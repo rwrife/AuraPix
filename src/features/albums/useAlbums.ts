@@ -55,7 +55,7 @@ export function useAlbums(albumsService: AlbumsService): UseAlbumsResult {
         setError('Unable to create album.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   return {
