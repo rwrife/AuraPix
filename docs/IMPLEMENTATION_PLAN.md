@@ -1,67 +1,56 @@
-# AuraPix Initial Implementation Plan
+# AuraPix Implementation Plan
 
-This plan defines the initial execution path for building AuraPix on Firebase.
+This plan defines incremental execution for AuraPix with an open-source-first baseline and Firebase-ready optionality.
 
-## Outcome
-Deliver a secure, scalable web app for photographers and teams to upload, organize, and share photos, with a plugin-friendly editing foundation and API readiness for desktop clients.
+## Shipped increment: Foundation Kickoff (current)
 
-## Delivery phases
+Delivered in this increment:
 
-### Phase 0 — Foundation (Weeks 1-2)
-- Initialize React + Vite + TypeScript app shell
-- Create Firebase environments (dev/stage/prod)
-- Configure CI/CD and environment management
-- Establish coding standards, linting, testing, and observability baseline
+- Web baseline scaffold (React + Vite + TypeScript)
+- Quality gates (lint, format, unit test, build)
+- Environment template and setup documentation
+- CI workflow for install/lint/test/build/format check
+- Contribution and collaboration templates
+- Firebase App Hosting preparation notes (non-locking)
 
-Detailed breakdown:
-- [Auth & User Identity](features/auth-and-user-management.md)
-- [Security, Compliance & Observability](features/security-compliance-observability.md)
+## Phase 1 — Core Domain Skeleton
 
-### Phase 1 — Core Library Management (Weeks 3-6)
-- Implement upload pipeline and image derivative generation
-- Build all-photos grid and album workflows
-- Add collections (groupings of albums)
-- Implement search, metadata filters, and bulk operations
+Goal: establish domain boundaries and first vertical slice.
 
-Detailed breakdown:
-- [Library & Organization](features/library-and-organization.md)
-- [Uploads, Processing & Storage](features/uploads-processing-storage.md)
+- Define domain modules: `library`, `albums`, `sharing`, `auth`
+- Introduce API contract layer (OpenAPI or typed endpoints)
+- Add first feature slice: list/create album (stubbed backend allowed)
+- Add adapter pattern for storage/auth providers
 
-### Phase 2 — Sharing & Collaboration (Weeks 7-10)
-- Add secure share links (public/private/password/expiry)
-- Add team workspaces and role-based access controls
-- Add activity logs and collaboration visibility
+## Phase 2 — Upload + Library MVP
 
-Detailed breakdown:
-- [Sharing & Access Control](features/sharing-access-control.md)
-- [Teams & Roles](features/teams-and-roles.md)
+- Upload flow with metadata persistence
+- Gallery grid with pagination and basic filtering
+- Background derivative generation contract (provider-agnostic)
+- Storage limits and usage telemetry foundations
 
-### Phase 3 — Plugin Editing + API Hardening (Weeks 11-14)
-- Build plugin runtime contract for lightweight non-destructive edits
-- Add initial plugins (crop, brightness, contrast, exposure)
-- Harden external API for desktop and third-party clients
+## Phase 3 — Sharing + Team controls
 
-Detailed breakdown:
-- [Plugin Editing System](features/plugin-editing-system.md)
-- [API & Desktop Readiness](features/api-and-desktop-readiness.md)
+- Link-based sharing policies (expiry/password/revocation)
+- Team roles and scoped resource access
+- Audit events for critical actions
+
+## Phase 4 — Plugin editing + API hardening
+
+- Define plugin execution contract for non-destructive edits
+- Add first plugins (crop/exposure/brightness)
+- Harden API for desktop/third-party clients
 
 ## Cross-cutting requirements
-- Storage quota management and cost controls
-- Idempotent processing and retry-safe workflows
-- Fine-grained authorization and auditability
-- Performance targets for large galleries
+
+- Security and least-privilege authorization
+- Idempotent retry-safe background processing
+- Cost-aware storage lifecycle controls
+- Observability and operational readiness
 
 ## Success criteria
-- Users can upload and organize photos into albums and collections
-- Teams can collaborate via role-based permissions
-- Share links can be securely managed and revoked
-- Storage usage is enforceable and observable
-- API contracts are stable enough for desktop implementation
 
-## Next planning steps
-Each feature document under `docs/features/` is intentionally scoped for deeper planning sessions. We will evolve each into:
-1. Product requirements
-2. Technical design
-3. Data model and API contracts
-4. Security rules and test strategy
-5. Rollout plan and acceptance criteria
+- New contributors can run and validate project in <10 minutes
+- CI enforces quality gates on every PR
+- Architecture remains provider-agnostic in core domains
+- Firebase App Hosting can be enabled as an implementation detail
