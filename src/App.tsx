@@ -1,4 +1,4 @@
- import { useMemo } from "react";
+import { useMemo } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { AlbumDetailPage } from "./pages/AlbumDetailPage";
