@@ -14,8 +14,8 @@ interface PhotoGalleryProps {
 }
 
 const GRID_BTNS: { mode: GridMode; icon: string; title: string }[] = [
-  { mode: "small", icon: "⊟", title: "Small tiles (64×64)" },
-  { mode: "medium", icon: "⊞", title: "Medium tiles (128×128)" },
+  { mode: "small", icon: "⊟", title: "Small tiles (128×128)" },
+  { mode: "medium", icon: "⊞", title: "Medium tiles (256×256)" },
   { mode: "large", icon: "▣", title: "Large tiles (320×320)" },
 ];
 
