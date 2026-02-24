@@ -24,16 +24,24 @@ export function LibraryPage() {
     }
   }
 
+  const isViewing = viewerIndex !== null && photos.length > 0;
+
   return (
-    <div className="page">
+    <div className={`page${isViewing ? " page--viewer-mode" : ""}`}>
       <div className="page-header">
         <h1 className="page-title">Library</h1>
-        <button
-          className="btn-primary"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          + Upload photos
-        </button>
+        {isViewing ? (
+          <button className="btn-ghost" onClick={() => setViewerIndex(null)}>
+            ← Back to grid
+          </button>
+        ) : (
+          <button
+            className="btn-primary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            + Upload photos
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -46,7 +54,13 @@ export function LibraryPage() {
 
       {error && <p className="error">{error}</p>}
 
-      {loading ? (
+      {isViewing ? (
+        <PhotoViewer
+          photos={photos}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      ) : loading ? (
         <p className="state-message">Loading library…</p>
       ) : photos.length === 0 ? (
         <div className="empty-state">
@@ -97,14 +111,6 @@ export function LibraryPage() {
             </div>
           ))}
         </div>
-      )}
-
-      {viewerIndex !== null && (
-        <PhotoViewer
-          photos={photos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-        />
       )}
     </div>
   );

@@ -203,6 +203,8 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Pages ─────────────────────────────────────────────────────────────── */
@@ -211,6 +213,14 @@ body {
   flex-direction: column;
   gap: 1.5rem;
   max-width: 1200px;
+}
+
+/* Viewer mode: page fills .app-main height so the panel can expand */
+.page.page--viewer-mode {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  max-width: none;
 }
 
 .page-header {
@@ -592,4 +602,290 @@ input:focus {
 .error {
   color: #dc2626;
   font-size: 0.875rem;
+}
+
+/* ── Photo thumbnail button (opens viewer) ─────────────────────────────── */
+.photo-thumb-btn {
+  all: unset;
+  display: block;
+  cursor: pointer;
+  width: 100%;
+  line-height: 0;
+}
+
+.photo-thumb-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Photo Viewer (inline panel) ───────────────────────────────────────── */
+.photo-viewer-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.photo-viewer-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 0;
+  padding: 0 3rem;
+}
+
+.photo-viewer-close {
+  position: absolute;
+  top: 0.625rem;
+  right: 0.625rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.photo-viewer-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.photo-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 5;
+  transition: background 0.15s;
+}
+
+.photo-viewer-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.photo-viewer-nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.photo-viewer-nav-prev {
+  left: 0.5rem;
+}
+
+.photo-viewer-nav-next {
+  right: 0.5rem;
+}
+
+.photo-viewer-image-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.photo-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.photo-viewer-caption {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.8rem;
+  padding: 0.5rem 1rem;
+  flex-shrink: 0;
+}
+
+/* ── Filmstrip ─────────────────────────────────────────────────────────── */
+.photo-viewer-filmstrip {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0.625rem 1rem;
+  background: rgba(0, 0, 0, 0.55);
+  flex-shrink: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.photo-viewer-filmstrip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.photo-viewer-filmstrip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+}
+
+.filmstrip-thumb {
+  flex-shrink: 0;
+  width: 68px;
+  height: 68px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: #1e293b;
+  transition: border-color 0.15s, opacity 0.15s;
+  padding: 0;
+  line-height: 0;
+}
+
+.filmstrip-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.filmstrip-thumb.active {
+  border-color: #6366f1;
+  opacity: 1;
+}
+
+.filmstrip-thumb:not(.active) {
+  opacity: 0.55;
+}
+
+.filmstrip-thumb:not(.active):hover {
+  opacity: 0.85;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Folder sections (AlbumsPage) ──────────────────────────────────────── */
+.folder-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.folder-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.folder-collapse-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  width: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-section-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.folder-section-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #1e293b;
+  flex: 1;
+}
+
+.folder-album-count {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-left: 0.25rem;
+}
+
+.folder-delete-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Album card folder select & actions ────────────────────────────────── */
+.album-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.folder-select {
+  font-family: inherit;
+  font-size: 0.775rem;
+  padding: 0.2rem 0.375rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  max-width: 110px;
+}
+
+.folder-select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+/* ── Sidebar folder groups ─────────────────────────────────────────────── */
+.sidebar-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-folder-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3125rem 0.75rem;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  gap: 0.375rem;
 }

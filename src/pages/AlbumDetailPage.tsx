@@ -38,6 +38,8 @@ export function AlbumDetailPage() {
     (p) => albumId != null && !p.albumIds.includes(albumId),
   );
 
+  const isViewing = viewerIndex !== null && albumPhotos.length > 0;
+
   useEffect(() => {
     if (!albumId) return;
     setAlbumLoading(true);
@@ -55,7 +57,6 @@ export function AlbumDetailPage() {
     }
     const addedCount = allPhotos.length - prevPhotosLen.current;
     if (addedCount > 0) {
-      // The newest photos are at the front of the sorted list
       const newPhotos = allPhotos
         .filter((p) => !p.albumIds.includes(albumId))
         .slice(0, addedCount);
@@ -105,34 +106,42 @@ export function AlbumDetailPage() {
   }
 
   return (
-    <div className="page">
+    <div className={`page${isViewing ? " page--viewer-mode" : ""}`}>
       <div className="page-header">
         <Link to="/albums" className="btn-ghost btn-sm">
           ← Albums
         </Link>
         <h1 className="page-title">{album.name}</h1>
-        <div className="header-actions">
-          <button
-            className="btn-primary"
-            onClick={() => {
-              pendingUpload.current = true;
-              fileInputRef.current?.click();
-            }}
-          >
-            + Upload to album
-          </button>
-          <button
-            className="btn-ghost"
-            onClick={() => setShowPicker((v) => !v)}
-            disabled={availablePhotos.length === 0}
-          >
-            Add from library
-            {availablePhotos.length > 0 ? ` (${availablePhotos.length})` : ""}
-          </button>
-          <button className="btn-danger-ghost" onClick={handleDeleteAlbum}>
-            Delete album
-          </button>
-        </div>
+        {isViewing ? (
+          <div className="header-actions">
+            <button className="btn-ghost" onClick={() => setViewerIndex(null)}>
+              ← Back to grid
+            </button>
+          </div>
+        ) : (
+          <div className="header-actions">
+            <button
+              className="btn-primary"
+              onClick={() => {
+                pendingUpload.current = true;
+                fileInputRef.current?.click();
+              }}
+            >
+              + Upload to album
+            </button>
+            <button
+              className="btn-ghost"
+              onClick={() => setShowPicker((v) => !v)}
+              disabled={availablePhotos.length === 0}
+            >
+              Add from library
+              {availablePhotos.length > 0 ? ` (${availablePhotos.length})` : ""}
+            </button>
+            <button className="btn-danger-ghost" onClick={handleDeleteAlbum}>
+              Delete album
+            </button>
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -143,7 +152,7 @@ export function AlbumDetailPage() {
         />
       </div>
 
-      {showPicker && availablePhotos.length > 0 && (
+      {!isViewing && showPicker && availablePhotos.length > 0 && (
         <div className="photo-picker">
           <p className="picker-label">
             Select photos from your library to add to this album:
@@ -162,7 +171,13 @@ export function AlbumDetailPage() {
         </div>
       )}
 
-      {libraryLoading ? (
+      {isViewing ? (
+        <PhotoViewer
+          photos={albumPhotos}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      ) : libraryLoading ? (
         <p className="state-message">Loading photos…</p>
       ) : albumPhotos.length === 0 ? (
         <div className="empty-state">
@@ -203,14 +218,6 @@ export function AlbumDetailPage() {
             </div>
           ))}
         </div>
-      )}
-
-      {viewerIndex !== null && (
-        <PhotoViewer
-          photos={albumPhotos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-        />
       )}
     </div>
   );

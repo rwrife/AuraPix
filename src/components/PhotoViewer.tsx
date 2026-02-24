@@ -47,75 +47,66 @@ export function PhotoViewer({ photos, initialIndex, onClose }: PhotoViewerProps)
   if (!current) return null;
 
   return (
-    <div
-      className="photo-viewer-overlay"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Photo viewer"
-    >
-      {/* Stop click bubbling so clicking inside the viewer doesn't close it */}
-      <div className="photo-viewer" onClick={(e) => e.stopPropagation()}>
-        {/* Close */}
-        <button className="photo-viewer-close" onClick={onClose} title="Close (Esc)">
-          ✕
+    <div className="photo-viewer-panel">
+      {/* Back / close button */}
+      <button className="photo-viewer-close" onClick={onClose} title="Back to grid (Esc)">
+        ✕
+      </button>
+
+      {/* Main image area */}
+      <div className="photo-viewer-main">
+        <button
+          className="photo-viewer-nav photo-viewer-nav-prev"
+          onClick={goPrev}
+          disabled={currentIndex === 0}
+          title="Previous (←)"
+        >
+          ‹
         </button>
 
-        {/* Main image area */}
-        <div className="photo-viewer-main">
-          <button
-            className="photo-viewer-nav photo-viewer-prev"
-            onClick={goPrev}
-            disabled={currentIndex === 0}
-            title="Previous (←)"
-          >
-            ‹
-          </button>
+        <div className="photo-viewer-image-wrap">
+          <img
+            key={current.id}
+            src={current.storagePath}
+            alt={current.originalName}
+            className="photo-viewer-image"
+          />
+        </div>
 
-          <div className="photo-viewer-image-wrap">
+        <button
+          className="photo-viewer-nav photo-viewer-nav-next"
+          onClick={goNext}
+          disabled={currentIndex === photos.length - 1}
+          title="Next (→)"
+        >
+          ›
+        </button>
+      </div>
+
+      {/* Caption */}
+      <p className="photo-viewer-caption">
+        <span className="photo-viewer-name">{current.originalName}</span>
+        <span className="photo-viewer-counter">
+          {currentIndex + 1} / {photos.length}
+        </span>
+      </p>
+
+      {/* Filmstrip */}
+      <div className="photo-viewer-filmstrip" ref={filmstripRef}>
+        {photos.map((photo, idx) => (
+          <button
+            key={photo.id}
+            className={`filmstrip-thumb${idx === currentIndex ? " active" : ""}`}
+            onClick={() => setCurrentIndex(idx)}
+            title={photo.originalName}
+          >
             <img
-              key={current.id}
-              src={current.storagePath}
-              alt={current.originalName}
-              className="photo-viewer-image"
+              src={photo.thumbnailPath ?? photo.storagePath}
+              alt={photo.originalName}
+              loading="lazy"
             />
-          </div>
-
-          <button
-            className="photo-viewer-nav photo-viewer-next"
-            onClick={goNext}
-            disabled={currentIndex === photos.length - 1}
-            title="Next (→)"
-          >
-            ›
           </button>
-        </div>
-
-        {/* Caption */}
-        <p className="photo-viewer-caption">
-          <span className="photo-viewer-name">{current.originalName}</span>
-          <span className="photo-viewer-counter">
-            {currentIndex + 1} / {photos.length}
-          </span>
-        </p>
-
-        {/* Filmstrip */}
-        <div className="photo-viewer-filmstrip" ref={filmstripRef}>
-          {photos.map((photo, idx) => (
-            <button
-              key={photo.id}
-              className={`filmstrip-thumb${idx === currentIndex ? " active" : ""}`}
-              onClick={() => setCurrentIndex(idx)}
-              title={photo.originalName}
-            >
-              <img
-                src={photo.thumbnailPath ?? photo.storagePath}
-                alt={photo.originalName}
-                loading="lazy"
-              />
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
     </div>
   );
