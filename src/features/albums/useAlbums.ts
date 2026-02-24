@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { AlbumsService } from '../../domain/albums/contract';
-import type { Album } from '../../domain/albums/types';
+import { useCallback, useEffect, useState } from "react";
+import type { Album } from "../../domain/albums/types";
+import { useServices } from "../../services/useServices";
 
 interface UseAlbumsResult {
   albums: Album[];
   loading: boolean;
   error: string | null;
   createAlbum(name: string): Promise<void>;
+  deleteAlbum?(albumId: string): Promise<void>;
 }
 
-export function useAlbums(albumsService: AlbumsService): UseAlbumsResult {
+export function useAlbums(): UseAlbumsResult {
+  const { albums: albumsService } = useServices();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export function useAlbums(albumsService: AlbumsService): UseAlbumsResult {
         }
       } catch {
         if (!cancelled) {
-          setError('Unable to load albums.');
+          setError("Unable to load albums.");
         }
       } finally {
         if (!cancelled) {
@@ -52,10 +54,10 @@ export function useAlbums(albumsService: AlbumsService): UseAlbumsResult {
           setError(err.message);
           return;
         }
-        setError('Unable to create album.');
+        setError("Unable to create album.");
       }
     },
-    [albumsService]
+    [albumsService],
   );
 
   return {

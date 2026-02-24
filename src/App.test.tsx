@@ -1,28 +1,25 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { App } from './App';
+import { render, screen } from "@testing-library/react";
+import App from "./App";
 
-describe('App', () => {
-  it('renders project heading', async () => {
+describe("App", () => {
+  it("renders the app shell with navigation links", async () => {
     render(<App />);
-    expect(screen.getByRole('heading', { name: 'AuraPix' })).toBeInTheDocument();
-    expect(await screen.findByText('Sample Highlights')).toBeInTheDocument();
+
+    expect(screen.getByText("AuraPix")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Albums" })).toBeInTheDocument();
   });
 
-  it('creates a new album from form input', async () => {
+  it("shows the library page by default", async () => {
     render(<App />);
 
-    const input = screen.getByLabelText('Album name');
-    fireEvent.change(input, { target: { value: 'Weekend Trip' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create album' }));
-
-    expect(await screen.findByText('Weekend Trip')).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
   });
 
-  it('shows validation error when album name is empty', async () => {
+  it("displays the current user in the header", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create album' }));
-
-    expect(await screen.findByText('Album name is required.')).toBeInTheDocument();
+    // In local mode the auto-signed-in user's display name appears
+    expect(await screen.findByText("Local User")).toBeInTheDocument();
   });
 });

@@ -1,54 +1,36 @@
-import { FormEvent, useMemo, useState } from 'react';
-import { InMemoryAlbumsService } from './adapters/albums/inMemoryAlbumsService';
-import { useAlbums } from './features/albums/useAlbums';
+import { useMemo } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Layout } from "./components/Layout";
+import { AlbumsPage } from "./pages/AlbumsPage";
+import { LibraryPage } from "./pages/LibraryPage";
+import { createLocalServices } from "./services/createLocalServices";
+import { ServiceProvider } from "./services/ServiceContext";
 
-export function App() {
-  const albumsService = useMemo(() => new InMemoryAlbumsService(), []);
-  const { albums, loading, error, createAlbum } = useAlbums(albumsService);
-  const [albumName, setAlbumName] = useState('');
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await createAlbum(albumName);
-    setAlbumName('');
-  }
+export default function App() {
+  const services = useMemo(() => {
+    const SERVICE_MODE = import.meta.env.VITE_SERVICE_MODE ?? "local";
+    if (SERVICE_MODE === "firebase") {
+      // Firebase adapter bundle — swap in once Phase 2 Firebase adapters land
+      throw new Error(
+        "Firebase mode is not yet implemented. Set VITE_SERVICE_MODE=local.",
+      );
+    }
+    return createLocalServices();
+  }, []);
 
   return (
-    <main className="container">
-      <h1>AuraPix</h1>
-      <p>Albums vertical slice: create and view albums using a contract-aligned stub service.</p>
-
-      <section className="panel">
-        <h2>Create album</h2>
-        <form className="album-form" onSubmit={handleSubmit}>
-          <label htmlFor="album-name">Album name</label>
-          <input
-            id="album-name"
-            name="albumName"
-            value={albumName}
-            onChange={(event) => setAlbumName(event.target.value)}
-            placeholder="e.g. Weekend Trip"
-          />
-          <button type="submit">Create album</button>
-        </form>
-        {error ? <p className="error">{error}</p> : null}
-      </section>
-
-      <section className="panel">
-        <h2>Albums</h2>
-        {loading ? <p>Loading albums…</p> : null}
-        {!loading && albums.length === 0 ? <p>No albums yet.</p> : null}
-        {!loading && albums.length > 0 ? (
-          <ul className="album-list">
-            {albums.map((album) => (
-              <li key={album.id}>
-                <span>{album.name}</span>
-                <time dateTime={album.createdAt}>{new Date(album.createdAt).toLocaleString()}</time>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-    </main>
+    <ServiceProvider services={services}>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/library" replace />} />
+            <Route path="/library" element={<LibraryPage />} />
+            <Route path="/albums" element={<AlbumsPage />} />
+            {/* Catch-all: redirect unknown paths to library */}
+            <Route path="*" element={<Navigate to="/library" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ServiceProvider>
   );
 }
