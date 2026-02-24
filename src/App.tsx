@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { AlbumDetailPage } from "./pages/AlbumDetailPage";
 import { AlbumsPage } from "./pages/AlbumsPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { createLocalServices } from "./services/createLocalServices";
@@ -26,6 +27,7 @@ export default function App() {
             <Route index element={<Navigate to="/library" replace />} />
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/albums" element={<AlbumsPage />} />
+            <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
             {/* Catch-all: redirect unknown paths to library */}
             <Route path="*" element={<Navigate to="/library" replace />} />
           </Route>

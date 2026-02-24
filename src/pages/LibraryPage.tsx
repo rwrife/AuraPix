@@ -1,8 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { PhotoViewer } from "../components/PhotoViewer";
 import { useAuth } from "../features/auth/useAuth";
 import { useLibrary } from "../features/library/useLibrary";
 
-/** Derive a stable libraryId from the authenticated user's id */
 function toLibraryId(userId: string) {
   return `library-${userId}`;
 }
@@ -14,6 +14,7 @@ export function LibraryPage() {
     useLibrary(libraryId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
@@ -50,22 +51,34 @@ export function LibraryPage() {
       ) : photos.length === 0 ? (
         <div className="empty-state">
           <p>No photos yet.</p>
-          <p>Click <strong>Upload photos</strong> to add images.</p>
+          <p>
+            Click <strong>Upload photos</strong> to add images.
+          </p>
         </div>
       ) : (
         <div className="photo-grid">
-          {photos.map((photo) => (
+          {photos.map((photo, idx) => (
             <div key={photo.id} className="photo-card">
-              <img
-                src={photo.thumbnailPath ?? photo.storagePath}
-                alt={photo.originalName}
-                className="photo-thumb"
-                loading="lazy"
-              />
+              <button
+                className="photo-thumb-btn"
+                onClick={() => setViewerIndex(idx)}
+                title="View photo"
+              >
+                <img
+                  src={photo.thumbnailPath ?? photo.storagePath}
+                  alt={photo.originalName}
+                  className="photo-thumb"
+                  loading="lazy"
+                />
+              </button>
               <div className="photo-actions">
                 <button
                   className={`btn-icon ${photo.isFavorite ? "active" : ""}`}
-                  title={photo.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                  title={
+                    photo.isFavorite
+                      ? "Remove from favorites"
+                      : "Add to favorites"
+                  }
                   onClick={() => toggleFavorite(photo.id)}
                 >
                   {photo.isFavorite ? "♥" : "♡"}
@@ -84,6 +97,14 @@ export function LibraryPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {viewerIndex !== null && (
+        <PhotoViewer
+          photos={photos}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
       )}
     </div>
   );
