@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { PhotoViewer } from "../components/PhotoViewer";
+import { PhotoGallery } from "../components/PhotoGallery";
 import type { Album } from "../domain/albums/types";
 import type { Photo } from "../domain/library/types";
 import { useAuth } from "../features/auth/useAuth";
@@ -24,9 +24,8 @@ export function AlbumDetailPage() {
   const [album, setAlbum] = useState<Album | null>(null);
   const [albumLoading, setAlbumLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [isFilmstrip, setIsFilmstrip] = useState(false);
 
-  // track whether the next batch of new photos should be auto-assigned
   const pendingUpload = useRef(false);
   const prevPhotosLen = useRef(allPhotos.length);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,8 +37,6 @@ export function AlbumDetailPage() {
     (p) => albumId != null && !p.albumIds.includes(albumId),
   );
 
-  const isViewing = viewerIndex !== null && albumPhotos.length > 0;
-
   useEffect(() => {
     if (!albumId) return;
     setAlbumLoading(true);
@@ -49,7 +46,6 @@ export function AlbumDetailPage() {
       .catch(() => setAlbumLoading(false));
   }, [albums, albumId]);
 
-  // Auto-assign photos that were just uploaded via this page
   useEffect(() => {
     if (!albumId || !pendingUpload.current) {
       prevPhotosLen.current = allPhotos.length;
@@ -106,19 +102,13 @@ export function AlbumDetailPage() {
   }
 
   return (
-    <div className={`page${isViewing ? " page--viewer-mode" : ""}`}>
+    <div className={`page${isFilmstrip ? " page--viewer-mode" : ""}`}>
       <div className="page-header">
         <Link to="/albums" className="btn-ghost btn-sm">
           ← Albums
         </Link>
         <h1 className="page-title">{album.name}</h1>
-        {isViewing ? (
-          <div className="header-actions">
-            <button className="btn-ghost" onClick={() => setViewerIndex(null)}>
-              ← Back to grid
-            </button>
-          </div>
-        ) : (
+        {!isFilmstrip && (
           <div className="header-actions">
             <button
               className="btn-primary"
@@ -152,7 +142,7 @@ export function AlbumDetailPage() {
         />
       </div>
 
-      {!isViewing && showPicker && availablePhotos.length > 0 && (
+      {!isFilmstrip && showPicker && availablePhotos.length > 0 && (
         <div className="photo-picker">
           <p className="picker-label">
             Select photos from your library to add to this album:
@@ -171,13 +161,7 @@ export function AlbumDetailPage() {
         </div>
       )}
 
-      {isViewing ? (
-        <PhotoViewer
-          photos={albumPhotos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-        />
-      ) : libraryLoading ? (
+      {libraryLoading ? (
         <p className="state-message">Loading photos…</p>
       ) : albumPhotos.length === 0 ? (
         <div className="empty-state">
@@ -188,36 +172,19 @@ export function AlbumDetailPage() {
           </p>
         </div>
       ) : (
-        <div className="photo-grid">
-          {albumPhotos.map((photo, idx) => (
-            <div key={photo.id} className="photo-card">
-              <button
-                className="photo-thumb-btn"
-                onClick={() => setViewerIndex(idx)}
-                title="View photo"
-              >
-                <img
-                  src={photo.thumbnailPath ?? photo.storagePath}
-                  alt={photo.originalName}
-                  className="photo-thumb"
-                  loading="lazy"
-                />
-              </button>
-              <div className="photo-actions">
-                <button
-                  className="btn-icon btn-danger"
-                  title="Remove from album"
-                  onClick={() => removeFromAlbum(photo)}
-                >
-                  ✕
-                </button>
-              </div>
-              <p className="photo-name" title={photo.originalName}>
-                {photo.originalName}
-              </p>
-            </div>
-          ))}
-        </div>
+        <PhotoGallery
+          photos={albumPhotos}
+          onIsFilmstripChange={setIsFilmstrip}
+          renderOverlayActions={(photo) => (
+            <button
+              className="btn-icon btn-danger"
+              title="Remove from album"
+              onClick={() => removeFromAlbum(photo)}
+            >
+              ✕
+            </button>
+          )}
+        />
       )}
     </div>
   );

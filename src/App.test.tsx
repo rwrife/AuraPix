@@ -6,8 +6,8 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByText("AuraPix")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Albums" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Library/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Albums/ })).toBeInTheDocument();
   });
 
   it("shows the library page by default", async () => {

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { PhotoViewer } from "../components/PhotoViewer";
+import { PhotoGallery } from "../components/PhotoGallery";
 import { useAuth } from "../features/auth/useAuth";
 import { useLibrary } from "../features/library/useLibrary";
 
@@ -14,7 +14,7 @@ export function LibraryPage() {
     useLibrary(libraryId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [isFilmstrip, setIsFilmstrip] = useState(false);
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
@@ -24,17 +24,11 @@ export function LibraryPage() {
     }
   }
 
-  const isViewing = viewerIndex !== null && photos.length > 0;
-
   return (
-    <div className={`page${isViewing ? " page--viewer-mode" : ""}`}>
+    <div className={`page${isFilmstrip ? " page--viewer-mode" : ""}`}>
       <div className="page-header">
         <h1 className="page-title">Library</h1>
-        {isViewing ? (
-          <button className="btn-ghost" onClick={() => setViewerIndex(null)}>
-            ← Back to grid
-          </button>
-        ) : (
+        {!isFilmstrip && (
           <button
             className="btn-primary"
             onClick={() => fileInputRef.current?.click()}
@@ -54,13 +48,7 @@ export function LibraryPage() {
 
       {error && <p className="error">{error}</p>}
 
-      {isViewing ? (
-        <PhotoViewer
-          photos={photos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-        />
-      ) : loading ? (
+      {loading ? (
         <p className="state-message">Loading library…</p>
       ) : photos.length === 0 ? (
         <div className="empty-state">
@@ -70,47 +58,28 @@ export function LibraryPage() {
           </p>
         </div>
       ) : (
-        <div className="photo-grid">
-          {photos.map((photo, idx) => (
-            <div key={photo.id} className="photo-card">
+        <PhotoGallery
+          photos={photos}
+          onIsFilmstripChange={setIsFilmstrip}
+          renderOverlayActions={(photo) => (
+            <>
               <button
-                className="photo-thumb-btn"
-                onClick={() => setViewerIndex(idx)}
-                title="View photo"
+                className={`btn-icon${photo.isFavorite ? " active" : ""}`}
+                title={photo.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                onClick={() => toggleFavorite(photo.id)}
               >
-                <img
-                  src={photo.thumbnailPath ?? photo.storagePath}
-                  alt={photo.originalName}
-                  className="photo-thumb"
-                  loading="lazy"
-                />
+                {photo.isFavorite ? "♥" : "♡"}
               </button>
-              <div className="photo-actions">
-                <button
-                  className={`btn-icon ${photo.isFavorite ? "active" : ""}`}
-                  title={
-                    photo.isFavorite
-                      ? "Remove from favorites"
-                      : "Add to favorites"
-                  }
-                  onClick={() => toggleFavorite(photo.id)}
-                >
-                  {photo.isFavorite ? "♥" : "♡"}
-                </button>
-                <button
-                  className="btn-icon btn-danger"
-                  title="Delete photo"
-                  onClick={() => deletePhoto(photo.id)}
-                >
-                  ✕
-                </button>
-              </div>
-              <p className="photo-name" title={photo.originalName}>
-                {photo.originalName}
-              </p>
-            </div>
-          ))}
-        </div>
+              <button
+                className="btn-icon btn-danger"
+                title="Delete photo"
+                onClick={() => deletePhoto(photo.id)}
+              >
+                ✕
+              </button>
+            </>
+          )}
+        />
       )}
     </div>
   );
