@@ -217,9 +217,7 @@ function LayoutShell() {
                   <div className="user-info">
                     <div className="user-info-name">{displayName}</div>
                     {user?.email && <div className="user-info-email">{user.email}</div>}
-                    {isLocalMode && (
-                      <div className="user-info-mode">Single-user mode</div>
-                    )}
+                    {isLocalMode && <div className="user-info-mode">Single-user mode</div>}
                   </div>
                 </div>
 
@@ -228,11 +226,7 @@ function LayoutShell() {
                 <div className="user-menu-actions">
                   {!isLocalMode && (
                     <button className="user-menu-item" onClick={handleSignOut}>
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="user-menu-icon"
-                        aria-hidden="true"
-                      >
+                      <svg viewBox="0 0 24 24" className="user-menu-icon" aria-hidden="true">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                         <polyline points="16 17 21 12 16 7" />
                         <line x1="21" y1="12" x2="9" y2="12" />
@@ -242,8 +236,8 @@ function LayoutShell() {
                   )}
                   {isLocalMode && (
                     <div className="user-menu-note">
-                      Authentication is not available in local mode. When deployed with
-                      Firebase, user sign-in and sign-out will be enabled here.
+                      Authentication is not available in local mode. When deployed with Firebase,
+                      user sign-in and sign-out will be enabled here.
                     </div>
                   )}
                 </div>
@@ -252,10 +246,7 @@ function LayoutShell() {
           </div>
 
           {showUserMenu && (
-            <div
-              className="user-menu-backdrop"
-              onClick={() => setShowUserMenu(false)}
-            />
+            <div className="user-menu-backdrop" onClick={() => setShowUserMenu(false)} />
           )}
         </div>
       </header>
