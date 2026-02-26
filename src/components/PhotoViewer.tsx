@@ -14,8 +14,8 @@ export interface ViewerState {
   currentPhoto: Photo;
   currentIndex: number;
   totalPhotos: number;
-  activeTool: string | null;
-  setActiveTool: (tool: string | null) => void;
+  activeTool: ViewerTool | null;
+  setActiveTool: (tool: ViewerTool | null) => void;
   showDeleteConfirm: () => void;
   brightness: number;
   setBrightness: (v: number) => void;
