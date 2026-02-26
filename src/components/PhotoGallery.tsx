@@ -37,6 +37,7 @@ export function PhotoGallery({
   const [focusedIndex, setFocusedIndex] = useState(0);
   const prevGridMode = useRef<GridMode>(gridMode);
   const tileRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const gridRef = useRef<HTMLDivElement | null>(null);
 
   const isFilmstrip = mode === "filmstrip";
 
@@ -55,6 +56,15 @@ export function PhotoGallery({
   useEffect(() => {
     onIsFilmstripChange?.(isFilmstrip);
   }, [isFilmstrip, onIsFilmstripChange]);
+
+  useEffect(() => {
+    if (isFilmstrip || photos.length === 0) return;
+    const frame = requestAnimationFrame(() => {
+      gridRef.current?.focus();
+      setFocusedIndex((idx) => Math.max(0, Math.min(idx, photos.length - 1)));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isFilmstrip, photos.length]);
 
   function enterFilmstrip(idx: number) {
     if (mode !== "filmstrip") prevGridMode.current = mode as GridMode;
@@ -164,6 +174,7 @@ export function PhotoGallery({
     <div className="photo-gallery">
       {/* Tiles */}
       <div
+        ref={gridRef}
         className={`photo-grid-gallery photo-grid-gallery--${mode}`}
         tabIndex={0}
         onKeyDown={handleGridKeyDown}

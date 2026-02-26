@@ -136,6 +136,90 @@ export function LibraryPage() {
             />
           )}
         </div>
+        {/* Slide-out panel for viewer tools */}
+        {isFilmstrip && (
+          <div className={`viewer-slide-panel${viewerState?.activeTool ? " open" : ""}`}>
+            <div className="viewer-slide-panel-header">
+              <h3 className="viewer-slide-panel-title">
+                {viewerState?.activeTool === "info" && "Info"}
+                {viewerState?.activeTool === "versions" && "Versions"}
+                {viewerState?.activeTool === "comments" && "Comments"}
+                {viewerState?.activeTool === "tags" && "Tags"}
+                {viewerState?.activeTool === "presets" && "Presets"}
+                {viewerState?.activeTool === "edit" && "Edit"}
+                {viewerState?.activeTool === "crop" && "Crop"}
+              </h3>
+              <button
+                className="viewer-slide-panel-close"
+                onClick={() => viewerState?.setActiveTool(null)}
+                title="Close (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="viewer-slide-panel-body">
+              {viewerState?.activeTool === "info" && (
+                <>
+                  <p className="state-message">Name: {viewerState?.currentPhoto.originalName}</p>
+                  <p className="state-message">ID: {viewerState?.currentPhoto.id}</p>
+                </>
+              )}
+              {viewerState?.activeTool === "versions" && (
+                <p className="state-message">Version history tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "comments" && (
+                <p className="state-message">Comments tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "tags" && (
+                <p className="state-message">Tag management tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "presets" && (
+                <p className="state-message">Preset tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "edit" && (
+                <>
+                  <label className="settings-label" htmlFor="edit-brightness">
+                    Brightness
+                  </label>
+                  <input
+                    id="edit-brightness"
+                    type="range"
+                    min={-100}
+                    max={100}
+                    value={viewerState?.brightness ?? 0}
+                    onChange={(e) => viewerState?.setBrightness(Number(e.target.value))}
+                  />
+                  <label className="settings-label" htmlFor="edit-contrast">
+                    Contrast
+                  </label>
+                  <input
+                    id="edit-contrast"
+                    type="range"
+                    min={-100}
+                    max={100}
+                    value={viewerState?.contrast ?? 0}
+                    onChange={(e) => viewerState?.setContrast(Number(e.target.value))}
+                  />
+                  <label className="settings-label" htmlFor="edit-saturation">
+                    Saturation
+                  </label>
+                  <input
+                    id="edit-saturation"
+                    type="range"
+                    min={-100}
+                    max={100}
+                    value={viewerState?.saturation ?? 0}
+                    onChange={(e) => viewerState?.setSaturation(Number(e.target.value))}
+                  />
+                </>
+              )}
+              {viewerState?.activeTool === "crop" && (
+                <p className="state-message">Crop tools coming soon.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         <aside className="page-right-column" aria-label="Library tools">
           {isFilmstrip ? (
             viewerState ? (

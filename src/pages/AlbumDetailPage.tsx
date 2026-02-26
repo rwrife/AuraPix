@@ -83,6 +83,20 @@ export function AlbumDetailPage() {
     return () => clearInterval(interval);
   }, [isFilmstrip]);
 
+  // ESC key to close panel
+  useEffect(() => {
+    if (!isFilmstrip || !viewerState?.activeTool) return;
+    
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape" && viewerState?.activeTool) {
+        viewerState.setActiveTool(null);
+      }
+    }
+    
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [isFilmstrip, viewerState]);
+
   async function handleUpload(
     files: File[],
     targetAlbumId: string | null,
@@ -188,7 +202,7 @@ export function AlbumDetailPage() {
         )}
       </div>
 
-      <div className={`page-with-toolbar${isFilmstrip ? " page--viewer-mode" : ""}`}>
+      <div className={`page-with-toolbar${isFilmstrip ? " page--viewer-mode" : ""}`} style={isFilmstrip && viewerState ? { gridTemplateColumns: '1fr auto 68px' } : undefined}>
         <div className="page-center-column">
           {libraryLoading ? (
             <p className="state-message">Loading photos…</p>
@@ -214,9 +228,93 @@ export function AlbumDetailPage() {
           )}
         </div>
 
+        {/* Slide-out panel for viewer tools */}
+        {isFilmstrip && (
+          <div className={`viewer-slide-panel${viewerState?.activeTool ? " open" : ""}`}>
+            <div className="viewer-slide-panel-header">
+              <h3 className="viewer-slide-panel-title">
+                {viewerState?.activeTool === "info" && "Info"}
+                {viewerState?.activeTool === "versions" && "Versions"}
+                {viewerState?.activeTool === "comments" && "Comments"}
+                {viewerState?.activeTool === "tags" && "Tags"}
+                {viewerState?.activeTool === "presets" && "Presets"}
+                {viewerState?.activeTool === "edit" && "Edit"}
+                {viewerState?.activeTool === "crop" && "Crop"}
+              </h3>
+              <button
+                className="viewer-slide-panel-close"
+                onClick={() => viewerState?.setActiveTool(null)}
+                title="Close (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="viewer-slide-panel-body">
+              {viewerState?.activeTool === "info" && (
+                <>
+                  <p className="state-message">Name: {viewerState?.currentPhoto.originalName}</p>
+                  <p className="state-message">ID: {viewerState?.currentPhoto.id}</p>
+                </>
+              )}
+              {viewerState?.activeTool === "versions" && (
+                <p className="state-message">Version history tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "comments" && (
+                <p className="state-message">Comments tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "tags" && (
+                <p className="state-message">Tag management tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "presets" && (
+                <p className="state-message">Preset tools coming soon.</p>
+              )}
+              {viewerState?.activeTool === "edit" && (
+                <>
+                  <label className="settings-label" htmlFor="edit-brightness">
+                    Brightness
+                  </label>
+                  <input
+                    id="edit-brightness"
+                    type="range"
+                    min={-100}
+                    max={100}
+                    value={viewerState?.brightness ?? 0}
+                    onChange={(e) => viewerState?.setBrightness(Number(e.target.value))}
+                  />
+                  <label className="settings-label" htmlFor="edit-contrast">
+                    Contrast
+                  </label>
+                  <input
+                    id="edit-contrast"
+                    type="range"
+                    min={-100}
+                    max={100}
+                    value={viewerState?.contrast ?? 0}
+                    onChange={(e) => viewerState?.setContrast(Number(e.target.value))}
+                  />
+                  <label className="settings-label" htmlFor="edit-saturation">
+                    Saturation
+                  </label>
+                  <input
+                    id="edit-saturation"
+                    type="range"
+                    min={-100}
+                    max={100}
+                    value={viewerState?.saturation ?? 0}
+                    onChange={(e) => viewerState?.setSaturation(Number(e.target.value))}
+                  />
+                </>
+              )}
+              {viewerState?.activeTool === "crop" && (
+                <p className="state-message">Crop tools coming soon.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         <aside className="page-right-column" aria-label="Album tools">
           {isFilmstrip ? (
-            viewerState ? (
+            viewerState && (
             <>
               <button
                 className="right-toolbar-icon btn-danger-ghost"
@@ -226,14 +324,14 @@ export function AlbumDetailPage() {
                 🗑
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "info" ? " active" : ""}`}
                 title="Info"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "info" ? null : "info")}
               >
                 ℹ
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "versions" ? " active" : ""}`}
                 title="Versions"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "versions" ? null : "versions")}
               >
@@ -247,123 +345,41 @@ export function AlbumDetailPage() {
                 ♥
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "comments" ? " active" : ""}`}
                 title="Comments"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "comments" ? null : "comments")}
               >
                 💬
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "tags" ? " active" : ""}`}
                 title="Tags"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "tags" ? null : "tags")}
               >
                 #
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "presets" ? " active" : ""}`}
                 title="Presets"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "presets" ? null : "presets")}
               >
                 ✶
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "edit" ? " active" : ""}`}
                 title="Edit"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "edit" ? null : "edit")}
               >
                 🎚
               </button>
               <button
-                className="right-toolbar-icon btn-ghost"
+                className={`right-toolbar-icon btn-ghost${viewerState.activeTool === "crop" ? " active" : ""}`}
                 title="Crop"
                 onClick={() => viewerState.setActiveTool(viewerState.activeTool === "crop" ? null : "crop")}
               >
                 ⬚
               </button>
-
-              {viewerState.activeTool && (
-                <section className="settings-panel">
-                  {viewerState.activeTool === "info" && (
-                    <>
-                      <h3 className="settings-panel-title">Info</h3>
-                      <p className="state-message">Name: {viewerState.currentPhoto.originalName}</p>
-                      <p className="state-message">ID: {viewerState.currentPhoto.id}</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "versions" && (
-                    <>
-                      <h3 className="settings-panel-title">Versions</h3>
-                      <p className="state-message">Version history tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "comments" && (
-                    <>
-                      <h3 className="settings-panel-title">Comments</h3>
-                      <p className="state-message">Comments tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "tags" && (
-                    <>
-                      <h3 className="settings-panel-title">Tags</h3>
-                      <p className="state-message">Tag management tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "presets" && (
-                    <>
-                      <h3 className="settings-panel-title">Presets</h3>
-                      <p className="state-message">Preset tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "edit" && (
-                    <>
-                      <h3 className="settings-panel-title">Edit</h3>
-                      <label className="settings-label" htmlFor="edit-brightness">
-                        Brightness
-                      </label>
-                      <input
-                        id="edit-brightness"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        value={viewerState.brightness}
-                        onChange={(e) => viewerState.setBrightness(Number(e.target.value))}
-                      />
-                      <label className="settings-label" htmlFor="edit-contrast">
-                        Contrast
-                      </label>
-                      <input
-                        id="edit-contrast"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        value={viewerState.contrast}
-                        onChange={(e) => viewerState.setContrast(Number(e.target.value))}
-                      />
-                      <label className="settings-label" htmlFor="edit-saturation">
-                        Saturation
-                      </label>
-                      <input
-                        id="edit-saturation"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        value={viewerState.saturation}
-                        onChange={(e) => viewerState.setSaturation(Number(e.target.value))}
-                      />
-                    </>
-                  )}
-                  {viewerState.activeTool === "crop" && (
-                    <>
-                      <h3 className="settings-panel-title">Crop</h3>
-                      <p className="state-message">Crop tools coming soon.</p>
-                    </>
-                  )}
-                </section>
-              )}
             </>
-            ) : (
-              <p className="state-message">Loading tools...</p>
             )
           ) : (
             <>
