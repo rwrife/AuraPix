@@ -306,10 +306,15 @@ export function AlbumsPage() {
 
   async function handleCreateAlbum(e: React.FormEvent) {
     e.preventDefault();
-    if (!albumName.trim()) return;
+    const trimmedName = albumName.trim();
+    if (!trimmedName) return;
+
     setCreating(true);
-    await createAlbum(albumName.trim());
     setAlbumName('');
+    const created = await createAlbum(trimmedName);
+    if (!created) {
+      setAlbumName(trimmedName);
+    }
     setCreating(false);
   }
 

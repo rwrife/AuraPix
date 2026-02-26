@@ -19,6 +19,10 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
+function normalizeName(name: string) {
+  return name.trim().toLocaleLowerCase();
+}
+
 export class InMemoryAlbumsService implements AlbumsService {
   private albums: Album[];
   private folders: AlbumFolder[];
@@ -82,6 +86,11 @@ export class InMemoryAlbumsService implements AlbumsService {
   async createAlbum(input: CreateAlbumInput): Promise<Album> {
     const name = input.name.trim();
     if (!name) throw new Error('Album name is required.');
+
+    const normalizedName = normalizeName(name);
+    const duplicate = this.albums.some((album) => normalizeName(album.name) === normalizedName);
+    if (duplicate) throw new Error('An album with this name already exists.');
+
     const album: Album = {
       id: uid('album'),
       name,
@@ -100,6 +109,12 @@ export class InMemoryAlbumsService implements AlbumsService {
     if (idx === -1) throw new Error('Album not found.');
     const nextName = updates.name !== undefined ? updates.name.trim() : this.albums[idx].name;
     if (!nextName) throw new Error('Album name is required.');
+
+    const normalizedName = normalizeName(nextName);
+    const duplicate = this.albums.some(
+      (album) => album.id !== albumId && normalizeName(album.name) === normalizedName
+    );
+    if (duplicate) throw new Error('An album with this name already exists.');
 
     const updated: Album = { ...this.albums[idx], ...updates, name: nextName };
     this.albums = this.albums.map((a) => (a.id === albumId ? updated : a));
