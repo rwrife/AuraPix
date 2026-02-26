@@ -113,6 +113,14 @@ GET  /images/:libraryId/:photoId      - Serve image (cached)
 POST /images/:libraryId               - Upload photo
      Body: multipart/form-data with 'file' field
      Returns: 202 with photoId and processing status
+
+POST /edits/:libraryId/:photoId       - Apply edit operations
+     Body: { operations: EditOperation[], description?: string }
+     Returns: Photo with new edit version
+
+POST /edits/:libraryId/:photoId/revert - Revert to previous edit version
+     Body: { targetVersion: number }
+     Returns: Photo with reverted version
 ```
 
 ### Internal Endpoints
