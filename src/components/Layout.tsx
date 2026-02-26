@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import type { Album, AlbumFolder } from "../domain/albums/types";
+import { useState, useMemo } from "react";
+import { Outlet, useNavigate } from "react-router-dom";
 import { AlbumsProvider, useAlbums } from "../features/albums/useAlbums";
 import { useAuth } from "../features/auth/useAuth";
+import { SidebarNav } from "./sidebar";
+import type { SidebarItem } from "./sidebar";
 
 function RecentIcon() {
   return (
@@ -71,19 +72,6 @@ function AlbumsIcon() {
   );
 }
 
-function FolderIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
-      <path d="M3 9h6l1.8 2H21v7.3A1.7 1.7 0 0 1 19.3 20H4.7A1.7 1.7 0 0 1 3 18.3V9Z" />
-      <path d="M3 9V7A2 2 0 0 1 5 5h4l1.5 2H19a2 2 0 0 1 2 2" />
-    </svg>
-  );
-}
-
 function SearchIcon() {
   return (
     <svg
@@ -115,14 +103,93 @@ function LayoutShell() {
     // Full-text search wired in a future phase
   }
 
-  function navClass({ isActive }: { isActive: boolean }) {
-    return isActive ? "sidebar-link active" : "sidebar-link";
-  }
+  // Build sidebar navigation items
+  const sidebarTopItems = useMemo<SidebarItem[]>(() => {
+    const items: SidebarItem[] = [
+      {
+        type: "link",
+        id: "recent",
+        label: "Recent",
+        to: "/recent",
+        icon: <RecentIcon />,
+      },
+      {
+        type: "link",
+        id: "library",
+        label: "Library",
+        to: "/library",
+        icon: <LibraryIcon />,
+        end: true,
+      },
+      {
+        type: "link",
+        id: "teams",
+        label: "Teams",
+        to: "/teams",
+        icon: <TeamsIcon />,
+      },
+      {
+        type: "link",
+        id: "favorites",
+        label: "Favorites",
+        to: "/favorites",
+        icon: <FavoritesIcon />,
+      },
+    ];
 
-  // Build folder → albums mapping for sidebar
-  const folderAlbums = (folder: AlbumFolder): Album[] =>
-    albums.filter((a) => a.folderId === folder.id);
-  const ungrouped = albums.filter((a) => !a.folderId);
+    // Build Albums parent item with children
+    const albumChildren = [
+      // Folder-grouped albums
+      ...folders.flatMap((folder) =>
+        albums
+          .filter((a) => a.folderId === folder.id)
+          .map((album) => ({
+            id: album.id,
+            label: album.name,
+            to: `/albums/${album.id}`,
+            groupLabel: folder.name,
+          }))
+      ),
+      // Ungrouped albums
+      ...albums
+        .filter((a) => !a.folderId)
+        .map((album) => ({
+          id: album.id,
+          label: album.name,
+          to: `/albums/${album.id}`,
+        })),
+    ];
+
+    items.push({
+      type: "parent",
+      id: "albums",
+      label: "Albums",
+      to: "/albums",
+      icon: <AlbumsIcon />,
+      children: albumChildren,
+      defaultExpanded: true,
+    });
+
+    return items;
+  }, [albums, folders]);
+
+  const sidebarBottomItems = useMemo<SidebarItem[]>(() => {
+    return [
+      {
+        type: "link",
+        id: "settings",
+        label: "Settings",
+        to: "/settings",
+        icon: (
+          <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 1v6m0 6v10M1 12h6m6 0h10" />
+            <path d="m4.93 4.93 4.24 4.24m5.66 0 4.24-4.24M4.93 19.07l4.24-4.24m5.66 0 4.24 4.24" />
+          </svg>
+        ),
+      },
+    ];
+  }, []);
 
   return (
     <div className="app-shell">
@@ -163,80 +230,7 @@ function LayoutShell() {
       </header>
 
       <div className="app-body">
-        <nav className="app-sidebar">
-          <NavLink to="/recent" className={navClass}>
-            <span className="sidebar-icon">
-              <RecentIcon />
-            </span>
-            <span>Recent</span>
-          </NavLink>
-          <NavLink to="/library" className={navClass} end>
-            <span className="sidebar-icon">
-              <LibraryIcon />
-            </span>
-            <span>Library</span>
-          </NavLink>
-          <NavLink to="/teams" className={navClass}>
-            <span className="sidebar-icon">
-              <TeamsIcon />
-            </span>
-            <span>Teams</span>
-          </NavLink>
-          <NavLink to="/favorites" className={navClass}>
-            <span className="sidebar-icon">
-              <FavoritesIcon />
-            </span>
-            <span>Favorites</span>
-          </NavLink>
-
-          <div className="sidebar-section">
-            <NavLink to="/albums" className={navClass} end>
-              <span className="sidebar-icon">
-                <AlbumsIcon />
-              </span>
-              <span>Albums</span>
-            </NavLink>
-
-            {/* Folders with their albums */}
-            {folders.map((folder) => (
-              <div key={folder.id} className="sidebar-folder">
-                <span className="sidebar-folder-label">
-                  <span className="sidebar-icon">
-                    <FolderIcon />
-                  </span>
-                  {folder.name}
-                </span>
-                {folderAlbums(folder).length > 0 && (
-                  <ul className="sidebar-album-list">
-                    {folderAlbums(folder).map((album) => (
-                      <li key={album.id}>
-                        <NavLink
-                          to={`/albums/${album.id}`}
-                          className={navClass}
-                        >
-                          {album.name}
-                        </NavLink>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-
-            {/* Ungrouped albums */}
-            {ungrouped.length > 0 && (
-              <ul className="sidebar-album-list">
-                {ungrouped.map((album) => (
-                  <li key={album.id}>
-                    <NavLink to={`/albums/${album.id}`} className={navClass}>
-                      {album.name}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </nav>
+        <SidebarNav topItems={sidebarTopItems} bottomItems={sidebarBottomItems} />
 
         <main className="app-main">
           <Outlet />
