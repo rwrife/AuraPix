@@ -212,6 +212,7 @@ export function LibraryPage() {
     () => [...new Set(photos.flatMap((photo) => photo.tags))].sort((a, b) => a.localeCompare(b)),
     [photos]
   );
+  const topQuickTags = useMemo(() => availableTags.slice(0, 4), [availableTags]);
 
   const queuedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'queued').length;
   const completedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'completed').length;
@@ -318,6 +319,16 @@ export function LibraryPage() {
                 </option>
               ))}
             </select>
+            {topQuickTags.map((tag) => (
+              <button
+                key={tag}
+                className={`btn-ghost btn-sm${activeTagFilter === tag ? ' active' : ''}`}
+                title={`Filter by #${tag}`}
+                onClick={() => setActiveTagFilter(activeTagFilter === tag ? '' : tag)}
+              >
+                #{tag}
+              </button>
+            ))}
             <select
               className="btn-ghost btn-sm"
               aria-label="Filter by camera make"
