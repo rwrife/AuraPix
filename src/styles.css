@@ -245,7 +245,7 @@ body {
   stroke-linejoin: round;
 }
 
-.sidebar-section {  
+.sidebar-section {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -801,7 +801,9 @@ input:focus {
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   flex-shrink: 0;
 }
 

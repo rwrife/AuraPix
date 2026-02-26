@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { PhotoGallery } from "../components/PhotoGallery";
-import { GRID_BUTTONS, type GridMode } from "../components/photoGalleryConfig";
-import type { ViewerState } from "../components/PhotoViewer";
-import { UploadModal } from "../components/UploadModal";
-import { Toolbar } from "../components/toolbar";
-import { ViewerToolbar } from "../components/toolbar";
-import { createViewerToolbarConfig } from "../components/toolbar/examples/viewerToolbarConfig";
-import type { ToolbarButton, ModalContentProps } from "../components/toolbar";
-import { useAuth } from "../features/auth/useAuth";
-import { useAlbums } from "../features/albums/useAlbums";
-import { useLibrary } from "../features/library/useLibrary";
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { PhotoGallery } from '../components/PhotoGallery';
+import { GRID_BUTTONS, type GridMode } from '../components/photoGalleryConfig';
+import type { ViewerState } from '../components/PhotoViewer';
+import { UploadModal } from '../components/UploadModal';
+import { Toolbar } from '../components/toolbar';
+import { ViewerToolbar } from '../components/toolbar';
+import { createViewerToolbarConfig } from '../components/toolbar/examples/viewerToolbarConfig';
+import type { ToolbarButton, ModalContentProps } from '../components/toolbar';
+import { useAuth } from '../features/auth/useAuth';
+import { useAlbums } from '../features/albums/useAlbums';
+import { useLibrary } from '../features/library/useLibrary';
 
 function toLibraryId(userId: string) {
   return `library-${userId}`;
@@ -20,16 +20,24 @@ export function LibraryPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const libraryId = toLibraryId(user?.id ?? "local-user-1");
-  const { photos, loading, error, addPhoto, assignToAlbum, bulkAddToAlbum, toggleFavorite, deletePhoto } =
-    useLibrary(libraryId);
+  const libraryId = toLibraryId(user?.id ?? 'local-user-1');
+  const {
+    photos,
+    loading,
+    error,
+    addPhoto,
+    assignToAlbum,
+    bulkAddToAlbum,
+    toggleFavorite,
+    deletePhoto,
+  } = useLibrary(libraryId);
   const { albums } = useAlbums();
 
   const [isFilmstrip, setIsFilmstrip] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [gridMode, setGridMode] = useState<GridMode>("medium");
+  const [gridMode, setGridMode] = useState<GridMode>('medium');
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
-  const [bulkAlbumId, setBulkAlbumId] = useState<string>("");
+  const [bulkAlbumId, setBulkAlbumId] = useState<string>('');
   const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
   const viewerStateRef = useRef<ViewerState | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
@@ -55,24 +63,24 @@ export function LibraryPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get("upload") !== "1") return;
+    if (params.get('upload') !== '1') return;
 
     setShowUploadModal(true);
-    params.delete("upload");
+    params.delete('upload');
     const search = params.toString();
     navigate(
       {
-        pathname: "/library",
-        search: search ? `?${search}` : "",
+        pathname: '/library',
+        search: search ? `?${search}` : '',
       },
-      { replace: true },
+      { replace: true }
     );
   }, [location.search, navigate]);
 
   async function handleUpload(
     files: File[],
     albumId: string | null,
-    onProgress: (completed: number, total: number) => void,
+    onProgress: (completed: number, total: number) => void
   ) {
     for (let i = 0; i < files.length; i++) {
       const photo = await addPhoto(files[i]);
@@ -85,14 +93,14 @@ export function LibraryPage() {
     if (!bulkAlbumId || selectedPhotoIds.size === 0) return;
 
     const result = await bulkAddToAlbum([...selectedPhotoIds], bulkAlbumId);
-    const albumName = albums.find((album) => album.id === bulkAlbumId)?.name ?? "album";
+    const albumName = albums.find((album) => album.id === bulkAlbumId)?.name ?? 'album';
 
-    const addedCount = result.results.filter((item) => item.status === "added").length;
+    const addedCount = result.results.filter((item) => item.status === 'added').length;
     const alreadyInAlbumCount = result.results.filter(
-      (item) => item.status === "skipped" && item.code === "already_in_album",
+      (item) => item.status === 'skipped' && item.code === 'already_in_album'
     ).length;
     const missingCount = result.results.filter(
-      (item) => item.status === "skipped" && item.code === "not_found",
+      (item) => item.status === 'skipped' && item.code === 'not_found'
     ).length;
 
     const messageParts = [`Added ${addedCount} photo(s) to “${albumName}”.`];
@@ -103,7 +111,7 @@ export function LibraryPage() {
       messageParts.push(`${missingCount} no longer available.`);
     }
 
-    setBulkActionMessage(messageParts.join(" "));
+    setBulkActionMessage(messageParts.join(' '));
     setSelectedPhotoIds(new Set());
   }
 
@@ -133,10 +141,10 @@ export function LibraryPage() {
   const galleryToolbarButtons = useMemo<ToolbarButton[]>(() => {
     return [
       {
-        type: "toggle",
-        id: "favorite",
-        icon: "♥",
-        title: "Toggle favorite",
+        type: 'toggle',
+        id: 'favorite',
+        icon: '♥',
+        title: 'Toggle favorite',
         disabled: selectedPhotoIds.size === 0,
         onClick: async () => {
           if (selectedPhotoIds.size === 0) return;
@@ -148,11 +156,11 @@ export function LibraryPage() {
         },
       },
       {
-        type: "modal",
-        id: "delete",
-        icon: "✕",
-        title: "Delete selected",
-        className: "btn-danger-ghost",
+        type: 'modal',
+        id: 'delete',
+        icon: '✕',
+        title: 'Delete selected',
+        className: 'btn-danger-ghost',
         disabled: selectedPhotoIds.size === 0,
         modalTitle: `Delete ${selectedPhotoIds.size} photo(s)?`,
         modalContent: ({ onClose }: ModalContentProps) => (
@@ -190,7 +198,6 @@ export function LibraryPage() {
         <h1 className="page-title">Library</h1>
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
-
             <button
               className="btn-ghost btn-sm"
               title="Select all"
@@ -201,7 +208,7 @@ export function LibraryPage() {
             {GRID_BUTTONS.map(({ mode, icon, title }) => (
               <button
                 key={mode}
-                className={`btn-ghost btn-sm${gridMode === mode ? " active" : ""}`}
+                className={`btn-ghost btn-sm${gridMode === mode ? ' active' : ''}`}
                 title={title}
                 onClick={() => setGridMode(mode)}
               >
@@ -212,7 +219,7 @@ export function LibraryPage() {
         )}
       </div>
 
-      <div className={`page-with-toolbar${isFilmstrip ? " page--viewer-mode" : ""}`}>
+      <div className={`page-with-toolbar${isFilmstrip ? ' page--viewer-mode' : ''}`}>
         <div className="page-center-column">
           {error && <p className="error">{error}</p>}
 
@@ -254,9 +261,7 @@ export function LibraryPage() {
 
       {!isFilmstrip && selectedPhotoIds.size > 0 && (
         <div className="floating-selection-toolbar">
-          <span className="floating-selection-toolbar-count">
-            {selectedPhotoIds.size} selected
-          </span>
+          <span className="floating-selection-toolbar-count">{selectedPhotoIds.size} selected</span>
           <div className="floating-selection-toolbar-actions">
             <button
               className="btn-ghost btn-sm"
@@ -324,10 +329,7 @@ export function LibraryPage() {
       )}
 
       {showUploadModal && (
-        <UploadModal
-          onClose={() => setShowUploadModal(false)}
-          onUpload={handleUpload}
-        />
+        <UploadModal onClose={() => setShowUploadModal(false)} onUpload={handleUpload} />
       )}
     </>
   );

@@ -1,5 +1,5 @@
-export { Toolbar } from "./Toolbar";
-export { ViewerToolbar } from "./ViewerToolbar";
+export { Toolbar } from './Toolbar';
+export { ViewerToolbar } from './ViewerToolbar';
 export type {
   ToolbarButton,
   ToggleToolbarButton,
@@ -8,4 +8,4 @@ export type {
   ModalContentProps,
   PanelContentProps,
   ToolbarConfig,
-} from "./types";
+} from './types';

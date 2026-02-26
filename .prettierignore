@@ -3,3 +3,5 @@ coverage
 node_modules
 docs/features
 AGENTS.md
+functions
+src/components/**/README.md

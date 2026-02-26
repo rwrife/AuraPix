@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 /**
  * Base configuration for all toolbar buttons
@@ -15,7 +15,7 @@ export interface BaseToolbarButton {
  * Toggle button - directly executes action on click (e.g., favorite)
  */
 export interface ToggleToolbarButton extends BaseToolbarButton {
-  type: "toggle";
+  type: 'toggle';
   isActive?: boolean;
   onClick: () => void | Promise<void>;
 }
@@ -24,20 +24,20 @@ export interface ToggleToolbarButton extends BaseToolbarButton {
  * Modal button - opens a modal dialog with custom content (e.g., delete confirmation)
  */
 export interface ModalToolbarButton extends BaseToolbarButton {
-  type: "modal";
+  type: 'modal';
   /** Component to render inside the modal */
   modalContent: ReactNode | ((props: ModalContentProps) => ReactNode);
   /** Optional modal title override (defaults to button title) */
   modalTitle?: string;
   /** Optional modal size */
-  modalSize?: "small" | "medium" | "large";
+  modalSize?: 'small' | 'medium' | 'large';
 }
 
 /**
  * Panel button - opens a slide-out settings panel (e.g., comments, edit tools)
  */
 export interface PanelToolbarButton extends BaseToolbarButton {
-  type: "panel";
+  type: 'panel';
   /** Component to render inside the panel */
   panelContent: ReactNode | ((props: PanelContentProps) => ReactNode);
   /** Optional panel title override (defaults to button title) */

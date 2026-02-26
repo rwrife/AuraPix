@@ -1,6 +1,6 @@
-import { useState } from "react";
-import type { ToolbarButton, PanelToolbarButton } from "./types";
-import { ToolbarButtonComponent } from "./ToolbarButton";
+import { useState } from 'react';
+import type { ToolbarButton, PanelToolbarButton } from './types';
+import { ToolbarButtonComponent } from './ToolbarButton';
 
 interface ToolbarProps {
   buttons: ToolbarButton[];
@@ -11,9 +11,9 @@ interface ToolbarProps {
 export function Toolbar({ buttons, ariaLabel }: ToolbarProps) {
   const [activePanel, setActivePanel] = useState<string | null>(null);
 
-  const activePanelButton = buttons.find(
-    (b) => b.type === "panel" && b.id === activePanel
-  ) as PanelToolbarButton | undefined;
+  const activePanelButton = buttons.find((b) => b.type === 'panel' && b.id === activePanel) as
+    | PanelToolbarButton
+    | undefined;
 
   return (
     <>
@@ -32,7 +32,7 @@ export function Toolbar({ buttons, ariaLabel }: ToolbarProps) {
             <h3 className="settings-panel-title">
               {activePanelButton.panelTitle || activePanelButton.title}
             </h3>
-            {typeof activePanelButton.panelContent === "function"
+            {typeof activePanelButton.panelContent === 'function'
               ? activePanelButton.panelContent({ onClose: () => setActivePanel(null) })
               : activePanelButton.panelContent}
           </div>
