@@ -1,24 +1,17 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { useAlbums } from "../features/albums/useAlbums";
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAlbums } from '../features/albums/useAlbums';
 
 export function FolderDetailPage() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
-  const {
-    folders,
-    albums,
-    loading,
-    error,
-    renameFolder,
-    deleteFolder,
-  } = useAlbums();
+  const { folders, albums, loading, error, renameFolder, deleteFolder } = useAlbums();
 
   const folder = folders.find((f) => f.id === folderId) ?? null;
   const folderAlbums = albums.filter((a) => a.folderId === folderId);
 
   const [showSettings, setShowSettings] = useState(false);
-  const [nameInput, setNameInput] = useState("");
+  const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -39,14 +32,14 @@ export function FolderDetailPage() {
     if (!folder) return;
     if (
       !confirm(
-        `Delete folder "${folder.name}"? Albums will become unassigned and photos will not be deleted.`,
+        `Delete folder "${folder.name}"? Albums will become unassigned and photos will not be deleted.`
       )
     ) {
       return;
     }
 
     await deleteFolder(folder.id);
-    navigate("/albums");
+    navigate('/albums');
   }
 
   if (loading) return <p className="state-message">Loading folder…</p>;
@@ -95,7 +88,7 @@ export function FolderDetailPage() {
 
         <aside className="page-right-column" aria-label="Folder tools">
           <button
-            className={`btn-ghost right-toolbar-icon${showSettings ? " active" : ""}`}
+            className={`btn-ghost right-toolbar-icon${showSettings ? ' active' : ''}`}
             onClick={() => setShowSettings((v) => !v)}
             title="Folder settings"
             aria-label="Folder settings"
@@ -121,7 +114,7 @@ export function FolderDetailPage() {
                 disabled={saving || !nameInput.trim() || nameInput.trim() === folder.name}
                 onClick={handleSaveSettings}
               >
-                {saving ? "Saving…" : "Save"}
+                {saving ? 'Saving…' : 'Save'}
               </button>
 
               <button className="btn-danger-ghost" onClick={handleDeleteFolder}>

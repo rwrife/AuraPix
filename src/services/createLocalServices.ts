@@ -1,8 +1,8 @@
-import { InMemoryAlbumsService } from "../adapters/albums/inMemoryAlbumsService";
-import { InMemoryAuthService } from "../adapters/auth/inMemoryAuthService";
-import { InMemoryLibraryService } from "../adapters/library/inMemoryLibraryService";
-import { InMemorySharingService } from "../adapters/sharing/inMemorySharingService";
-import type { Services } from "./ServiceContext";
+import { InMemoryAlbumsService } from '../adapters/albums/inMemoryAlbumsService';
+import { InMemoryAuthService } from '../adapters/auth/inMemoryAuthService';
+import { InMemoryLibraryService } from '../adapters/library/inMemoryLibraryService';
+import { InMemorySharingService } from '../adapters/sharing/inMemorySharingService';
+import type { Services } from './ServiceContext';
 
 // ---------------------------------------------------------------------------
 // Factory for the local (single-user, no-Firebase) service bundle.

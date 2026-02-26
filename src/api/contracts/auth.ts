@@ -1,4 +1,4 @@
-import type { Session, SignInInput, SignUpInput, User } from "../../domain/auth/types";
+import type { Session, SignInInput, SignUpInput, User } from '../../domain/auth/types';
 
 // ---------------------------------------------------------------------------
 // Auth API contracts

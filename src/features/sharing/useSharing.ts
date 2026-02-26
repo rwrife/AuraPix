@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import type { ShareLink } from "../../domain/sharing/types";
-import { useServices } from "../../services/useServices";
+import { useCallback, useEffect, useState } from 'react';
+import type { ShareLink } from '../../domain/sharing/types';
+import { useServices } from '../../services/useServices';
 
 interface UseSharingState {
   links: ShareLink[];
@@ -10,9 +10,9 @@ interface UseSharingState {
 
 interface UseSharingReturn extends UseSharingState {
   createLink(
-    resourceType: ShareLink["resourceType"],
+    resourceType: ShareLink['resourceType'],
     resourceId: string,
-    options?: { expiresAt?: string; password?: string },
+    options?: { expiresAt?: string; password?: string }
   ): Promise<ShareLink>;
   revokeLink(linkId: string): Promise<void>;
 }
@@ -36,9 +36,7 @@ export function useSharing(resourceId: string): UseSharingReturn {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load share links.",
-          );
+          setError(err instanceof Error ? err.message : 'Failed to load share links.');
           setLoading(false);
         }
       });
@@ -49,20 +47,20 @@ export function useSharing(resourceId: string): UseSharingReturn {
 
   const createLink = useCallback(
     async (
-      resourceType: ShareLink["resourceType"],
+      resourceType: ShareLink['resourceType'],
       resId: string,
-      options?: { expiresAt?: string; password?: string },
+      options?: { expiresAt?: string; password?: string }
     ): Promise<ShareLink> => {
       const link = await sharing.createShareLink({
         resourceType,
         resourceId: resId,
-        policy: { permission: "view", expiresAt: options?.expiresAt ?? null },
+        policy: { permission: 'view', expiresAt: options?.expiresAt ?? null },
         password: options?.password,
       });
       setLinks((prev) => [link, ...prev]);
       return link;
     },
-    [sharing],
+    [sharing]
   );
 
   const revokeLink = useCallback(
@@ -70,7 +68,7 @@ export function useSharing(resourceId: string): UseSharingReturn {
       await sharing.revokeShareLink(linkId);
       setLinks((prev) => prev.filter((l) => l.id !== linkId));
     },
-    [sharing],
+    [sharing]
   );
 
   return { links, loading, error, createLink, revokeLink };

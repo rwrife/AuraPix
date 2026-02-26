@@ -1,4 +1,4 @@
-import type { Session, SignInInput, SignUpInput, User } from "./types";
+import type { Session, SignInInput, SignUpInput, User } from './types';
 
 export interface AuthService {
   signIn(input: SignInInput): Promise<Session>;

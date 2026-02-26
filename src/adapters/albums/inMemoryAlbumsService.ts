@@ -1,17 +1,17 @@
-import type { AlbumsService } from "../../domain/albums/contract";
+import type { AlbumsService } from '../../domain/albums/contract';
 import type {
   Album,
   AlbumFolder,
   CreateAlbumInput,
   CreateFolderInput,
-} from "../../domain/albums/types";
+} from '../../domain/albums/types';
 
 const INITIAL_ALBUMS: Album[] = [
   {
-    id: "album-seed-1",
-    name: "Sample Highlights",
+    id: 'album-seed-1',
+    name: 'Sample Highlights',
     folderId: null,
-    createdAt: new Date("2026-01-15T12:00:00.000Z").toISOString(),
+    createdAt: new Date('2026-01-15T12:00:00.000Z').toISOString(),
   },
 ];
 
@@ -23,10 +23,7 @@ export class InMemoryAlbumsService implements AlbumsService {
   private albums: Album[];
   private folders: AlbumFolder[];
 
-  constructor(
-    seedAlbums: Album[] = INITIAL_ALBUMS,
-    seedFolders: AlbumFolder[] = [],
-  ) {
+  constructor(seedAlbums: Album[] = INITIAL_ALBUMS, seedFolders: AlbumFolder[] = []) {
     this.albums = [...seedAlbums];
     this.folders = [...seedFolders];
   }
@@ -38,9 +35,9 @@ export class InMemoryAlbumsService implements AlbumsService {
 
   async createFolder(input: CreateFolderInput): Promise<AlbumFolder> {
     const name = input.name.trim();
-    if (!name) throw new Error("Folder name is required.");
+    if (!name) throw new Error('Folder name is required.');
     const folder: AlbumFolder = {
-      id: uid("folder"),
+      id: uid('folder'),
       name,
       createdAt: new Date().toISOString(),
     };
@@ -50,14 +47,13 @@ export class InMemoryAlbumsService implements AlbumsService {
 
   async updateFolder(
     folderId: string,
-    updates: Partial<Pick<AlbumFolder, "name">>,
+    updates: Partial<Pick<AlbumFolder, 'name'>>
   ): Promise<AlbumFolder> {
     const idx = this.folders.findIndex((f) => f.id === folderId);
-    if (idx === -1) throw new Error("Folder not found.");
+    if (idx === -1) throw new Error('Folder not found.');
 
-    const nextName =
-      updates.name !== undefined ? updates.name.trim() : this.folders[idx].name;
-    if (!nextName) throw new Error("Folder name is required.");
+    const nextName = updates.name !== undefined ? updates.name.trim() : this.folders[idx].name;
+    if (!nextName) throw new Error('Folder name is required.');
 
     const updated: AlbumFolder = {
       ...this.folders[idx],
@@ -71,16 +67,12 @@ export class InMemoryAlbumsService implements AlbumsService {
   async deleteFolder(folderId: string): Promise<void> {
     this.folders = this.folders.filter((f) => f.id !== folderId);
     // Un-fold albums that were in this folder
-    this.albums = this.albums.map((a) =>
-      a.folderId === folderId ? { ...a, folderId: null } : a,
-    );
+    this.albums = this.albums.map((a) => (a.folderId === folderId ? { ...a, folderId: null } : a));
   }
 
   // ── Albums ─────────────────────────────────────────────────────────────
   async listAlbums(): Promise<Album[]> {
-    return [...this.albums].sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    );
+    return [...this.albums].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getAlbum(albumId: string): Promise<Album | null> {
@@ -89,9 +81,9 @@ export class InMemoryAlbumsService implements AlbumsService {
 
   async createAlbum(input: CreateAlbumInput): Promise<Album> {
     const name = input.name.trim();
-    if (!name) throw new Error("Album name is required.");
+    if (!name) throw new Error('Album name is required.');
     const album: Album = {
-      id: uid("album"),
+      id: uid('album'),
       name,
       folderId: input.folderId ?? null,
       createdAt: new Date().toISOString(),
@@ -102,13 +94,12 @@ export class InMemoryAlbumsService implements AlbumsService {
 
   async updateAlbum(
     albumId: string,
-    updates: Partial<Pick<Album, "name" | "folderId">>,
+    updates: Partial<Pick<Album, 'name' | 'folderId'>>
   ): Promise<Album> {
     const idx = this.albums.findIndex((a) => a.id === albumId);
-    if (idx === -1) throw new Error("Album not found.");
-    const nextName =
-      updates.name !== undefined ? updates.name.trim() : this.albums[idx].name;
-    if (!nextName) throw new Error("Album name is required.");
+    if (idx === -1) throw new Error('Album not found.');
+    const nextName = updates.name !== undefined ? updates.name.trim() : this.albums[idx].name;
+    if (!nextName) throw new Error('Album name is required.');
 
     const updated: Album = { ...this.albums[idx], ...updates, name: nextName };
     this.albums = this.albums.map((a) => (a.id === albumId ? updated : a));

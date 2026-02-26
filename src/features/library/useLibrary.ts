@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Photo } from "../../domain/library/types";
-import { useServices } from "../../services/useServices";
+import { useCallback, useEffect, useState } from 'react';
+import type { Photo } from '../../domain/library/types';
+import { useServices } from '../../services/useServices';
 
 interface UseLibraryState {
   photos: Photo[];
@@ -51,7 +51,7 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load photos.");
+          setError(err instanceof Error ? err.message : 'Failed to load photos.');
           setLoading(false);
         }
       });
@@ -75,7 +75,7 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
       refresh();
       return photo;
     },
-    [library, libraryId, refresh],
+    [library, libraryId, refresh]
   );
 
   const toggleFavorite = useCallback(
@@ -85,11 +85,9 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
       const updated = await library.updatePhoto(photoId, {
         isFavorite: !photo.isFavorite,
       });
-      setPhotos((prev) =>
-        prev.map((p) => (p.id === photoId ? updated : p)),
-      );
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
     },
-    [library, photos],
+    [library, photos]
   );
 
   const deletePhoto = useCallback(
@@ -97,7 +95,7 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
       await library.deletePhoto(photoId);
       setPhotos((prev) => prev.filter((p) => p.id !== photoId));
     },
-    [library],
+    [library]
   );
 
   const assignToAlbum = useCallback(
@@ -108,11 +106,9 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
         ? photo.albumIds
         : [...photo.albumIds, albumId];
       const updated = await library.updatePhoto(photoId, { albumIds });
-      setPhotos((prev) =>
-        prev.map((p) => (p.id === photoId ? updated : p)),
-      );
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
     },
-    [library, photos],
+    [library, photos]
   );
 
   return {

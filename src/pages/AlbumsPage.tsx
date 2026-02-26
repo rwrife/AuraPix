@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import type { Album, AlbumFolder } from "../domain/albums/types";
-import type { Photo } from "../domain/library/types";
-import { useAlbums } from "../features/albums/useAlbums";
-import { useAuth } from "../features/auth/useAuth";
-import { useLibrary } from "../features/library/useLibrary";
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import type { Album, AlbumFolder } from '../domain/albums/types';
+import type { Photo } from '../domain/library/types';
+import { useAlbums } from '../features/albums/useAlbums';
+import { useAuth } from '../features/auth/useAuth';
+import { useLibrary } from '../features/library/useLibrary';
 
 function toLibraryId(userId: string) {
   return `library-${userId}`;
@@ -87,16 +87,14 @@ function AlbumGridCard({
             {album.name}
           </Link>
           <span className="album-photo-count">
-            {albumPhotos.length} photo{albumPhotos.length !== 1 ? "s" : ""}
+            {albumPhotos.length} photo{albumPhotos.length !== 1 ? 's' : ''}
           </span>
         </div>
         <div className="album-card-actions">
           <select
             className="folder-select"
-            value={album.folderId ?? ""}
-            onChange={(e) =>
-              onMove(album.id, e.target.value === "" ? null : e.target.value)
-            }
+            value={album.folderId ?? ''}
+            onChange={(e) => onMove(album.id, e.target.value === '' ? null : e.target.value)}
             title="Move to folder"
           >
             <option value="">No folder</option>
@@ -142,20 +140,16 @@ function AlbumListRow({
     <li className="album-item">
       <Link to={`/albums/${album.id}`} className="album-link">
         <span className="album-name">{album.name}</span>
-        <span className="album-date">
-          {new Date(album.createdAt).toLocaleDateString()}
-        </span>
+        <span className="album-date">{new Date(album.createdAt).toLocaleDateString()}</span>
         <span className="album-photo-count">
-          {albumPhotos.length} photo{albumPhotos.length !== 1 ? "s" : ""}
+          {albumPhotos.length} photo{albumPhotos.length !== 1 ? 's' : ''}
         </span>
       </Link>
       <div className="album-item-actions">
         <select
           className="folder-select"
-          value={album.folderId ?? ""}
-          onChange={(e) =>
-            onMove(album.id, e.target.value === "" ? null : e.target.value)
-          }
+          value={album.folderId ?? ''}
+          onChange={(e) => onMove(album.id, e.target.value === '' ? null : e.target.value)}
           title="Move to folder"
         >
           <option value="">No folder</option>
@@ -184,7 +178,7 @@ interface FolderSectionProps {
   folderAlbums: Album[];
   allPhotos: Photo[];
   allFolders: AlbumFolder[];
-  viewMode: "grid" | "list";
+  viewMode: 'grid' | 'list';
   deletingId: string | null;
   onDelete(albumId: string, albumName: string): void;
   onMove(albumId: string, folderId: string | null): void;
@@ -206,8 +200,7 @@ function FolderSection({
 
   if (folderAlbums.length === 0 && folder !== null) return null;
 
-  const photosForAlbum = (albumId: string) =>
-    allPhotos.filter((p) => p.albumIds.includes(albumId));
+  const photosForAlbum = (albumId: string) => allPhotos.filter((p) => p.albumIds.includes(albumId));
 
   return (
     <div className="folder-section">
@@ -215,9 +208,9 @@ function FolderSection({
         <button
           className="folder-collapse-btn"
           onClick={() => setCollapsed((v) => !v)}
-          title={collapsed ? "Expand" : "Collapse"}
+          title={collapsed ? 'Expand' : 'Collapse'}
         >
-          {collapsed ? "▶" : "▼"}
+          {collapsed ? '▶' : '▼'}
         </button>
         {folder ? (
           <>
@@ -229,7 +222,7 @@ function FolderSection({
               {folder.name}
             </Link>
             <span className="folder-album-count">
-              {folderAlbums.length} album{folderAlbums.length !== 1 ? "s" : ""}
+              {folderAlbums.length} album{folderAlbums.length !== 1 ? 's' : ''}
             </span>
             {onDeleteFolder && (
               <button
@@ -244,18 +237,16 @@ function FolderSection({
         ) : (
           <>
             <span className="folder-section-icon">📄</span>
-            <span className="folder-section-name folder-section-name--ungrouped">
-              Ungrouped
-            </span>
+            <span className="folder-section-name folder-section-name--ungrouped">Ungrouped</span>
             <span className="folder-album-count">
-              {folderAlbums.length} album{folderAlbums.length !== 1 ? "s" : ""}
+              {folderAlbums.length} album{folderAlbums.length !== 1 ? 's' : ''}
             </span>
           </>
         )}
       </div>
 
       {!collapsed &&
-        (viewMode === "grid" ? (
+        (viewMode === 'grid' ? (
           <div className="album-grid-view">
             {folderAlbums.map((album) => (
               <AlbumGridCard
@@ -291,25 +282,34 @@ function FolderSection({
 // ── Page ──────────────────────────────────────────────────────────────────
 export function AlbumsPage() {
   const { user } = useAuth();
-  const libraryId = toLibraryId(user?.id ?? "local-user-1");
-  const { albums, folders, loading, error, createAlbum, deleteAlbum, createFolder, deleteFolder, moveAlbum } =
-    useAlbums();
+  const libraryId = toLibraryId(user?.id ?? 'local-user-1');
+  const {
+    albums,
+    folders,
+    loading,
+    error,
+    createAlbum,
+    deleteAlbum,
+    createFolder,
+    deleteFolder,
+    moveAlbum,
+  } = useAlbums();
   const { photos } = useLibrary(libraryId);
 
-  const [albumName, setAlbumName] = useState("");
+  const [albumName, setAlbumName] = useState('');
   const [creating, setCreating] = useState(false);
-  const [folderName, setFolderName] = useState("");
+  const [folderName, setFolderName] = useState('');
   const [showFolderForm, setShowFolderForm] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   async function handleCreateAlbum(e: React.FormEvent) {
     e.preventDefault();
     if (!albumName.trim()) return;
     setCreating(true);
     await createAlbum(albumName.trim());
-    setAlbumName("");
+    setAlbumName('');
     setCreating(false);
   }
 
@@ -318,26 +318,20 @@ export function AlbumsPage() {
     if (!folderName.trim()) return;
     setCreatingFolder(true);
     await createFolder(folderName.trim());
-    setFolderName("");
+    setFolderName('');
     setCreatingFolder(false);
     setShowFolderForm(false);
   }
 
   async function handleDeleteAlbum(albumId: string, albumName: string) {
-    if (!confirm(`Delete album "${albumName}"? Photos will not be deleted.`))
-      return;
+    if (!confirm(`Delete album "${albumName}"? Photos will not be deleted.`)) return;
     setDeletingId(albumId);
     await deleteAlbum(albumId);
     setDeletingId(null);
   }
 
   async function handleDeleteFolder(folderId: string, name: string) {
-    if (
-      !confirm(
-        `Delete folder "${name}"? Albums inside will become ungrouped.`,
-      )
-    )
-      return;
+    if (!confirm(`Delete folder "${name}"? Albums inside will become ungrouped.`)) return;
     await deleteFolder(folderId);
   }
 
@@ -346,25 +340,22 @@ export function AlbumsPage() {
       <div className="page-titlebar">
         <h1 className="page-title">Albums</h1>
         <div className="header-actions">
-          <button
-            className="btn-ghost btn-sm"
-            onClick={() => setShowFolderForm((v) => !v)}
-          >
+          <button className="btn-ghost btn-sm" onClick={() => setShowFolderForm((v) => !v)}>
             <span className="btn-inline-icon" aria-hidden="true">
               <NewFolderIcon />
             </span>
             New Folder
           </button>
           <button
-            className={`btn-ghost btn-sm${viewMode === "grid" ? " active" : ""}`}
-            onClick={() => setViewMode("grid")}
+            className={`btn-ghost btn-sm${viewMode === 'grid' ? ' active' : ''}`}
+            onClick={() => setViewMode('grid')}
             title="Grid view"
           >
             ⊞ Grid
           </button>
           <button
-            className={`btn-ghost btn-sm${viewMode === "list" ? " active" : ""}`}
-            onClick={() => setViewMode("list")}
+            className={`btn-ghost btn-sm${viewMode === 'list' ? ' active' : ''}`}
+            onClick={() => setViewMode('list')}
             title="List view"
           >
             ≡ List
@@ -374,82 +365,78 @@ export function AlbumsPage() {
 
       <div className="page-content">
         {/* Create folder form */}
-      {showFolderForm && (
-        <form className="album-form" onSubmit={handleCreateFolder}>
+        {showFolderForm && (
+          <form className="album-form" onSubmit={handleCreateFolder}>
+            <input
+              type="text"
+              placeholder="Folder name"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              disabled={creatingFolder}
+              autoFocus
+            />
+            <button type="submit" disabled={creatingFolder || !folderName.trim()}>
+              {creatingFolder ? 'Creating…' : 'Create folder'}
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => setShowFolderForm(false)}>
+              Cancel
+            </button>
+          </form>
+        )}
+
+        {/* Create album form */}
+        <form className="album-form" onSubmit={handleCreateAlbum}>
           <input
             type="text"
-            placeholder="Folder name"
-            value={folderName}
-            onChange={(e) => setFolderName(e.target.value)}
-            disabled={creatingFolder}
-            autoFocus
+            placeholder="New album name"
+            value={albumName}
+            onChange={(e) => setAlbumName(e.target.value)}
+            disabled={creating}
           />
-          <button type="submit" disabled={creatingFolder || !folderName.trim()}>
-            {creatingFolder ? "Creating…" : "Create folder"}
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => setShowFolderForm(false)}
-          >
-            Cancel
+          <button type="submit" disabled={creating || !albumName.trim()}>
+            {creating ? 'Creating…' : 'Create album'}
           </button>
         </form>
-      )}
 
-      {/* Create album form */}
-      <form className="album-form" onSubmit={handleCreateAlbum}>
-        <input
-          type="text"
-          placeholder="New album name"
-          value={albumName}
-          onChange={(e) => setAlbumName(e.target.value)}
-          disabled={creating}
-        />
-        <button type="submit" disabled={creating || !albumName.trim()}>
-          {creating ? "Creating…" : "Create album"}
-        </button>
-      </form>
+        {error && <p className="error">{error}</p>}
 
-      {error && <p className="error">{error}</p>}
+        {loading ? (
+          <p className="state-message">Loading albums…</p>
+        ) : albums.length === 0 ? (
+          <p className="state-message">No albums yet. Create one above.</p>
+        ) : (
+          <div className="folders-container">
+            {/* Folder sections */}
+            {folders.map((folder) => (
+              <FolderSection
+                key={folder.id}
+                folder={folder}
+                folderAlbums={albums.filter((a) => a.folderId === folder.id)}
+                allPhotos={photos}
+                allFolders={folders}
+                viewMode={viewMode}
+                deletingId={deletingId}
+                onDelete={handleDeleteAlbum}
+                onMove={moveAlbum}
+                onDeleteFolder={handleDeleteFolder}
+              />
+            ))}
 
-      {loading ? (
-        <p className="state-message">Loading albums…</p>
-      ) : albums.length === 0 ? (
-        <p className="state-message">No albums yet. Create one above.</p>
-      ) : (
-        <div className="folders-container">
-          {/* Folder sections */}
-          {folders.map((folder) => (
-            <FolderSection
-              key={folder.id}
-              folder={folder}
-              folderAlbums={albums.filter((a) => a.folderId === folder.id)}
-              allPhotos={photos}
-              allFolders={folders}
-              viewMode={viewMode}
-              deletingId={deletingId}
-              onDelete={handleDeleteAlbum}
-              onMove={moveAlbum}
-              onDeleteFolder={handleDeleteFolder}
-            />
-          ))}
-
-          {/* Ungrouped albums */}
-          {albums.filter((a) => !a.folderId).length > 0 && (
-            <FolderSection
-              folder={null}
-              folderAlbums={albums.filter((a) => !a.folderId)}
-              allPhotos={photos}
-              allFolders={folders}
-              viewMode={viewMode}
-              deletingId={deletingId}
-              onDelete={handleDeleteAlbum}
-              onMove={moveAlbum}
-            />
-          )}
-        </div>
-      )}
+            {/* Ungrouped albums */}
+            {albums.filter((a) => !a.folderId).length > 0 && (
+              <FolderSection
+                folder={null}
+                folderAlbums={albums.filter((a) => !a.folderId)}
+                allPhotos={photos}
+                allFolders={folders}
+                viewMode={viewMode}
+                deletingId={deletingId}
+                onDelete={handleDeleteAlbum}
+                onMove={moveAlbum}
+              />
+            )}
+          </div>
+        )}
       </div>
     </>
   );

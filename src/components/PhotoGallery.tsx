@@ -5,17 +5,18 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type MutableRefObject,
-} from "react";
-import type { Photo } from "../domain/library/types";
-import { PhotoViewer, type ViewerState } from "./PhotoViewer";
-import type { GridMode } from "./photoGalleryConfig";
-type ViewMode = GridMode | "filmstrip";
+} from 'react';
+import type { Photo } from '../domain/library/types';
+import { PhotoViewer, type ViewerState } from './PhotoViewer';
+import type { GridMode } from './photoGalleryConfig';
+type ViewMode = GridMode | 'filmstrip';
 
 interface PhotoGalleryProps {
   photos: Photo[];
   gridMode?: GridMode;
   selectedPhotoIds?: Set<string>;
   onSelectionChange?: (selectedIds: Set<string>) => void;
+  onGridModeChange?: (mode: GridMode) => void;
   onIsFilmstripChange?: (isFilmstrip: boolean) => void;
   onDeletePhoto?: (photo: Photo) => Promise<void> | void;
   onToggleFavorite?: (photo: Photo) => Promise<void> | void;
@@ -24,9 +25,10 @@ interface PhotoGalleryProps {
 
 export function PhotoGallery({
   photos,
-  gridMode = "medium",
+  gridMode = 'medium',
   selectedPhotoIds = new Set(),
   onSelectionChange,
+  onGridModeChange,
   onIsFilmstripChange,
   onDeletePhoto,
   onToggleFavorite,
@@ -39,11 +41,11 @@ export function PhotoGallery({
   const tileRefs = useRef<Array<HTMLDivElement | null>>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
-  const isFilmstrip = mode === "filmstrip";
+  const isFilmstrip = mode === 'filmstrip';
 
   // Sync external gridMode changes
   useEffect(() => {
-    if (mode !== "filmstrip") {
+    if (mode !== 'filmstrip') {
       setMode(gridMode);
       prevGridMode.current = gridMode;
     }
@@ -55,7 +57,10 @@ export function PhotoGallery({
 
   useEffect(() => {
     onIsFilmstripChange?.(isFilmstrip);
-  }, [isFilmstrip, onIsFilmstripChange]);
+    if (!isFilmstrip) {
+      onGridModeChange?.(mode as GridMode);
+    }
+  }, [isFilmstrip, mode, onGridModeChange, onIsFilmstripChange]);
 
   useEffect(() => {
     if (isFilmstrip || photos.length === 0) return;
@@ -67,9 +72,9 @@ export function PhotoGallery({
   }, [isFilmstrip, photos.length]);
 
   function enterFilmstrip(idx: number) {
-    if (mode !== "filmstrip") prevGridMode.current = mode as GridMode;
+    if (mode !== 'filmstrip') prevGridMode.current = mode as GridMode;
     setViewerIndex(idx);
-    setMode("filmstrip");
+    setMode('filmstrip');
   }
 
   function exitFilmstrip() {
@@ -118,33 +123,33 @@ export function PhotoGallery({
 
   function handleGridKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement | null;
-    if (target?.tagName === "INPUT") return;
+    if (target?.tagName === 'INPUT') return;
 
     const idx = focusedIndex;
     const columns = getColumnCount();
     switch (event.key) {
-      case "ArrowRight":
+      case 'ArrowRight':
         event.preventDefault();
         moveFocus(idx + 1);
         break;
-      case "ArrowLeft":
+      case 'ArrowLeft':
         event.preventDefault();
         moveFocus(idx - 1);
         break;
-      case "ArrowDown":
+      case 'ArrowDown':
         event.preventDefault();
         moveFocus(idx + columns);
         break;
-      case "ArrowUp":
+      case 'ArrowUp':
         event.preventDefault();
         moveFocus(idx - columns);
         break;
-      case " ":
-      case "Spacebar":
+      case ' ':
+      case 'Spacebar':
         event.preventDefault();
         togglePhotoSelection(photos[idx].id);
         break;
-      case "Enter":
+      case 'Enter':
         event.preventDefault();
         enterFilmstrip(idx);
         break;
@@ -187,10 +192,10 @@ export function PhotoGallery({
               ref={(el) => {
                 tileRefs.current[idx] = el;
               }}
-              className={`gallery-tile${mode === "large" ? " gallery-tile--large" : ""}${isSelected ? " gallery-tile--selected" : ""}`}
+              className={`gallery-tile${mode === 'large' ? ' gallery-tile--large' : ''}${isSelected ? ' gallery-tile--selected' : ''}`}
               onClick={(e) => handleTileClick(idx, e)}
               onMouseEnter={() => setFocusedIndex(idx)}
-              data-focused={idx === focusedIndex ? "true" : "false"}
+              data-focused={idx === focusedIndex ? 'true' : 'false'}
               title={photo.originalName}
             >
               {/* Selection checkbox */}
@@ -214,9 +219,7 @@ export function PhotoGallery({
                 className="gallery-tile-img"
                 loading="lazy"
               />
-              {mode === "large" && (
-                <p className="gallery-tile-name">{photo.originalName}</p>
-              )}
+              {mode === 'large' && <p className="gallery-tile-name">{photo.originalName}</p>}
             </div>
           );
         })}

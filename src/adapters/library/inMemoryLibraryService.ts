@@ -1,18 +1,18 @@
-import type { LibraryService } from "../../domain/library/contract";
+import type { LibraryService } from '../../domain/library/contract';
 import type {
   AddPhotoInput,
   ListPhotosInput,
   ListPhotosResult,
   Photo,
   UpdatePhotoInput,
-} from "../../domain/library/types";
+} from '../../domain/library/types';
 
 // ---------------------------------------------------------------------------
 // In-memory library service with localStorage persistence.
 // Photos are stored as data URLs so they survive page refresh locally.
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "aurapix:local:photos";
+const STORAGE_KEY = 'aurapix:local:photos';
 
 function loadPhotos(): Photo[] {
   try {
@@ -41,7 +41,7 @@ export class InMemoryLibraryService implements LibraryService {
 
   async listPhotos(input: ListPhotosInput): Promise<ListPhotosResult> {
     let results = this.photos.filter(
-      (p) => p.libraryId === input.libraryId && p.status === "ready",
+      (p) => p.libraryId === input.libraryId && p.status === 'ready'
     );
 
     if (input.albumId) {
@@ -51,23 +51,17 @@ export class InMemoryLibraryService implements LibraryService {
       results = results.filter((p) => p.isFavorite);
     }
     if (input.tags && input.tags.length > 0) {
-      results = results.filter((p) =>
-        input.tags!.every((t) => p.tags.includes(t)),
-      );
+      results = results.filter((p) => input.tags!.every((t) => p.tags.includes(t)));
     }
 
     // Sort newest-first
     results = results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     const pageSize = input.pageSize ?? results.length;
-    const startIndex = input.pageToken
-      ? results.findIndex((p) => p.id === input.pageToken)
-      : 0;
+    const startIndex = input.pageToken ? results.findIndex((p) => p.id === input.pageToken) : 0;
     const page = results.slice(startIndex, startIndex + pageSize);
     const nextPageToken =
-      startIndex + pageSize < results.length
-        ? results[startIndex + pageSize].id
-        : null;
+      startIndex + pageSize < results.length ? results[startIndex + pageSize].id : null;
 
     return { photos: page, nextPageToken };
   }
@@ -87,12 +81,12 @@ export class InMemoryLibraryService implements LibraryService {
       originalName: input.originalName,
       storagePath: input.dataUrl,
       thumbnailPath: input.dataUrl,
-      status: "ready",
+      status: 'ready',
       metadata: input.metadata
         ? {
             width: input.metadata.width ?? 0,
             height: input.metadata.height ?? 0,
-            mimeType: input.metadata.mimeType ?? "image/jpeg",
+            mimeType: input.metadata.mimeType ?? 'image/jpeg',
             sizeBytes: input.metadata.sizeBytes ?? 0,
             takenAt: input.metadata.takenAt ?? null,
             location: input.metadata.location ?? null,
@@ -123,11 +117,7 @@ export class InMemoryLibraryService implements LibraryService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.photos = [
-      ...this.photos.slice(0, idx),
-      updated,
-      ...this.photos.slice(idx + 1),
-    ];
+    this.photos = [...this.photos.slice(0, idx), updated, ...this.photos.slice(idx + 1)];
     savePhotos(this.photos);
     return updated;
   }

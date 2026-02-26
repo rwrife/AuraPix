@@ -1,8 +1,4 @@
-import type {
-  CreateShareLinkInput,
-  ResolveShareLinkInput,
-  ShareLink,
-} from "./types";
+import type { CreateShareLinkInput, ResolveShareLinkInput, ShareLink } from './types';
 
 export interface SharingService {
   createShareLink(input: CreateShareLinkInput): Promise<ShareLink>;

@@ -1,10 +1,5 @@
-import type { AuthService } from "../../domain/auth/contract";
-import type {
-  Session,
-  SignInInput,
-  SignUpInput,
-  User,
-} from "../../domain/auth/types";
+import type { AuthService } from '../../domain/auth/contract';
+import type { Session, SignInInput, SignUpInput, User } from '../../domain/auth/types';
 
 // ---------------------------------------------------------------------------
 // Single-user in-memory auth service.
@@ -12,14 +7,14 @@ import type {
 // auto-created and persisted in localStorage so sessions survive refresh.
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "aurapix:local:session";
+const STORAGE_KEY = 'aurapix:local:session';
 
 const LOCAL_USER: User = {
-  id: "local-user-1",
-  email: "local@aurapix.local",
-  displayName: "Local User",
+  id: 'local-user-1',
+  email: 'local@aurapix.local',
+  displayName: 'Local User',
   photoUrl: null,
-  createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
+  createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
 };
 
 function makeSession(user: User): Session {
@@ -33,7 +28,7 @@ function makeSession(user: User): Session {
 export class InMemoryAuthService implements AuthService {
   /** In-memory user store: email → user */
   private users = new Map<string, { user: User; password: string }>([
-    [LOCAL_USER.email, { user: LOCAL_USER, password: "local" }],
+    [LOCAL_USER.email, { user: LOCAL_USER, password: 'local' }],
   ]);
 
   private session: Session | null = null;
@@ -57,7 +52,7 @@ export class InMemoryAuthService implements AuthService {
   async signIn(input: SignInInput): Promise<Session> {
     const entry = this.users.get(input.email);
     if (!entry || entry.password !== input.password) {
-      throw new Error("Invalid email or password.");
+      throw new Error('Invalid email or password.');
     }
     this.session = makeSession(entry.user);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.session));
@@ -66,7 +61,7 @@ export class InMemoryAuthService implements AuthService {
 
   async signUp(input: SignUpInput): Promise<Session> {
     if (this.users.has(input.email)) {
-      throw new Error("An account with that email already exists.");
+      throw new Error('An account with that email already exists.');
     }
     const user: User = {
       id: `local-user-${Date.now()}`,

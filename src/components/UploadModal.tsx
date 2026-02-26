@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useAlbums } from "../features/albums/useAlbums";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAlbums } from '../features/albums/useAlbums';
 
 interface UploadModalProps {
   /**
@@ -15,22 +15,18 @@ interface UploadModalProps {
   onUpload(
     files: File[],
     albumId: string | null,
-    onProgress: (completed: number, total: number) => void,
+    onProgress: (completed: number, total: number) => void
   ): void | Promise<void>;
 }
 
-export function UploadModal({
-  preselectedAlbumId,
-  onClose,
-  onUpload,
-}: UploadModalProps) {
+export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadModalProps) {
   const showAlbumSelector = preselectedAlbumId == null;
   const { albums, createAlbum } = useAlbums();
 
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedAlbumId, setSelectedAlbumId] = useState<string>("none");
-  const [newAlbumName, setNewAlbumName] = useState("");
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string>('none');
+  const [newAlbumName, setNewAlbumName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadedCount, setUploadedCount] = useState(0);
@@ -40,16 +36,11 @@ export function UploadModal({
 
   function mergeFiles(incoming: FileList | File[] | null) {
     if (!incoming) return;
-    const images = Array.from(incoming).filter((f) =>
-      f.type.startsWith("image/"),
-    );
+    const images = Array.from(incoming).filter((f) => f.type.startsWith('image/'));
     if (images.length === 0) return;
     setFiles((prev) => {
       const existingKeys = new Set(prev.map((f) => `${f.name}-${f.size}`));
-      return [
-        ...prev,
-        ...images.filter((f) => !existingKeys.has(`${f.name}-${f.size}`)),
-      ];
+      return [...prev, ...images.filter((f) => !existingKeys.has(`${f.name}-${f.size}`))];
     });
   }
 
@@ -75,7 +66,7 @@ export function UploadModal({
 
   function handleAlbumChange(value: string) {
     setSelectedAlbumId(value);
-    if (value === "create-new") {
+    if (value === 'create-new') {
       // Focus the new album input on next tick
       setTimeout(() => newAlbumInputRef.current?.focus(), 0);
     }
@@ -90,16 +81,16 @@ export function UploadModal({
       let albumId: string | null = preselectedAlbumId ?? null;
 
       if (showAlbumSelector) {
-        if (selectedAlbumId === "create-new") {
+        if (selectedAlbumId === 'create-new') {
           const name = newAlbumName.trim();
           if (!name) {
-            setUploadError("Please enter a name for the new album.");
+            setUploadError('Please enter a name for the new album.');
             setUploading(false);
             return;
           }
           const created = await createAlbum(name);
           albumId = created?.id ?? null;
-        } else if (selectedAlbumId !== "none") {
+        } else if (selectedAlbumId !== 'none') {
           albumId = selectedAlbumId;
         }
       }
@@ -110,9 +101,7 @@ export function UploadModal({
       });
       onClose();
     } catch (err) {
-      setUploadError(
-        err instanceof Error ? err.message : "Upload failed. Please try again.",
-      );
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -120,14 +109,14 @@ export function UploadModal({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape') onClose();
     },
-    [onClose],
+    [onClose]
   );
 
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
   return (
@@ -137,21 +126,11 @@ export function UploadModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className="modal-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Upload photos"
-      >
+      <div className="modal-dialog" role="dialog" aria-modal="true" aria-label="Upload photos">
         {/* Header */}
         <div className="modal-header">
           <h2 className="modal-title">Upload Photos</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
@@ -160,7 +139,7 @@ export function UploadModal({
         <div className="modal-body">
           {/* Drop zone */}
           <div
-            className={`upload-dropzone${isDragging ? " upload-dropzone--active" : ""}`}
+            className={`upload-dropzone${isDragging ? ' upload-dropzone--active' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -168,8 +147,7 @@ export function UploadModal({
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ")
-                fileInputRef.current?.click();
+              if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click();
             }}
             aria-label="Drop photos here or click to browse"
           >
@@ -182,9 +160,7 @@ export function UploadModal({
               onChange={(e) => mergeFiles(e.target.files)}
             />
             <span className="upload-dropzone-icon">📷</span>
-            <p className="upload-dropzone-text">
-              Drag &amp; drop photos here
-            </p>
+            <p className="upload-dropzone-text">Drag &amp; drop photos here</p>
             <p className="upload-dropzone-subtext">or</p>
             <button
               type="button"
@@ -202,7 +178,7 @@ export function UploadModal({
           {files.length > 0 && (
             <div className="upload-file-list">
               <p className="upload-file-list-label">
-                {files.length} file{files.length !== 1 ? "s" : ""} selected
+                {files.length} file{files.length !== 1 ? 's' : ''} selected
               </p>
               <ul className="upload-file-items">
                 {files.map((f, i) => (
@@ -233,10 +209,7 @@ export function UploadModal({
           {/* Album selector — only shown when not already inside an album */}
           {showAlbumSelector && (
             <div className="upload-album-section">
-              <label
-                className="upload-label"
-                htmlFor="upload-album-select"
-              >
+              <label className="upload-label" htmlFor="upload-album-select">
                 Add to album
               </label>
               <select
@@ -259,7 +232,7 @@ export function UploadModal({
                 <option value="create-new">+ Create new album…</option>
               </select>
 
-              {selectedAlbumId === "create-new" && (
+              {selectedAlbumId === 'create-new' && (
                 <input
                   ref={newAlbumInputRef}
                   type="text"
@@ -269,7 +242,7 @@ export function UploadModal({
                   onChange={(e) => setNewAlbumName(e.target.value)}
                   disabled={uploading}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && files.length > 0) handleUpload();
+                    if (e.key === 'Enter' && files.length > 0) handleUpload();
                   }}
                 />
               )}
@@ -301,12 +274,7 @@ export function UploadModal({
 
         {/* Footer */}
         <div className="modal-footer">
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={onClose}
-            disabled={uploading}
-          >
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={uploading}>
             Cancel
           </button>
           <button
@@ -315,9 +283,7 @@ export function UploadModal({
             onClick={handleUpload}
             disabled={files.length === 0 || uploading}
           >
-            {uploading
-              ? "Uploading…"
-              : `Upload${files.length > 0 ? ` (${files.length})` : ""}`}
+            {uploading ? 'Uploading…' : `Upload${files.length > 0 ? ` (${files.length})` : ''}`}
           </button>
         </div>
       </div>
