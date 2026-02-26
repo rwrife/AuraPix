@@ -2,6 +2,7 @@ import { InMemoryAlbumsService } from '../adapters/albums/inMemoryAlbumsService'
 import { InMemoryAuthService } from '../adapters/auth/inMemoryAuthService';
 import { InMemoryLibraryService } from '../adapters/library/inMemoryLibraryService';
 import { InMemorySharingService } from '../adapters/sharing/inMemorySharingService';
+import { InMemoryUploadSessionsService } from '../adapters/uploads/inMemoryUploadSessionsService';
 import type { Services } from './ServiceContext';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,7 @@ export function createLocalServices(): Services {
         : undefined,
     }),
     sharing: new InMemorySharingService(),
+    uploads: new InMemoryUploadSessionsService(),
   };
 
   return _cached;

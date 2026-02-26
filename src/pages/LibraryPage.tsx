@@ -11,6 +11,8 @@ import type { ToolbarButton, ModalContentProps } from '../components/toolbar';
 import { useAuth } from '../features/auth/useAuth';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useLibrary } from '../features/library/useLibrary';
+import { useUploadSessions } from '../features/uploads/useUploadSessions';
+import { useServices } from '../services/useServices';
 
 function toLibraryId(userId: string) {
   return `library-${userId}`;
@@ -51,6 +53,14 @@ export function LibraryPage() {
     deletePhoto,
   } = useLibrary(libraryId, metadataFilters);
   const { albums } = useAlbums();
+  const { uploads: uploadSessionsService } = useServices();
+  const {
+    pendingSession,
+    metadata: uploadedMetadata,
+    jobs: derivativeJobs,
+    replayedFinalize,
+    createAndFinalizeSession,
+  } = useUploadSessions(uploadSessionsService);
 
   const [isFilmstrip, setIsFilmstrip] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -103,7 +113,10 @@ export function LibraryPage() {
     onProgress: (completed: number, total: number) => void
   ) {
     for (let i = 0; i < files.length; i++) {
-      const photo = await addPhoto(files[i]);
+      const file = files[i];
+      await createAndFinalizeSession(file.name, file.size);
+
+      const photo = await addPhoto(file);
       if (albumId) await assignToAlbum(photo.id, albumId, photo);
       onProgress(i + 1, files.length);
     }
@@ -319,6 +332,15 @@ export function LibraryPage() {
       <div className={`page-with-toolbar${isFilmstrip ? ' page--viewer-mode' : ''}`}>
         <div className="page-center-column">
           {error && <p className="error">{error}</p>}
+
+          {(pendingSession || uploadedMetadata.length > 0) && (
+            <div className="state-message" role="status" aria-live="polite">
+              <strong>Upload pipeline:</strong> {uploadedMetadata.length} finalized ·{' '}
+              {derivativeJobs.length} derivative job(s) queued
+              {pendingSession ? ` · latest key ${pendingSession.objectKey}` : ''}
+              {replayedFinalize ? ' · idempotent replay detected' : ''}
+            </div>
+          )}
 
           {loading ? (
             <p className="state-message">Loading library…</p>

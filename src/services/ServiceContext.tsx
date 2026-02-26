@@ -3,6 +3,7 @@ import type { AlbumsService } from '../domain/albums/contract';
 import type { AuthService } from '../domain/auth/contract';
 import type { LibraryService } from '../domain/library/contract';
 import type { SharingService } from '../domain/sharing/contract';
+import type { UploadSessionsService } from '../domain/uploads/contract';
 
 // ---------------------------------------------------------------------------
 // ServiceContext — dependency injection for all backend abstractions.
@@ -14,6 +15,7 @@ export interface Services {
   albums: AlbumsService;
   library: LibraryService;
   sharing: SharingService;
+  uploads: UploadSessionsService;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
