@@ -1,6 +1,8 @@
 import type { LibraryService } from '../../domain/library/contract';
 import type {
   AddPhotoInput,
+  BulkAddToAlbumInput,
+  BulkAddToAlbumResult,
   ListPhotosInput,
   ListPhotosResult,
   Photo,
@@ -125,5 +127,33 @@ export class InMemoryLibraryService implements LibraryService {
   async deletePhoto(photoId: string): Promise<void> {
     this.photos = this.photos.filter((p) => p.id !== photoId);
     savePhotos(this.photos);
+  }
+
+  async bulkAddToAlbum(input: BulkAddToAlbumInput): Promise<BulkAddToAlbumResult> {
+    const results: BulkAddToAlbumResult['results'] = [];
+
+    for (const photoId of input.photoIds) {
+      const idx = this.photos.findIndex((p) => p.id === photoId && p.libraryId === input.libraryId);
+      if (idx === -1) {
+        results.push({ photoId, status: 'skipped', code: 'not_found' });
+        continue;
+      }
+
+      const photo = this.photos[idx];
+      if (photo.albumIds.includes(input.albumId)) {
+        results.push({ photoId, status: 'skipped', code: 'already_in_album' });
+        continue;
+      }
+
+      this.photos[idx] = {
+        ...photo,
+        albumIds: [...photo.albumIds, input.albumId],
+        updatedAt: new Date().toISOString(),
+      };
+      results.push({ photoId, status: 'added' });
+    }
+
+    savePhotos(this.photos);
+    return { albumId: input.albumId, results };
   }
 }

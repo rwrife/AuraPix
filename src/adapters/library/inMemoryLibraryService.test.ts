@@ -91,4 +91,35 @@ describe('InMemoryLibraryService', () => {
     const svc = new InMemoryLibraryService();
     await expect(svc.updatePhoto('ghost-id', { isFavorite: true })).rejects.toThrow('not found');
   });
+
+  it('bulkAddToAlbum returns deterministic per-item outcomes', async () => {
+    const svc = new InMemoryLibraryService();
+    const p1 = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'one.jpg',
+      dataUrl: 'data:image/jpeg;base64,one',
+    });
+    const p2 = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'two.jpg',
+      dataUrl: 'data:image/jpeg;base64,two',
+    });
+
+    await svc.updatePhoto(p2.id, { albumIds: ['album-a'] });
+
+    const result = await svc.bulkAddToAlbum({
+      libraryId: LIBRARY_ID,
+      albumId: 'album-a',
+      photoIds: [p1.id, p2.id, 'ghost-id'],
+    });
+
+    expect(result.results).toEqual([
+      { photoId: p1.id, status: 'added' },
+      { photoId: p2.id, status: 'skipped', code: 'already_in_album' },
+      { photoId: 'ghost-id', status: 'skipped', code: 'not_found' },
+    ]);
+
+    const updated = await svc.getPhoto(p1.id);
+    expect(updated?.albumIds).toContain('album-a');
+  });
 });

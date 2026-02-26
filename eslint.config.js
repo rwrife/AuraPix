@@ -7,7 +7,7 @@ import prettierConfig from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'coverage'],
+    ignores: ['dist', 'coverage', 'functions/**'],
   },
   {
     files: ['**/*.{ts,tsx}'],

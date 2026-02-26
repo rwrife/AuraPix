@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Photo } from '../../domain/library/types';
+import type { BulkAddToAlbumResult, Photo } from '../../domain/library/types';
 import { useServices } from '../../services/useServices';
 
 interface UseLibraryState {
@@ -15,6 +15,7 @@ interface UseLibraryReturn extends UseLibraryState {
   toggleFavorite(photoId: string): Promise<void>;
   deletePhoto(photoId: string): Promise<void>;
   assignToAlbum(photoId: string, albumId: string, hint?: Photo): Promise<void>;
+  bulkAddToAlbum(photoIds: string[], albumId: string): Promise<BulkAddToAlbumResult>;
 }
 
 /** Reads a File into a base64 data URL */
@@ -111,6 +112,37 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
     [library, photos]
   );
 
+  const bulkAddToAlbum = useCallback(
+    async (photoIds: string[], albumId: string) => {
+      const result = await library.bulkAddToAlbum({
+        libraryId,
+        albumId,
+        photoIds,
+      });
+
+      const addedIds = new Set(
+        result.results.filter((item) => item.status === 'added').map((item) => item.photoId)
+      );
+
+      if (addedIds.size > 0) {
+        setPhotos((prev) =>
+          prev.map((photo) =>
+            addedIds.has(photo.id) && !photo.albumIds.includes(albumId)
+              ? {
+                  ...photo,
+                  albumIds: [...photo.albumIds, albumId],
+                  updatedAt: new Date().toISOString(),
+                }
+              : photo
+          )
+        );
+      }
+
+      return result;
+    },
+    [library, libraryId]
+  );
+
   return {
     photos,
     loading,
@@ -121,5 +153,6 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
     toggleFavorite,
     deletePhoto,
     assignToAlbum,
+    bulkAddToAlbum,
   };
 }

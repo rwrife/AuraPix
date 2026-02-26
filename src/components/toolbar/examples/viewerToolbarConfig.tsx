@@ -1,5 +1,5 @@
-import type { Photo } from "../../../domain/library/types";
-import type { ToolbarButton, ModalContentProps } from "../types";
+import type { Photo } from '../../../domain/library/types';
+import type { ToolbarButton, ModalContentProps } from '../types';
 
 interface ViewerToolbarConfigProps {
   currentPhoto: Photo;
@@ -31,12 +31,12 @@ export function createViewerToolbarConfig({
   return [
     // Modal button example: Delete with confirmation
     {
-      type: "modal",
-      id: "delete",
-      icon: "🗑",
-      title: "Delete",
-      className: "btn-danger-ghost",
-      modalTitle: "Delete photo?",
+      type: 'modal',
+      id: 'delete',
+      icon: '🗑',
+      title: 'Delete',
+      className: 'btn-danger-ghost',
+      modalTitle: 'Delete photo?',
       modalContent: ({ onClose }: ModalContentProps) => (
         <>
           <p className="state-message">This will permanently delete this photo.</p>
@@ -60,10 +60,10 @@ export function createViewerToolbarConfig({
 
     // Panel button example: Info
     {
-      type: "panel",
-      id: "info",
-      icon: "ℹ",
-      title: "Info",
+      type: 'panel',
+      id: 'info',
+      icon: 'ℹ',
+      title: 'Info',
       panelContent: (
         <>
           <p className="state-message">Name: {currentPhoto.originalName}</p>
@@ -74,56 +74,56 @@ export function createViewerToolbarConfig({
 
     // Panel button example: Versions
     {
-      type: "panel",
-      id: "versions",
-      icon: "⧉",
-      title: "Versions",
+      type: 'panel',
+      id: 'versions',
+      icon: '⧉',
+      title: 'Versions',
       panelContent: <p className="state-message">Version history tools coming soon.</p>,
     },
 
     // Toggle button example: Favorite
     {
-      type: "toggle",
-      id: "favorite",
-      icon: "♥",
-      title: currentPhoto.isFavorite ? "Unfavorite" : "Favorite",
+      type: 'toggle',
+      id: 'favorite',
+      icon: '♥',
+      title: currentPhoto.isFavorite ? 'Unfavorite' : 'Favorite',
       isActive: currentPhoto.isFavorite,
       onClick: onToggleFavorite,
     },
 
     // Panel button example: Comments
     {
-      type: "panel",
-      id: "comments",
-      icon: "💬",
-      title: "Comments",
+      type: 'panel',
+      id: 'comments',
+      icon: '💬',
+      title: 'Comments',
       panelContent: <p className="state-message">Comments tools coming soon.</p>,
     },
 
     // Panel button example: Tags
     {
-      type: "panel",
-      id: "tags",
-      icon: "#",
-      title: "Tags",
+      type: 'panel',
+      id: 'tags',
+      icon: '#',
+      title: 'Tags',
       panelContent: <p className="state-message">Tag management tools coming soon.</p>,
     },
 
     // Panel button example: Presets
     {
-      type: "panel",
-      id: "presets",
-      icon: "✶",
-      title: "Presets",
+      type: 'panel',
+      id: 'presets',
+      icon: '✶',
+      title: 'Presets',
       panelContent: <p className="state-message">Preset tools coming soon.</p>,
     },
 
     // Panel button example: Edit with interactive controls
     {
-      type: "panel",
-      id: "edit",
-      icon: "🎚",
-      title: "Edit",
+      type: 'panel',
+      id: 'edit',
+      icon: '🎚',
+      title: 'Edit',
       panelContent: (
         <>
           <label className="settings-label" htmlFor="edit-brightness">
@@ -165,10 +165,10 @@ export function createViewerToolbarConfig({
 
     // Panel button example: Crop
     {
-      type: "panel",
-      id: "crop",
-      icon: "⬚",
-      title: "Crop",
+      type: 'panel',
+      id: 'crop',
+      icon: '⬚',
+      title: 'Crop',
       panelContent: <p className="state-message">Crop tools coming soon.</p>,
     },
   ];

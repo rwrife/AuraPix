@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 /**
  * Base configuration for all sidebar items
@@ -13,7 +13,7 @@ export interface BaseSidebarItem {
  * Simple link navigation item (e.g., Library, Recent, Favorites)
  */
 export interface LinkSidebarItem extends BaseSidebarItem {
-  type: "link";
+  type: 'link';
   to: string;
   /** Whether to match exactly (default: false) */
   end?: boolean;
@@ -23,7 +23,7 @@ export interface LinkSidebarItem extends BaseSidebarItem {
  * Collapsible section with child links (e.g., Albums with sub-albums)
  */
 export interface ParentSidebarItem extends BaseSidebarItem {
-  type: "parent";
+  type: 'parent';
   to?: string;
   /** Whether to match exactly for parent link (default: true) */
   end?: boolean;

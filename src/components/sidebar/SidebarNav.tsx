@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
-import type { SidebarItem, LinkSidebarItem, ParentSidebarItem, ChildSidebarItem } from "./types";
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import type { SidebarItem, LinkSidebarItem, ParentSidebarItem, ChildSidebarItem } from './types';
 
 interface SidebarNavProps {
   /** Main navigation items (scrollable) */
@@ -33,7 +33,7 @@ interface SidebarItemComponentProps {
 }
 
 function SidebarItemComponent({ item }: SidebarItemComponentProps) {
-  if (item.type === "link") {
+  if (item.type === 'link') {
     return <LinkItem item={item as LinkSidebarItem} />;
   }
   return <ParentItem item={item as ParentSidebarItem} />;
@@ -45,7 +45,7 @@ interface LinkItemProps {
 
 function LinkItem({ item }: LinkItemProps) {
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    isActive ? "sidebar-link active" : "sidebar-link";
+    isActive ? 'sidebar-link active' : 'sidebar-link';
 
   return (
     <NavLink to={item.to} className={navClass} end={item.end}>
@@ -61,9 +61,9 @@ interface ParentItemProps {
 
 function ParentItem({ item }: ParentItemProps) {
   const [isExpanded, setIsExpanded] = useState(item.defaultExpanded ?? false);
-  
+
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    isActive ? "sidebar-link active" : "sidebar-link";
+    isActive ? 'sidebar-link active' : 'sidebar-link';
 
   // Group children by groupLabel
   const groupedChildren: Record<string, ChildSidebarItem[]> = {};
@@ -91,7 +91,7 @@ function ParentItem({ item }: ParentItemProps) {
         <button
           className="sidebar-link"
           onClick={() => setIsExpanded(!isExpanded)}
-          aria-expanded={isExpanded ? "true" : "false"}
+          aria-expanded={isExpanded ? 'true' : 'false'}
         >
           {item.icon && <span className="sidebar-icon">{item.icon}</span>}
           <span>{item.label}</span>

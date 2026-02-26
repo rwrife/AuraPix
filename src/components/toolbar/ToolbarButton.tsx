@@ -1,10 +1,6 @@
-import { useState } from "react";
-import { createPortal } from "react-dom";
-import type {
-  ToolbarButton,
-  ToggleToolbarButton,
-  ModalToolbarButton,
-} from "./types";
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
+import type { ToolbarButton, ToggleToolbarButton, ModalToolbarButton } from './types';
 
 interface ToolbarButtonProps {
   button: ToolbarButton;
@@ -12,22 +8,18 @@ interface ToolbarButtonProps {
   onPanelChange: (panelId: string | null) => void;
 }
 
-export function ToolbarButtonComponent({
-  button,
-  activePanel,
-  onPanelChange,
-}: ToolbarButtonProps) {
+export function ToolbarButtonComponent({ button, activePanel, onPanelChange }: ToolbarButtonProps) {
   const [showModal, setShowModal] = useState(false);
 
   const handleClick = () => {
     switch (button.type) {
-      case "toggle":
+      case 'toggle':
         (button as ToggleToolbarButton).onClick();
         break;
-      case "modal":
+      case 'modal':
         setShowModal(true);
         break;
-      case "panel": {
+      case 'panel': {
         onPanelChange(activePanel === button.id ? null : button.id);
         break;
       }
@@ -35,16 +27,16 @@ export function ToolbarButtonComponent({
   };
 
   const isActive =
-    button.type === "toggle"
+    button.type === 'toggle'
       ? (button as ToggleToolbarButton).isActive
-      : button.type === "panel"
+      : button.type === 'panel'
         ? activePanel === button.id
         : false;
 
   return (
     <>
       <button
-        className={`right-toolbar-icon ${button.className || "btn-ghost"}${isActive ? " active" : ""}`}
+        className={`right-toolbar-icon ${button.className || 'btn-ghost'}${isActive ? ' active' : ''}`}
         title={button.title}
         onClick={handleClick}
         disabled={button.disabled}
@@ -53,11 +45,8 @@ export function ToolbarButtonComponent({
         {button.icon}
       </button>
 
-      {button.type === "modal" && showModal && (
-        <ModalDialog
-          button={button as ModalToolbarButton}
-          onClose={() => setShowModal(false)}
-        />
+      {button.type === 'modal' && showModal && (
+        <ModalDialog button={button as ModalToolbarButton} onClose={() => setShowModal(false)} />
       )}
     </>
   );
@@ -70,14 +59,14 @@ interface ModalDialogProps {
 
 function ModalDialog({ button, onClose }: ModalDialogProps) {
   const content =
-    typeof button.modalContent === "function"
+    typeof button.modalContent === 'function'
       ? button.modalContent({ onClose })
       : button.modalContent;
 
   const modalElement = (
     <div className="confirm-modal-backdrop" role="presentation" onClick={onClose}>
       <div
-        className={`confirm-modal${button.modalSize === "large" ? " confirm-modal--large" : button.modalSize === "small" ? " confirm-modal--small" : ""}`}
+        className={`confirm-modal${button.modalSize === 'large' ? ' confirm-modal--large' : button.modalSize === 'small' ? ' confirm-modal--small' : ''}`}
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
