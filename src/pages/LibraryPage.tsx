@@ -135,7 +135,9 @@ export function LibraryPage() {
 
     const selectedPhotos = photos.filter((photo) => selectedPhotoIds.has(photo.id));
     for (const photo of selectedPhotos) {
-      const normalizedTags = Array.from(new Set([...photo.tags.map((tag) => tag.toLowerCase()), nextTag]));
+      const normalizedTags = Array.from(
+        new Set([...photo.tags.map((tag) => tag.toLowerCase()), nextTag])
+      );
       await setTags(photo.id, normalizedTags);
     }
 
