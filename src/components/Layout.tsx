@@ -67,12 +67,22 @@ function LayoutShell() {
   const { albums, folders } = useAlbums();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const avatarLetter = (user?.displayName ?? user?.email ?? '?')[0].toUpperCase();
+  // Determine if we're in local mode based on environment
+  const isLocalMode = import.meta.env.VITE_SERVICE_MODE !== 'firebase';
+
+  const avatarLetter = user ? (user.displayName ?? user.email ?? '?')[0].toUpperCase() : '?';
+  const displayName = user?.displayName ?? user?.email ?? 'User';
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     // Full-text search wired in a future phase
+  }
+
+  function handleSignOut() {
+    setShowUserMenu(false);
+    signOut();
   }
 
   // Build sidebar navigation items
@@ -189,14 +199,63 @@ function LayoutShell() {
         </form>
 
         <div className="topbar-right">
-          {user && (
-            <div className="topbar-user">
+          <div className="topbar-user">
+            <button
+              className="user-profile-trigger"
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              aria-label="User menu"
+            >
               <span className="user-avatar">{avatarLetter}</span>
-              <span className="user-name">{user.displayName ?? user.email}</span>
-              <button className="btn-ghost btn-sm" onClick={signOut}>
-                Sign out
-              </button>
-            </div>
+              <span className="user-name">{displayName}</span>
+              {isLocalMode && <span className="user-mode-badge">Local</span>}
+            </button>
+
+            {showUserMenu && (
+              <div className="user-menu-dropdown">
+                <div className="user-menu-header">
+                  <div className="user-avatar-large">{avatarLetter}</div>
+                  <div className="user-info">
+                    <div className="user-info-name">{displayName}</div>
+                    {user?.email && <div className="user-info-email">{user.email}</div>}
+                    {isLocalMode && (
+                      <div className="user-info-mode">Single-user mode</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="user-menu-divider" />
+
+                <div className="user-menu-actions">
+                  {!isLocalMode && (
+                    <button className="user-menu-item" onClick={handleSignOut}>
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="user-menu-icon"
+                        aria-hidden="true"
+                      >
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      Sign out
+                    </button>
+                  )}
+                  {isLocalMode && (
+                    <div className="user-menu-note">
+                      Authentication is not available in local mode. When deployed with
+                      Firebase, user sign-in and sign-out will be enabled here.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {showUserMenu && (
+            <div
+              className="user-menu-backdrop"
+              onClick={() => setShowUserMenu(false)}
+            />
           )}
         </div>
       </header>
