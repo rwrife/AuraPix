@@ -30,3 +30,19 @@ export interface ResolveShareLinkInput {
   token: string;
   password?: string;
 }
+
+export type ShareAccessOutcome =
+  | 'granted'
+  | 'denied_not_found'
+  | 'denied_revoked'
+  | 'denied_expired'
+  | 'denied_max_uses'
+  | 'denied_invalid_password';
+
+export interface ShareAccessEvent {
+  id: string;
+  linkId: string | null;
+  token: string;
+  outcome: ShareAccessOutcome;
+  occurredAt: string;
+}
