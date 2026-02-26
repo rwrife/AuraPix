@@ -1,8 +1,8 @@
-import { createContext, type ReactNode } from "react";
-import type { AlbumsService } from "../domain/albums/contract";
-import type { AuthService } from "../domain/auth/contract";
-import type { LibraryService } from "../domain/library/contract";
-import type { SharingService } from "../domain/sharing/contract";
+import { createContext, type ReactNode } from 'react';
+import type { AlbumsService } from '../domain/albums/contract';
+import type { AuthService } from '../domain/auth/contract';
+import type { LibraryService } from '../domain/library/contract';
+import type { SharingService } from '../domain/sharing/contract';
 
 // ---------------------------------------------------------------------------
 // ServiceContext — dependency injection for all backend abstractions.
@@ -26,9 +26,5 @@ export function ServiceProvider({
   services: Services;
   children: ReactNode;
 }) {
-  return (
-    <ServiceContext.Provider value={services}>
-      {children}
-    </ServiceContext.Provider>
-  );
+  return <ServiceContext.Provider value={services}>{children}</ServiceContext.Provider>;
 }

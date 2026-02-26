@@ -1,16 +1,12 @@
-import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import type { Album, AlbumFolder } from "../domain/albums/types";
-import { AlbumsProvider, useAlbums } from "../features/albums/useAlbums";
-import { useAuth } from "../features/auth/useAuth";
+import { useState } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import type { Album, AlbumFolder } from '../domain/albums/types';
+import { AlbumsProvider, useAlbums } from '../features/albums/useAlbums';
+import { useAuth } from '../features/auth/useAuth';
 
 function RecentIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
       <circle cx="12" cy="12" r="8" />
       <path d="M12 8v4l3 2" />
     </svg>
@@ -19,11 +15,7 @@ function RecentIcon() {
 
 function LibraryIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
       <rect x="4" y="5" width="16" height="14" rx="2" />
       <circle cx="9" cy="10" r="1.5" />
       <path d="m6.5 16 4-4 2.5 2.5 2.5-2.5 2 2" />
@@ -33,11 +25,7 @@ function LibraryIcon() {
 
 function TeamsIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
       <circle cx="9" cy="9" r="2.5" />
       <circle cx="15.5" cy="10" r="2" />
       <path d="M4.5 17c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" />
@@ -48,11 +36,7 @@ function TeamsIcon() {
 
 function FavoritesIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
       <path d="M12 19s-6.5-3.8-8.4-7.5A4.8 4.8 0 0 1 12 6a4.8 4.8 0 0 1 8.4 5.5C18.5 15.2 12 19 12 19Z" />
     </svg>
   );
@@ -60,11 +44,7 @@ function FavoritesIcon() {
 
 function AlbumsIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
       <path d="M3 8.5h7l1.5 1.8H21v8.2a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 18.5V8.5Z" />
       <path d="M3 8.5V6.8A1.8 1.8 0 0 1 4.8 5h4.4l1.4 1.8H19.2A1.8 1.8 0 0 1 21 8.6" />
     </svg>
@@ -73,11 +53,7 @@ function AlbumsIcon() {
 
 function FolderIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="sidebar-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
       <path d="M3 9h6l1.8 2H21v7.3A1.7 1.7 0 0 1 19.3 20H4.7A1.7 1.7 0 0 1 3 18.3V9Z" />
       <path d="M3 9V7A2 2 0 0 1 5 5h4l1.5 2H19a2 2 0 0 1 2 2" />
     </svg>
@@ -86,11 +62,7 @@ function FolderIcon() {
 
 function SearchIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="topbar-search-icon-svg"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="topbar-search-icon-svg" aria-hidden="true">
       <circle cx="11" cy="11" r="6" />
       <path d="m16 16 4 4" />
     </svg>
@@ -102,13 +74,9 @@ function LayoutShell() {
   const { user, signOut } = useAuth();
   const { albums, folders } = useAlbums();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const avatarLetter = (
-    user?.displayName ??
-    user?.email ??
-    "?"
-  )[0].toUpperCase();
+  const avatarLetter = (user?.displayName ?? user?.email ?? '?')[0].toUpperCase();
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -116,7 +84,7 @@ function LayoutShell() {
   }
 
   function navClass({ isActive }: { isActive: boolean }) {
-    return isActive ? "sidebar-link active" : "sidebar-link";
+    return isActive ? 'sidebar-link active' : 'sidebar-link';
   }
 
   // Build folder → albums mapping for sidebar
@@ -131,7 +99,7 @@ function LayoutShell() {
           <span className="app-logo">AuraPix</span>
           <button
             className="btn-primary topbar-add-btn"
-            onClick={() => navigate("/library?upload=1")}
+            onClick={() => navigate('/library?upload=1')}
           >
             + Add Photos
           </button>
@@ -210,10 +178,7 @@ function LayoutShell() {
                   <ul className="sidebar-album-list">
                     {folderAlbums(folder).map((album) => (
                       <li key={album.id}>
-                        <NavLink
-                          to={`/albums/${album.id}`}
-                          className={navClass}
-                        >
+                        <NavLink to={`/albums/${album.id}`} className={navClass}>
                           {album.name}
                         </NavLink>
                       </li>

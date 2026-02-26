@@ -1,9 +1,9 @@
-import type { SharingService } from "../../domain/sharing/contract";
+import type { SharingService } from '../../domain/sharing/contract';
 import type {
   CreateShareLinkInput,
   ResolveShareLinkInput,
   ShareLink,
-} from "../../domain/sharing/types";
+} from '../../domain/sharing/types';
 
 // ---------------------------------------------------------------------------
 // In-memory sharing service.
@@ -24,7 +24,7 @@ export class InMemorySharingService implements SharingService {
       resourceType: input.resourceType,
       resourceId: input.resourceId,
       policy: {
-        permission: input.policy.permission ?? "view",
+        permission: input.policy.permission ?? 'view',
         expiresAt: input.policy.expiresAt ?? null,
         passwordProtected: !!input.password,
         maxUses: input.policy.maxUses ?? null,
@@ -32,7 +32,7 @@ export class InMemorySharingService implements SharingService {
       useCount: 0,
       revoked: false,
       createdAt: now,
-      createdBy: "local-user-1",
+      createdBy: 'local-user-1',
     };
 
     this.links = [link, ...this.links];
@@ -40,27 +40,18 @@ export class InMemorySharingService implements SharingService {
   }
 
   async listShareLinks(resourceId: string): Promise<ShareLink[]> {
-    return this.links.filter(
-      (l) => l.resourceId === resourceId && !l.revoked,
-    );
+    return this.links.filter((l) => l.resourceId === resourceId && !l.revoked);
   }
 
   async revokeShareLink(linkId: string): Promise<void> {
-    this.links = this.links.map((l) =>
-      l.id === linkId ? { ...l, revoked: true } : l,
-    );
+    this.links = this.links.map((l) => (l.id === linkId ? { ...l, revoked: true } : l));
   }
 
-  async resolveShareLink(
-    input: ResolveShareLinkInput,
-  ): Promise<ShareLink | null> {
+  async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
     const link = this.links.find((l) => l.token === input.token);
     if (!link || link.revoked) return null;
 
-    if (
-      link.policy.expiresAt &&
-      new Date(link.policy.expiresAt) < new Date()
-    ) {
+    if (link.policy.expiresAt && new Date(link.policy.expiresAt) < new Date()) {
       return null;
     }
 
@@ -69,9 +60,7 @@ export class InMemorySharingService implements SharingService {
     }
 
     // Increment use count
-    this.links = this.links.map((l) =>
-      l.id === link.id ? { ...l, useCount: l.useCount + 1 } : l,
-    );
+    this.links = this.links.map((l) => (l.id === link.id ? { ...l, useCount: l.useCount + 1 } : l));
 
     return { ...link, useCount: link.useCount + 1 };
   }

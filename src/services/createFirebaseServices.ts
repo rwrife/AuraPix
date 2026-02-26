@@ -1,4 +1,4 @@
-import type { Services } from "./ServiceContext";
+import type { Services } from './ServiceContext';
 
 // ---------------------------------------------------------------------------
 // Stub factory for the Firebase service bundle.
@@ -10,7 +10,7 @@ import type { Services } from "./ServiceContext";
 
 export function createFirebaseServices(): Services {
   throw new Error(
-    "Firebase services are not yet implemented. " +
-      "Run with VITE_SERVICE_MODE=local (or unset) to use local mode.",
+    'Firebase services are not yet implemented. ' +
+      'Run with VITE_SERVICE_MODE=local (or unset) to use local mode.'
   );
 }

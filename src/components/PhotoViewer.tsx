@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Photo } from "../domain/library/types";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Photo } from '../domain/library/types';
 
 interface PhotoViewerProps {
   photos: Photo[];
@@ -14,8 +14,8 @@ export interface ViewerState {
   currentPhoto: Photo;
   currentIndex: number;
   totalPhotos: number;
-  activeTool: string | null;
-  setActiveTool: (tool: string | null) => void;
+  activeTool: ViewerTool | null;
+  setActiveTool: (tool: ViewerTool | null) => void;
   showDeleteConfirm: () => void;
   brightness: number;
   setBrightness: (v: number) => void;
@@ -26,14 +26,7 @@ export interface ViewerState {
   onToggleFavorite: () => void;
 }
 
-type ViewerTool =
-  | "info"
-  | "versions"
-  | "comments"
-  | "tags"
-  | "presets"
-  | "edit"
-  | "crop";
+type ViewerTool = 'info' | 'versions' | 'comments' | 'tags' | 'presets' | 'edit' | 'crop';
 
 export function PhotoViewer({
   photos,
@@ -44,7 +37,7 @@ export function PhotoViewer({
   viewerStateRef,
 }: PhotoViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(
-    Math.max(0, Math.min(initialIndex, photos.length - 1)),
+    Math.max(0, Math.min(initialIndex, photos.length - 1))
   );
   const [activeTool, setActiveTool] = useState<ViewerTool | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -74,26 +67,33 @@ export function PhotoViewer({
         onToggleFavorite: () => onToggleFavorite?.(current),
       };
     }
-  }, [viewerStateRef, current, currentIndex, photos.length, activeTool, brightness, contrast, saturation, onToggleFavorite]);
+  }, [
+    viewerStateRef,
+    current,
+    currentIndex,
+    photos.length,
+    activeTool,
+    brightness,
+    contrast,
+    saturation,
+    onToggleFavorite,
+  ]);
 
-  const goPrev = useCallback(
-    () => setCurrentIndex((i) => Math.max(0, i - 1)),
-    [],
-  );
+  const goPrev = useCallback(() => setCurrentIndex((i) => Math.max(0, i - 1)), []);
   const goNext = useCallback(
     () => setCurrentIndex((i) => Math.min(photos.length - 1, i + 1)),
-    [photos.length],
+    [photos.length]
   );
 
   // Keyboard navigation
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "ArrowLeft") goPrev();
-      else if (e.key === "ArrowRight") goNext();
-      else if (e.key === "Escape") onClose();
+      if (e.key === 'ArrowLeft') goPrev();
+      else if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 'Escape') onClose();
     }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
   }, [goPrev, goNext, onClose]);
 
   // Scroll filmstrip to keep active thumbnail visible
@@ -102,7 +102,7 @@ export function PhotoViewer({
     if (!strip) return;
     const thumb = strip.children[currentIndex] as HTMLElement | undefined;
     if (thumb) {
-      thumb.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+      thumb.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
     }
   }, [currentIndex]);
 
@@ -162,7 +162,7 @@ export function PhotoViewer({
           {photos.map((photo, idx) => (
             <button
               key={photo.id}
-              className={`filmstrip-thumb${idx === currentIndex ? " active" : ""}`}
+              className={`filmstrip-thumb${idx === currentIndex ? ' active' : ''}`}
               onClick={() => setCurrentIndex(idx)}
               title={photo.originalName}
             >
@@ -176,24 +176,17 @@ export function PhotoViewer({
         </div>
       </div>
 
-
       {showDeleteConfirm && (
         <div className="confirm-modal-backdrop" role="presentation">
           <div className="confirm-modal" role="dialog" aria-modal="true">
             <h3 className="settings-panel-title">Delete photo?</h3>
-            <p className="state-message">
-              This will permanently delete this photo.
-            </p>
+            <p className="state-message">This will permanently delete this photo.</p>
             <div className="confirm-modal-actions">
               <button className="btn-ghost" onClick={() => setShowDeleteConfirm(false)}>
                 Cancel
               </button>
-              <button
-                className="btn-danger-ghost"
-                onClick={confirmDeletePhoto}
-                disabled={deleting}
-              >
-                {deleting ? "Deleting…" : "Delete"}
+              <button className="btn-danger-ghost" onClick={confirmDeletePhoto} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
