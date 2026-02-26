@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Photo } from '../domain/library/types';
+import { getOriginalUrl, getLargeThumbnailUrl } from '../utils/imageUrls';
+
+/**
+ * Helper to determine if photo uses legacy storage (data URLs) or API-based storage
+ */
+function isLegacyPhoto(photo: Photo): boolean {
+  return photo.storagePath?.startsWith('data:') || photo.storagePath?.startsWith('blob:');
+}
 
 interface PhotoViewerProps {
   photos: Photo[];
@@ -141,7 +149,7 @@ export function PhotoViewer({
           <div className="photo-viewer-image-wrap">
             <img
               key={current.id}
-              src={current.storagePath}
+              src={isLegacyPhoto(current) ? current.storagePath : getOriginalUrl(current.libraryId, current.id)}
               alt={current.originalName}
               className="photo-viewer-image"
             />
@@ -167,7 +175,7 @@ export function PhotoViewer({
               title={photo.originalName}
             >
               <img
-                src={photo.thumbnailPath ?? photo.storagePath}
+                src={isLegacyPhoto(photo) ? (photo.thumbnailPath ?? photo.storagePath) : getLargeThumbnailUrl(photo.libraryId, photo.id)}
                 alt={photo.originalName}
                 loading="lazy"
               />

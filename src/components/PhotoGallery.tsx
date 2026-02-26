@@ -9,7 +9,92 @@ import {
 import type { Photo } from '../domain/library/types';
 import { PhotoViewer, type ViewerState } from './PhotoViewer';
 import type { GridMode } from './photoGalleryConfig';
+import { getBlurPlaceholderUrl, getThumbnailUrl } from '../utils/imageUrls';
+
 type ViewMode = GridMode | 'filmstrip';
+
+interface LazyImageProps {
+  photo: Photo;
+  className?: string;
+  alt: string;
+}
+
+/**
+ * Lazy-loaded image component with blur-up technique
+ * Loads a small blurred placeholder first, then loads the full thumbnail when visible
+ * Falls back to legacy storagePath/thumbnailPath for in-memory photos
+ */
+function LazyImage({ photo, className, alt }: LazyImageProps) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Determine if this is an API-based photo or legacy in-memory photo
+  const isLegacyPhoto = photo.storagePath?.startsWith('data:') || photo.storagePath?.startsWith('blob:');
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsVisible(true);
+            observer.disconnect();
+          }
+        });
+      },
+      {
+        rootMargin: '50px', // Load images slightly before they come into view
+      }
+    );
+
+    observer.observe(img);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  // Use legacy paths for in-memory photos, API URLs for backend photos
+  const blurUrl = isLegacyPhoto 
+    ? (photo.thumbnailPath ?? photo.storagePath)
+    : getBlurPlaceholderUrl(photo.libraryId, photo.id);
+  const thumbnailUrl = isLegacyPhoto
+    ? (photo.thumbnailPath ?? photo.storagePath)
+    : getThumbnailUrl(photo.libraryId, photo.id);
+
+  return (
+    <>
+      {/* Blur placeholder - always loads immediately */}
+      <img
+        ref={imgRef}
+        src={blurUrl}
+        alt={alt}
+        className={`${className} gallery-tile-img-blur`}
+        style={{
+          filter: isLoaded ? 'blur(0)' : isLegacyPhoto ? 'none' : 'blur(20px)',
+          opacity: isLoaded ? 0 : 1,
+          transition: 'opacity 0.3s ease-in-out',
+        }}
+      />
+      {/* Full resolution thumbnail - loads when visible */}
+      {isVisible && (
+        <img
+          src={thumbnailUrl}
+          alt={alt}
+          className={className}
+          style={{
+            opacity: isLoaded ? 1 : 0,
+            transition: 'opacity 0.3s ease-in-out',
+          }}
+          onLoad={() => setIsLoaded(true)}
+        />
+      )}
+    </>
+  );
+}
 
 interface PhotoGalleryProps {
   photos: Photo[];
@@ -213,12 +298,7 @@ export function PhotoGallery({
                 />
               </div>
 
-              <img
-                src={photo.thumbnailPath ?? photo.storagePath}
-                alt={photo.originalName}
-                className="gallery-tile-img"
-                loading="lazy"
-              />
+              <LazyImage photo={photo} className="gallery-tile-img" alt={photo.originalName} />
               {mode === 'large' && <p className="gallery-tile-name">{photo.originalName}</p>}
             </div>
           );
