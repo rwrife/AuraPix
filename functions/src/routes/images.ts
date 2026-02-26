@@ -3,6 +3,7 @@ import { handleUpload, uploadMiddleware } from '../handlers/images/upload.js';
 import { handleServeImage } from '../handlers/images/serve.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createSlidingWindowRateLimiter } from '../middleware/rateLimit.js';
+import { appCheckUploadMiddleware } from '../middleware/appCheck.js';
 import { securityConfig } from '../config/index.js';
 
 const router = Router();
@@ -16,7 +17,7 @@ const uploadRateLimiter = createSlidingWindowRateLimiter({
  * Upload a photo
  * POST /images/:libraryId
  */
-router.post('/:libraryId', requireAuth, uploadRateLimiter, uploadMiddleware, async (req, res, next) => {
+router.post('/:libraryId', requireAuth, appCheckUploadMiddleware, uploadRateLimiter, uploadMiddleware, async (req, res, next) => {
   try {
     await handleUpload(req, res);
   } catch (error) {
