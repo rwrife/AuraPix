@@ -13,6 +13,7 @@ interface UseLibraryReturn extends UseLibraryState {
   refresh(): void;
   addPhoto(file: File): Promise<Photo>;
   toggleFavorite(photoId: string): Promise<void>;
+  setTags(photoId: string, tags: string[]): Promise<void>;
   deletePhoto(photoId: string): Promise<void>;
   assignToAlbum(photoId: string, albumId: string, hint?: Photo): Promise<void>;
   bulkAddToAlbum(photoIds: string[], albumId: string): Promise<BulkAddToAlbumResult>;
@@ -30,7 +31,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export function useLibrary(
   libraryId: string,
-  filters?: { metadata?: MetadataFilterInput }
+  filters?: { metadata?: MetadataFilterInput; favoritesOnly?: boolean; tags?: string[] }
 ): UseLibraryReturn {
   const { library } = useServices();
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -45,7 +46,12 @@ export function useLibrary(
     let cancelled = false;
     setLoading(true);
     library
-      .listPhotos({ libraryId, metadata: filters?.metadata })
+      .listPhotos({
+        libraryId,
+        metadata: filters?.metadata,
+        favoritesOnly: filters?.favoritesOnly,
+        tags: filters?.tags,
+      })
       .then(({ photos: p, nextPageToken }) => {
         if (!cancelled) {
           setPhotos(p);
@@ -62,7 +68,7 @@ export function useLibrary(
     return () => {
       cancelled = true;
     };
-  }, [library, libraryId, tick, filters?.metadata]);
+  }, [library, libraryId, tick, filters?.metadata, filters?.favoritesOnly, filters?.tags]);
 
   const addPhoto = useCallback(
     async (file: File): Promise<Photo> => {
@@ -92,6 +98,14 @@ export function useLibrary(
       setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
     },
     [library, photos]
+  );
+
+  const setTags = useCallback(
+    async (photoId: string, tags: string[]) => {
+      const updated = await library.updatePhoto(photoId, { tags });
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
+    },
+    [library]
   );
 
   const deletePhoto = useCallback(
@@ -154,6 +168,7 @@ export function useLibrary(
     refresh,
     addPhoto,
     toggleFavorite,
+    setTags,
     deletePhoto,
     assignToAlbum,
     bulkAddToAlbum,

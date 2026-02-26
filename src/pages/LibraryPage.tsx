@@ -22,9 +22,15 @@ export function LibraryPage() {
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
   const [cameraMakeFilter, setCameraMakeFilter] = useState<string>('');
+  const [quickView, setQuickView] = useState<'all' | 'favorites'>('all');
+  const [activeTagFilter, setActiveTagFilter] = useState<string>('');
   const metadataFilters = useMemo(
-    () => ({ metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined }),
-    [cameraMakeFilter]
+    () => ({
+      metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined,
+      favoritesOnly: quickView === 'favorites',
+      tags: activeTagFilter ? [activeTagFilter] : undefined,
+    }),
+    [cameraMakeFilter, quickView, activeTagFilter]
   );
 
   const {
@@ -35,6 +41,7 @@ export function LibraryPage() {
     assignToAlbum,
     bulkAddToAlbum,
     toggleFavorite,
+    setTags,
     deletePhoto,
   } = useLibrary(libraryId, metadataFilters);
   const { albums } = useAlbums();
@@ -44,6 +51,7 @@ export function LibraryPage() {
   const [gridMode, setGridMode] = useState<GridMode>('medium');
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [bulkAlbumId, setBulkAlbumId] = useState<string>('');
+  const [bulkTagInput, setBulkTagInput] = useState<string>('');
   const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
   const viewerStateRef = useRef<ViewerState | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
@@ -121,6 +129,20 @@ export function LibraryPage() {
     setSelectedPhotoIds(new Set());
   }
 
+  async function handleBulkTagApply() {
+    const nextTag = bulkTagInput.trim().toLowerCase();
+    if (!nextTag || selectedPhotoIds.size === 0) return;
+
+    const selectedPhotos = photos.filter((photo) => selectedPhotoIds.has(photo.id));
+    for (const photo of selectedPhotos) {
+      const normalizedTags = Array.from(new Set([...photo.tags.map((tag) => tag.toLowerCase()), nextTag]));
+      await setTags(photo.id, normalizedTags);
+    }
+
+    setBulkActionMessage(`Tagged ${selectedPhotos.length} photo(s) with #${nextTag}.`);
+    setBulkTagInput('');
+  }
+
   // Viewer toolbar configuration
   const viewerToolbarButtons = useMemo<ToolbarButton[]>(() => {
     if (!viewerState) return [];
@@ -142,6 +164,11 @@ export function LibraryPage() {
       setSaturation: viewerState.setSaturation,
     });
   }, [viewerState, deletePhoto, photos.length]);
+
+  const availableTags = useMemo(
+    () => [...new Set(photos.flatMap((photo) => photo.tags))].sort((a, b) => a.localeCompare(b)),
+    [photos]
+  );
 
   // Gallery toolbar configuration
   const galleryToolbarButtons = useMemo<ToolbarButton[]>(() => {
@@ -204,6 +231,33 @@ export function LibraryPage() {
         <h1 className="page-title">Library</h1>
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
+            <button
+              className={`btn-ghost btn-sm${quickView === 'all' ? ' active' : ''}`}
+              title="Show all photos"
+              onClick={() => setQuickView('all')}
+            >
+              All
+            </button>
+            <button
+              className={`btn-ghost btn-sm${quickView === 'favorites' ? ' active' : ''}`}
+              title="Show favorites"
+              onClick={() => setQuickView('favorites')}
+            >
+              Favorites
+            </button>
+            <select
+              className="btn-ghost btn-sm"
+              aria-label="Filter by tag"
+              value={activeTagFilter}
+              onChange={(e) => setActiveTagFilter(e.target.value)}
+            >
+              <option value="">All tags</option>
+              {availableTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  #{tag}
+                </option>
+              ))}
+            </select>
             <select
               className="btn-ghost btn-sm"
               aria-label="Filter by camera make"
@@ -318,6 +372,21 @@ export function LibraryPage() {
               disabled={!bulkAlbumId || selectedPhotoIds.size === 0}
             >
               + Album
+            </button>
+            <input
+              className="btn-ghost btn-sm"
+              aria-label="Tag selected photos"
+              placeholder="tag"
+              value={bulkTagInput}
+              onChange={(e) => setBulkTagInput(e.target.value)}
+            />
+            <button
+              className="btn-ghost btn-sm"
+              onClick={handleBulkTagApply}
+              title="Apply tag to selected photos"
+              disabled={!bulkTagInput.trim() || selectedPhotoIds.size === 0}
+            >
+              + Tag
             </button>
             <button
               className="btn-danger-ghost btn-sm"
