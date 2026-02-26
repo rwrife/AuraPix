@@ -59,21 +59,30 @@
   - 7 LocalJsonData tests  
   - 2 Integration tests (upload & thumbnail generation)
 
-## Phase 3: Edit Versioning 🚧 PLANNED
+## Phase 3: Edit Versioning ✅ COMPLETE
 
 ### Non-Destructive Editing
-- [ ] Edit operation application with Sharp
-- [ ] Edit version management
-- [ ] POST /images/:libraryId/:photoId/edits - Apply edits
-- [ ] POST /images/:libraryId/:photoId/revert - Revert to version
-- [ ] Thumbnail regeneration on edit changes
-- [ ] Full-size edited image caching
+- ✅ Edit operation application with Sharp
+- ✅ Edit version management
+- ✅ POST /edits/:libraryId/:photoId - Apply edits
+- ✅ POST /edits/:libraryId/:photoId/revert - Revert to version
+- ✅ Thumbnail regeneration on edit changes
+- ✅ Full-size edited image caching with version keys
+- ✅ On-demand edit application for originals
 
 ### Edit Operations
-- [ ] Crop operation
-- [ ] Rotate operation
-- [ ] Adjust operation (brightness, contrast, saturation)
-- [ ] Filter operation (plugin-based)
+- ✅ Crop operation (x, y, width, height)
+- ✅ Rotate operation (90, 180, 270 degrees)
+- ✅ Adjust operation (brightness, contrast, saturation)
+- ✅ Filter operation (grayscale, sepia, blur, sharpen, negate)
+
+### Services & Handlers
+- ✅ EditProcessor service for validating and applying operations
+- ✅ Apply edits handler (creates new version, marks thumbnails outdated)
+- ✅ Revert version handler (switches to previous version)
+- ✅ Thumbnail regeneration with edits applied
+- ✅ Updated serve handler to apply edits on-demand for originals
+- ✅ Edits router mounted to server
 
 ## Phase 4: Firebase Integration 🚧 PLANNED
 

@@ -54,10 +54,12 @@ app.get('/health', (req, res) => {
 // Import routes
 import imagesRouter from './routes/images.js';
 import internalRouter from './routes/internal.js';
+import editsRouter from './routes/edits.js';
 
 // Mount routes
 app.use('/images', imagesRouter);
 app.use('/internal', internalRouter);
+app.use('/edits', editsRouter);
 
 // Error handlers (must be last)
 app.use(notFoundHandler);
