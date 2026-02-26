@@ -17,4 +17,5 @@ export interface UploadSessionsService {
   finalizeUpload(input: FinalizeUploadInput): Promise<FinalizeUploadResult>;
   listUploadedMetadata(): Promise<UploadMetadata[]>;
   listDerivativeJobs(): Promise<DerivativeJobEnvelope[]>;
+  processNextDerivativeJob(): Promise<DerivativeJobEnvelope | null>;
 }

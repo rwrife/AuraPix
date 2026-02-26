@@ -16,6 +16,7 @@ interface UseUploadSessionsResult {
   createSession(fileName: string): Promise<void>;
   finalizeSession(fileName: string, byteSize: number): Promise<void>;
   createAndFinalizeSession(fileName: string, byteSize: number): Promise<void>;
+  processNextDerivativeJob(): Promise<void>;
 }
 
 export function useUploadSessions(uploadService: UploadSessionsService): UseUploadSessionsResult {
@@ -117,6 +118,27 @@ export function useUploadSessions(uploadService: UploadSessionsService): UseUplo
     [uploadService]
   );
 
+  const processNextDerivativeJob = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await uploadService.processNextDerivativeJob();
+      const nextMetadata = await uploadService.listUploadedMetadata();
+      const nextJobs = await uploadService.listDerivativeJobs();
+      setMetadata(nextMetadata);
+      setJobs(nextJobs);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Unable to process derivative jobs.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [uploadService]);
+
   return {
     pendingSession,
     metadata,
@@ -127,5 +149,6 @@ export function useUploadSessions(uploadService: UploadSessionsService): UseUplo
     createSession,
     finalizeSession,
     createAndFinalizeSession,
+    processNextDerivativeJob,
   };
 }

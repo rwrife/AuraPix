@@ -145,4 +145,28 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
   async listDerivativeJobs(): Promise<DerivativeJobEnvelope[]> {
     return [...this.jobs.values()];
   }
+
+  async processNextDerivativeJob(): Promise<DerivativeJobEnvelope | null> {
+    const nextJob = [...this.jobs.values()].find((job) => job.status === 'queued');
+    if (!nextJob) {
+      return null;
+    }
+
+    const completedJob: DerivativeJobEnvelope = {
+      ...nextJob,
+      status: 'completed',
+    };
+
+    this.jobs.set(completedJob.jobId, completedJob);
+
+    const metadata = this.metadata.get(completedJob.metadataUploadId);
+    if (metadata) {
+      this.metadata.set(metadata.uploadId, {
+        ...metadata,
+        processingState: 'completed',
+      });
+    }
+
+    return completedJob;
+  }
 }
