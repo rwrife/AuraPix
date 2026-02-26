@@ -27,13 +27,16 @@ export function LibraryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
-  const initialQuickViewPreferences = useMemo(() => loadQuickViewPreferences(libraryId), [libraryId]);
+  const initialQuickViewPreferences = useMemo(
+    () => loadQuickViewPreferences(libraryId),
+    [libraryId]
+  );
   const [cameraMakeFilter, setCameraMakeFilter] = useState<string>(
     initialQuickViewPreferences.cameraMakeFilter
   );
-  const [quickCollection, setQuickCollection] = useState<'all' | 'favorites' | 'untagged' | 'recent'>(
-    initialQuickViewPreferences.quickCollection
-  );
+  const [quickCollection, setQuickCollection] = useState<
+    'all' | 'favorites' | 'untagged' | 'recent'
+  >(initialQuickViewPreferences.quickCollection);
   const [activeTagFilter, setActiveTagFilter] = useState<string>(
     initialQuickViewPreferences.activeTagFilter
   );
