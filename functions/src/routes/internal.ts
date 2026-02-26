@@ -12,6 +12,23 @@ const router = Router();
  * Manually trigger thumbnail generation
  * POST /internal/generate-thumbnails/:libraryId/:photoId
  */
+/**
+ * Health check endpoint
+ * GET /internal/health
+ */
+router.get('/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'aurapix-backend',
+    version: '1.0.0',
+  });
+});
+
+/**
+ * Manually trigger thumbnail generation
+ * POST /internal/generate-thumbnails/:libraryId/:photoId
+ */
 router.post(
   '/generate-thumbnails/:libraryId/:photoId',
   async (req: Request, res: Response, next) => {

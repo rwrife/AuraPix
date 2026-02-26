@@ -1,74 +1,147 @@
 # AuraPix
 
-AuraPix is an open-source foundation for photo management, sharing, and collaboration.
+A modern photo management and sharing platform built with React, TypeScript, and Firebase.
 
-It is designed to stay **vendor-neutral first** while being **Firebase App Hosting-ready** when we choose to adopt managed deployment.
+## Features
 
-## Vision
+- 📸 Photo library management and organization
+- 📁 Albums and folder organization
+- 🔐 User authentication and authorization
+- 🎨 Non-destructive image editing with plugin system
+- 🤝 Photo sharing and access control
+- 👥 Team collaboration with role-based permissions
+- ☁️ Cloud storage with Firebase
+- 📱 Responsive design for desktop and mobile
 
-- Fast, reliable media workflows for photographers and teams
-- Secure-by-default sharing and access controls
-- Extensible architecture for non-destructive editing plugins
-- API-first direction so desktop and automation clients can be added later
-
-## Current status (first practical increment)
-
-This repo now includes:
-
-- A lightweight React + Vite + TypeScript web baseline
-- Lint, format, test, and build scripts
-- Environment template and setup docs
-- CI workflow for install/lint/test/build
-- Community contribution basics (issues/PR templates, contributing guide, CODEOWNERS)
-- Firebase App Hosting prep notes without coupling the architecture
-
-## Quick start
+## Getting Started
 
 ### Prerequisites
 
-- Node.js 22+
-- npm 10+
+- Node.js 18+ and npm
+- Firebase project (for production deployment)
 
-### Local development
+### Installation
 
 ```bash
+# Install root dependencies
 npm install
-cp .env.example .env
+
+# Install backend dependencies
+npm --prefix functions install
+```
+
+### Development
+
+Run both frontend and backend concurrently in development mode:
+
+```bash
 npm run dev
 ```
 
-### Quality checks
+This will start:
+- Frontend (Vite): http://localhost:5173
+- Backend (Express): http://localhost:3001
+
+The frontend will automatically connect to the local backend and display a warning banner if the backend is unavailable.
+
+### Environment Configuration
+
+1. Copy `.env.example` to `.env.local`:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. Update the backend URL if needed:
+   ```
+   VITE_API_BASE_URL=http://localhost:3001  # For local development
+   ```
+
+3. For Firebase deployment, update to your Cloud Functions URL:
+   ```
+   VITE_API_BASE_URL=https://your-project.cloudfunctions.net/api
+   ```
+
+### Running Services Separately
 
 ```bash
-npm run lint
-npm run test
+# Frontend only
+npm run dev:frontend
+
+# Backend only
+npm run dev:backend
+```
+
+### Building for Production
+
+```bash
+# Build both frontend and backend
 npm run build
-npm run format:check
+
+# Build separately
+npm run build:frontend
+npm run build:backend
 ```
 
-## Documentation
+## Project Structure
 
-- Implementation plan: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
-- Environment setup: [`docs/setup/environment.md`](docs/setup/environment.md)
-- Firebase App Hosting prep: [`docs/setup/firebase-app-hosting-prep.md`](docs/setup/firebase-app-hosting-prep.md)
-- Feature planning docs: [`docs/features/`](docs/features)
-- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-
-## Repository structure
-
-```text
-src/                     Web app baseline
-.github/                 CI + issue/PR templates
-docs/                    Planning and setup docs
+```
+AuraPix/
+├── src/                    # Frontend React application
+│   ├── components/        # Reusable UI components
+│   ├── pages/            # Page components
+│   ├── services/         # Service layer and API clients
+│   ├── features/         # Feature modules
+│   ├── domain/           # Business logic and contracts
+│   └── adapters/         # Data adapters
+├── functions/            # Backend Node.js API
+│   ├── src/
+│   │   ├── handlers/    # Request handlers
+│   │   ├── services/    # Business logic services
+│   │   ├── adapters/    # Storage and data adapters
+│   │   ├── routes/      # API routes
+│   │   └── middleware/  # Express middleware
+│   └── test/           # Backend tests
+└── docs/               # Documentation
 ```
 
-## Deployment direction
+## Health Monitoring
 
-Near term:
+The application includes automatic backend health monitoring:
 
-- Keep deployment flexible and open-source friendly (any static host + API runtime)
+- Frontend checks backend availability every 30 seconds
+- A warning banner appears at the top if the backend is unreachable
+- Health status is displayed with error details
+- No user action required - monitoring is automatic
 
-Future-ready:
+## Testing
 
-- Preserve compatibility with Firebase App Hosting for managed deployments
-- Introduce Firebase-specific runtime wiring behind clear interfaces
+```bash
+# Run frontend tests
+npm test
+
+# Run backend tests
+npm --prefix functions test
+
+# Run with coverage
+npm run test:coverage
+```
+
+## Architecture
+
+AuraPix follows a clean architecture approach with:
+
+- **Frontend**: React + TypeScript + Vite
+- **Backend**: Node.js + Express + TypeScript
+- **Data Layer**: Firestore (metadata) + Cloud Storage (media)
+- **Authentication**: Firebase Authentication
+- **Deployment**: Firebase App Hosting + Cloud Functions
+
+See [docs/](./docs/) for detailed architecture documentation.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.
+
+## License
+
+Copyright © 2024 AuraPix. All rights reserved.

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AlbumDetailPage } from './pages/AlbumDetailPage';
@@ -7,6 +7,9 @@ import { FolderDetailPage } from './pages/FolderDetailPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { createLocalServices } from './services/createLocalServices';
 import { ServiceProvider } from './services/ServiceContext';
+import { HealthBanner } from './components/HealthBanner';
+import { initializeHealthCheck, cleanupHealthCheck } from './services/healthCheck';
+import { setupHealthDebug } from './utils/debugHealth';
 
 export default function App() {
   const services = useMemo(() => {
@@ -18,8 +21,19 @@ export default function App() {
     return createLocalServices();
   }, []);
 
+  // Initialize health check monitoring
+  useEffect(() => {
+    initializeHealthCheck();
+    setupHealthDebug();
+    
+    return () => {
+      cleanupHealthCheck();
+    };
+  }, []);
+
   return (
     <ServiceProvider services={services}>
+      <HealthBanner />
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
