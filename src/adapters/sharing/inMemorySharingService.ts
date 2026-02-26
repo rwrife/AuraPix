@@ -76,7 +76,9 @@ export class InMemorySharingService implements SharingService {
     return this.markGranted(link, input.token, 'granted');
   }
 
-  async resolveShareDownload(input: ResolveShareDownloadInput): Promise<ShareDownloadResolution | null> {
+  async resolveShareDownload(
+    input: ResolveShareDownloadInput
+  ): Promise<ShareDownloadResolution | null> {
     const link = this.validateAccess(input);
     if (!link) {
       return null;
