@@ -1,4 +1,4 @@
-export type SharePermission = "view" | "download" | "collaborate";
+export type SharePermission = 'view' | 'download' | 'collaborate';
 
 export interface SharePolicy {
   permission: SharePermission;
@@ -10,7 +10,7 @@ export interface SharePolicy {
 export interface ShareLink {
   id: string;
   token: string;
-  resourceType: "album" | "photo" | "library";
+  resourceType: 'album' | 'photo' | 'library';
   resourceId: string;
   policy: SharePolicy;
   useCount: number;
@@ -20,7 +20,7 @@ export interface ShareLink {
 }
 
 export interface CreateShareLinkInput {
-  resourceType: ShareLink["resourceType"];
+  resourceType: ShareLink['resourceType'];
   resourceId: string;
   policy: Partial<SharePolicy>;
   password?: string;

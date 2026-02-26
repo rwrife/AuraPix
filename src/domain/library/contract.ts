@@ -4,7 +4,7 @@ import type {
   ListPhotosResult,
   Photo,
   UpdatePhotoInput,
-} from "./types";
+} from './types';
 
 export interface LibraryService {
   listPhotos(input: ListPhotosInput): Promise<ListPhotosResult>;

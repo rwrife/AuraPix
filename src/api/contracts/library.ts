@@ -4,7 +4,7 @@ import type {
   ListPhotosResult,
   Photo,
   UpdatePhotoInput,
-} from "../../domain/library/types";
+} from '../../domain/library/types';
 
 // ---------------------------------------------------------------------------
 // Library API contracts

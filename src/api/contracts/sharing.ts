@@ -2,7 +2,7 @@ import type {
   CreateShareLinkInput,
   ResolveShareLinkInput,
   ShareLink,
-} from "../../domain/sharing/types";
+} from '../../domain/sharing/types';
 
 // ---------------------------------------------------------------------------
 // Sharing API contracts

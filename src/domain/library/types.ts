@@ -1,4 +1,4 @@
-export type PhotoStatus = "pending" | "ready" | "error";
+export type PhotoStatus = 'pending' | 'ready' | 'error';
 
 export interface PhotoMetadata {
   width: number;

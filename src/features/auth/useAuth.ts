@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import type { User } from "../../domain/auth/types";
-import { useServices } from "../../services/useServices";
+import { useCallback, useEffect, useState } from 'react';
+import type { User } from '../../domain/auth/types';
+import { useServices } from '../../services/useServices';
 
 interface UseAuthState {
   user: User | null;
@@ -42,11 +42,11 @@ export function useAuth(): UseAuthReturn {
         setState((s) => ({
           ...s,
           loading: false,
-          error: err instanceof Error ? err.message : "Sign-in failed.",
+          error: err instanceof Error ? err.message : 'Sign-in failed.',
         }));
       }
     },
-    [auth],
+    [auth]
   );
 
   const signUp = useCallback(
@@ -59,11 +59,11 @@ export function useAuth(): UseAuthReturn {
         setState((s) => ({
           ...s,
           loading: false,
-          error: err instanceof Error ? err.message : "Sign-up failed.",
+          error: err instanceof Error ? err.message : 'Sign-up failed.',
         }));
       }
     },
-    [auth],
+    [auth]
   );
 
   const signOut = useCallback(async () => {
@@ -75,7 +75,7 @@ export function useAuth(): UseAuthReturn {
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Sign-out failed.",
+        error: err instanceof Error ? err.message : 'Sign-out failed.',
       }));
     }
   }, [auth]);

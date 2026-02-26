@@ -1,13 +1,6 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import type { Album, AlbumFolder } from "../../domain/albums/types";
-import { useServices } from "../../services/useServices";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { Album, AlbumFolder } from '../../domain/albums/types';
+import { useServices } from '../../services/useServices';
 
 export interface AlbumsState {
   albums: Album[];
@@ -45,7 +38,7 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (!cancelled) {
-          setError("Unable to load albums.");
+          setError('Unable to load albums.');
           setLoading(false);
         }
       });
@@ -62,13 +55,11 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         setAlbums((prev) => [created, ...prev]);
         return created;
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to create album.",
-        );
+        setError(err instanceof Error ? err.message : 'Unable to create album.');
         return null;
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   const deleteAlbum = useCallback(
@@ -78,12 +69,10 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         await albumsService.deleteAlbum(albumId);
         setAlbums((prev) => prev.filter((a) => a.id !== albumId));
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to delete album.",
-        );
+        setError(err instanceof Error ? err.message : 'Unable to delete album.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   const renameAlbum = useCallback(
@@ -93,12 +82,10 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         const updated = await albumsService.updateAlbum(albumId, { name });
         setAlbums((prev) => prev.map((a) => (a.id === albumId ? updated : a)));
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to rename album.",
-        );
+        setError(err instanceof Error ? err.message : 'Unable to rename album.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   const createFolder = useCallback(
@@ -106,16 +93,12 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
       setError(null);
       try {
         const created = await albumsService.createFolder({ name });
-        setFolders((prev) =>
-          [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
-        );
+        setFolders((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to create folder.",
-        );
+        setError(err instanceof Error ? err.message : 'Unable to create folder.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   const deleteFolder = useCallback(
@@ -125,17 +108,13 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         await albumsService.deleteFolder(folderId);
         setFolders((prev) => prev.filter((f) => f.id !== folderId));
         setAlbums((prev) =>
-          prev.map((a) =>
-            a.folderId === folderId ? { ...a, folderId: null } : a,
-          ),
+          prev.map((a) => (a.folderId === folderId ? { ...a, folderId: null } : a))
         );
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to delete folder.",
-        );
+        setError(err instanceof Error ? err.message : 'Unable to delete folder.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   const renameFolder = useCallback(
@@ -146,15 +125,13 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         setFolders((prev) =>
           prev
             .map((f) => (f.id === folderId ? updated : f))
-            .sort((a, b) => a.name.localeCompare(b.name)),
+            .sort((a, b) => a.name.localeCompare(b.name))
         );
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to rename folder.",
-        );
+        setError(err instanceof Error ? err.message : 'Unable to rename folder.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   const moveAlbum = useCallback(
@@ -164,10 +141,10 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         const updated = await albumsService.updateAlbum(albumId, { folderId });
         setAlbums((prev) => prev.map((a) => (a.id === albumId ? updated : a)));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to move album.");
+        setError(err instanceof Error ? err.message : 'Unable to move album.');
       }
     },
-    [albumsService],
+    [albumsService]
   );
 
   return (
@@ -194,7 +171,6 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAlbums(): AlbumsState {
   const ctx = useContext(AlbumsContext);
-  if (!ctx)
-    throw new Error("useAlbums must be used within an AlbumsProvider");
+  if (!ctx) throw new Error('useAlbums must be used within an AlbumsProvider');
   return ctx;
 }

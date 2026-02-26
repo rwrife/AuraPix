@@ -2,7 +2,7 @@
    AuraPix — global styles (dark theme)
    ========================================================================= */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 /* ── Reset / base ──────────────────────────────────────────────────────── */
 *,
@@ -14,7 +14,7 @@
 }
 
 body {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: #e2e8f0;
@@ -178,7 +178,9 @@ body {
   font-size: 0.875rem;
   color: #94a3b8;
   text-decoration: none;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -322,17 +324,19 @@ button,
   font-size: 0.875rem;
   font-weight: 500;
   padding: 0.4375rem 0.875rem;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
 
 .btn-primary,
-button[type="submit"] {
+button[type='submit'] {
   background: #4f46e5;
   color: #fff;
 }
 
 .btn-primary:hover,
-button[type="submit"]:hover {
+button[type='submit']:hover {
   background: #4338ca;
 }
 
@@ -410,9 +414,9 @@ button:disabled {
 }
 
 /* ── Forms ─────────────────────────────────────────────────────────────── */
-input[type="text"],
-input[type="email"],
-input[type="password"] {
+input[type='text'],
+input[type='email'],
+input[type='password'] {
   font-family: inherit;
   font-size: 0.875rem;
   padding: 0.4375rem 0.75rem;
@@ -421,7 +425,9 @@ input[type="password"] {
   background: #1e293b;
   color: #e2e8f0;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
   width: 100%;
 }
 
@@ -877,7 +883,9 @@ input:focus {
   padding: 0;
   z-index: 5;
   opacity: 0.4;
-  transition: background 0.2s, opacity 0.2s;
+  transition:
+    background 0.2s,
+    opacity 0.2s;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -953,7 +961,10 @@ input:focus {
   border: 3px solid transparent;
   cursor: pointer;
   background: #1e293b;
-  transition: border-color 0.2s, opacity 0.2s, transform 0.2s;
+  transition:
+    border-color 0.2s,
+    opacity 0.2s,
+    transform 0.2s;
   padding: 0;
   line-height: 0;
 }
@@ -1118,7 +1129,10 @@ input:focus {
   background: #1e293b;
   display: flex;
   flex-direction: column;
-  transition: opacity 0.12s, box-shadow 0.12s, transform 0.12s;
+  transition:
+    opacity 0.12s,
+    box-shadow 0.12s,
+    transform 0.12s;
   border: 2px solid transparent;
 }
 
@@ -1137,7 +1151,7 @@ input:focus {
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
 }
 
-.gallery-tile[data-focused="true"] {
+.gallery-tile[data-focused='true'] {
   box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.7);
 }
 
@@ -1314,7 +1328,9 @@ input:focus {
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   flex-shrink: 0;
 }
 
@@ -1353,7 +1369,9 @@ input:focus {
   border-radius: 10px;
   background: #0f172a;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
   text-align: center;
   outline: none;
 }
@@ -1465,7 +1483,9 @@ input:focus {
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .upload-file-remove:hover:not(:disabled) {
@@ -1497,7 +1517,9 @@ input:focus {
   outline: none;
   cursor: pointer;
   width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .upload-album-select:focus {
@@ -1521,7 +1543,9 @@ input:focus {
   color: #e2e8f0;
   outline: none;
   width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .upload-album-name-input:focus {

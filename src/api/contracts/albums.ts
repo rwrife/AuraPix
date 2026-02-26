@@ -1,4 +1,4 @@
-import type { Album, CreateAlbumInput } from "../../domain/albums/types";
+import type { Album, CreateAlbumInput } from '../../domain/albums/types';
 
 // ---------------------------------------------------------------------------
 // Albums API contracts
