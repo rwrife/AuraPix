@@ -5,9 +5,20 @@
 
 import { getHealthCheckService } from '../services/healthCheck';
 
+declare global {
+  interface Window {
+    __debugHealth?: {
+      service: ReturnType<typeof getHealthCheckService>;
+      check: () => ReturnType<ReturnType<typeof getHealthCheckService>['performCheck']>;
+      status: () => ReturnType<ReturnType<typeof getHealthCheckService>['getStatus']>;
+      subscribe: () => ReturnType<ReturnType<typeof getHealthCheckService>['subscribe']>;
+    };
+  }
+}
+
 export function setupHealthDebug() {
   if (typeof window !== 'undefined') {
-    (window as any).__debugHealth = {
+    window.__debugHealth = {
       service: getHealthCheckService(),
       
       // Manually trigger a health check

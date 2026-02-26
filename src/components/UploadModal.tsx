@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAlbums } from '../features/albums/useAlbums';
+import { isSupportedUploadFile, uploadAcceptValue } from '../features/uploads/supportedUploadFiles';
 
 interface UploadModalProps {
   /**
@@ -36,11 +37,14 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
 
   function mergeFiles(incoming: FileList | File[] | null) {
     if (!incoming) return;
-    const images = Array.from(incoming).filter((f) => f.type.startsWith('image/'));
-    if (images.length === 0) return;
+    const supportedFiles = Array.from(incoming).filter((f) => isSupportedUploadFile(f));
+    if (supportedFiles.length === 0) return;
     setFiles((prev) => {
       const existingKeys = new Set(prev.map((f) => `${f.name}-${f.size}`));
-      return [...prev, ...images.filter((f) => !existingKeys.has(`${f.name}-${f.size}`))];
+      return [
+        ...prev,
+        ...supportedFiles.filter((f) => !existingKeys.has(`${f.name}-${f.size}`)),
+      ];
     });
   }
 
@@ -154,7 +158,7 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={uploadAcceptValue()}
               multiple
               hidden
               onChange={(e) => mergeFiles(e.target.files)}
