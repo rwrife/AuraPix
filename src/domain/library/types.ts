@@ -34,10 +34,19 @@ export interface MetadataFilterInput {
   takenBefore?: string;
 }
 
+export type LibraryQuickCollection = 'favorites' | 'untagged' | 'recent';
+
 export interface ListPhotosInput {
   libraryId: string;
   albumId?: string;
+  /**
+   * Backward-compatible legacy flag. Prefer `collection: 'favorites'` for new callers.
+   */
   favoritesOnly?: boolean;
+  /**
+   * Optional quick collection filter for reusable views.
+   */
+  collection?: LibraryQuickCollection;
   tags?: string[];
   metadata?: MetadataFilterInput;
   pageSize?: number;

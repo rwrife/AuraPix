@@ -22,15 +22,18 @@ export function LibraryPage() {
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
   const [cameraMakeFilter, setCameraMakeFilter] = useState<string>('');
-  const [quickView, setQuickView] = useState<'all' | 'favorites'>('all');
+  const [quickCollection, setQuickCollection] = useState<
+    'all' | 'favorites' | 'untagged' | 'recent'
+  >('all');
   const [activeTagFilter, setActiveTagFilter] = useState<string>('');
   const metadataFilters = useMemo(
     () => ({
       metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined,
-      favoritesOnly: quickView === 'favorites',
+      favoritesOnly: quickCollection === 'favorites',
+      collection: quickCollection === 'all' ? undefined : quickCollection,
       tags: activeTagFilter ? [activeTagFilter] : undefined,
     }),
-    [cameraMakeFilter, quickView, activeTagFilter]
+    [cameraMakeFilter, quickCollection, activeTagFilter]
   );
 
   const {
@@ -237,18 +240,32 @@ export function LibraryPage() {
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
             <button
-              className={`btn-ghost btn-sm${quickView === 'all' ? ' active' : ''}`}
+              className={`btn-ghost btn-sm${quickCollection === 'all' ? ' active' : ''}`}
               title="Show all photos"
-              onClick={() => setQuickView('all')}
+              onClick={() => setQuickCollection('all')}
             >
               All
             </button>
             <button
-              className={`btn-ghost btn-sm${quickView === 'favorites' ? ' active' : ''}`}
+              className={`btn-ghost btn-sm${quickCollection === 'favorites' ? ' active' : ''}`}
               title="Show favorites"
-              onClick={() => setQuickView('favorites')}
+              onClick={() => setQuickCollection('favorites')}
             >
               Favorites
+            </button>
+            <button
+              className={`btn-ghost btn-sm${quickCollection === 'untagged' ? ' active' : ''}`}
+              title="Show untagged photos"
+              onClick={() => setQuickCollection('untagged')}
+            >
+              Untagged
+            </button>
+            <button
+              className={`btn-ghost btn-sm${quickCollection === 'recent' ? ' active' : ''}`}
+              title="Show recent photos"
+              onClick={() => setQuickCollection('recent')}
+            >
+              Recent
             </button>
             <select
               className="btn-ghost btn-sm"

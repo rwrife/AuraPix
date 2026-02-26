@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BulkAddToAlbumResult, MetadataFilterInput, Photo } from '../../domain/library/types';
+import type {
+  BulkAddToAlbumResult,
+  LibraryQuickCollection,
+  MetadataFilterInput,
+  Photo,
+} from '../../domain/library/types';
 import { useServices } from '../../services/useServices';
 
 interface UseLibraryState {
@@ -33,7 +38,12 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export function useLibrary(
   libraryId: string,
-  filters?: { metadata?: MetadataFilterInput; favoritesOnly?: boolean; tags?: string[] }
+  filters?: {
+    metadata?: MetadataFilterInput;
+    favoritesOnly?: boolean;
+    collection?: LibraryQuickCollection;
+    tags?: string[];
+  }
 ): UseLibraryReturn {
   const { library } = useServices();
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -54,6 +64,7 @@ export function useLibrary(
         libraryId,
         metadata: filters?.metadata,
         favoritesOnly: filters?.favoritesOnly,
+        collection: filters?.collection,
         tags: filters?.tags,
         pageSize: 24,
       })
@@ -74,7 +85,15 @@ export function useLibrary(
     return () => {
       cancelled = true;
     };
-  }, [library, libraryId, tick, filters?.metadata, filters?.favoritesOnly, filters?.tags]);
+  }, [
+    library,
+    libraryId,
+    tick,
+    filters?.metadata,
+    filters?.favoritesOnly,
+    filters?.collection,
+    filters?.tags,
+  ]);
 
   const addPhoto = useCallback(
     async (file: File): Promise<Photo> => {
@@ -175,6 +194,7 @@ export function useLibrary(
         libraryId,
         metadata: filters?.metadata,
         favoritesOnly: filters?.favoritesOnly,
+        collection: filters?.collection,
         tags: filters?.tags,
         pageSize: 24,
         pageToken: nextPageToken,
@@ -193,6 +213,7 @@ export function useLibrary(
     libraryId,
     filters?.metadata,
     filters?.favoritesOnly,
+    filters?.collection,
     filters?.tags,
   ]);
 
