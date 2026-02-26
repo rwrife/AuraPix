@@ -22,9 +22,9 @@ export function LibraryPage() {
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
   const [cameraMakeFilter, setCameraMakeFilter] = useState<string>('');
-  const [quickCollection, setQuickCollection] = useState<'all' | 'favorites' | 'untagged' | 'recent'>(
-    'all'
-  );
+  const [quickCollection, setQuickCollection] = useState<
+    'all' | 'favorites' | 'untagged' | 'recent'
+  >('all');
   const [activeTagFilter, setActiveTagFilter] = useState<string>('');
   const metadataFilters = useMemo(
     () => ({
