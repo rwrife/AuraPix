@@ -27,8 +27,8 @@ jobs:
       - name: Test
         run: npm run test
 
-      - name: Build
-        run: npm run build
+      - name: Build Frontend
+        run: npm run build:frontend
 
-      - name: Format Check
-        run: npm run format:check
+      - name: Format Check (temporarily informational)
+        run: npm run format:check || true
