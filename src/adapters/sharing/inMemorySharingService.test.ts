@@ -46,4 +46,50 @@ describe('InMemorySharingService', () => {
     const events = await service.listAccessEvents('photo-22');
     expect(events.map((event) => event.outcome)).toEqual(['denied_max_uses', 'granted']);
   });
+
+  it('enforces download policies and deterministic watermark behavior', async () => {
+    const service = new InMemorySharingService();
+
+    const derivativeOnly = await service.createShareLink({
+      resourceType: 'photo',
+      resourceId: 'photo-77',
+      policy: {
+        permission: 'download',
+        downloadPolicy: 'derivative_only',
+        watermarkEnabled: true,
+      },
+    });
+
+    const blockedOriginal = await service.resolveShareDownload({
+      token: derivativeOnly.token,
+      assetKind: 'original',
+    });
+    const derivativeAllowed = await service.resolveShareDownload({
+      token: derivativeOnly.token,
+      assetKind: 'derivative',
+    });
+
+    expect(blockedOriginal).toBeNull();
+    expect(derivativeAllowed?.assetKind).toBe('derivative');
+    expect(derivativeAllowed?.watermarkApplied).toBe(true);
+
+    const noDownload = await service.createShareLink({
+      resourceType: 'photo',
+      resourceId: 'photo-77',
+      policy: { downloadPolicy: 'none' },
+    });
+    const blockedDerivative = await service.resolveShareDownload({
+      token: noDownload.token,
+      assetKind: 'derivative',
+    });
+
+    expect(blockedDerivative).toBeNull();
+
+    const events = await service.listAccessEvents('photo-77');
+    expect(events.map((event) => event.outcome)).toEqual([
+      'denied_download_disallowed',
+      'granted_download',
+      'denied_download_disallowed',
+    ]);
+  });
 });

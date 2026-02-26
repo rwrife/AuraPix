@@ -1,10 +1,13 @@
 export type SharePermission = 'view' | 'download' | 'collaborate';
+export type ShareDownloadPolicy = 'none' | 'derivative_only' | 'original_and_derivative';
 
 export interface SharePolicy {
   permission: SharePermission;
   expiresAt: string | null;
   passwordProtected: boolean;
   maxUses: number | null;
+  downloadPolicy: ShareDownloadPolicy;
+  watermarkEnabled: boolean;
 }
 
 export interface ShareLink {
@@ -31,13 +34,25 @@ export interface ResolveShareLinkInput {
   password?: string;
 }
 
+export interface ResolveShareDownloadInput extends ResolveShareLinkInput {
+  assetKind: 'original' | 'derivative';
+}
+
+export interface ShareDownloadResolution {
+  link: ShareLink;
+  assetKind: ResolveShareDownloadInput['assetKind'];
+  watermarkApplied: boolean;
+}
+
 export type ShareAccessOutcome =
   | 'granted'
+  | 'granted_download'
   | 'denied_not_found'
   | 'denied_revoked'
   | 'denied_expired'
   | 'denied_max_uses'
-  | 'denied_invalid_password';
+  | 'denied_invalid_password'
+  | 'denied_download_disallowed';
 
 export interface ShareAccessEvent {
   id: string;
