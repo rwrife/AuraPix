@@ -74,6 +74,54 @@ describe('InMemoryLibraryService', () => {
     expect(photos.map((p) => p.id)).not.toContain(p2.id);
   });
 
+  it('filters by normalized metadata camera make', async () => {
+    const svc = new InMemoryLibraryService();
+    const canon = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'canon.jpg',
+      dataUrl: 'data:image/jpeg;base64,canon',
+      metadata: { cameraMake: 'Canon', takenAt: '2026-02-21T10:00:00.000Z' },
+    });
+    await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'nikon.jpg',
+      dataUrl: 'data:image/jpeg;base64,nikon',
+      metadata: { cameraMake: 'Nikon', takenAt: '2026-02-21T10:00:00.000Z' },
+    });
+
+    const { photos } = await svc.listPhotos({
+      libraryId: LIBRARY_ID,
+      metadata: { cameraMake: 'canon' },
+    });
+
+    expect(photos).toHaveLength(1);
+    expect(photos[0].id).toBe(canon.id);
+  });
+
+  it('filters by capture datetime bounds', async () => {
+    const svc = new InMemoryLibraryService();
+    await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'older.jpg',
+      dataUrl: 'data:image/jpeg;base64,old',
+      metadata: { takenAt: '2026-02-20T10:00:00.000Z' },
+    });
+    const newer = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'newer.jpg',
+      dataUrl: 'data:image/jpeg;base64,new',
+      metadata: { takenAt: '2026-02-24T10:00:00.000Z' },
+    });
+
+    const { photos } = await svc.listPhotos({
+      libraryId: LIBRARY_ID,
+      metadata: { takenAfter: '2026-02-22T00:00:00.000Z' },
+    });
+
+    expect(photos).toHaveLength(1);
+    expect(photos[0].id).toBe(newer.id);
+  });
+
   it('deletes a photo', async () => {
     const svc = new InMemoryLibraryService();
     const photo = await svc.addPhoto({

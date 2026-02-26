@@ -56,6 +56,42 @@ export class InMemoryLibraryService implements LibraryService {
       results = results.filter((p) => input.tags!.every((t) => p.tags.includes(t)));
     }
 
+    if (input.metadata?.cameraMake) {
+      const cameraMake = input.metadata.cameraMake.trim().toLowerCase();
+      results = results.filter((p) => p.metadata?.cameraMake?.toLowerCase() === cameraMake);
+    }
+
+    if (input.metadata?.cameraModel) {
+      const cameraModel = input.metadata.cameraModel.trim().toLowerCase();
+      results = results.filter((p) => p.metadata?.cameraModel?.toLowerCase() === cameraModel);
+    }
+
+    if (input.metadata?.hasLocation !== undefined) {
+      results = results.filter(
+        (p) => (p.metadata?.location !== null) === input.metadata?.hasLocation
+      );
+    }
+
+    if (input.metadata?.takenAfter) {
+      const after = Date.parse(input.metadata.takenAfter);
+      if (!Number.isNaN(after)) {
+        results = results.filter((p) => {
+          const takenAt = p.metadata?.takenAt ? Date.parse(p.metadata.takenAt) : Number.NaN;
+          return !Number.isNaN(takenAt) && takenAt >= after;
+        });
+      }
+    }
+
+    if (input.metadata?.takenBefore) {
+      const before = Date.parse(input.metadata.takenBefore);
+      if (!Number.isNaN(before)) {
+        results = results.filter((p) => {
+          const takenAt = p.metadata?.takenAt ? Date.parse(p.metadata.takenAt) : Number.NaN;
+          return !Number.isNaN(takenAt) && takenAt <= before;
+        });
+      }
+    }
+
     // Sort newest-first
     results = results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
