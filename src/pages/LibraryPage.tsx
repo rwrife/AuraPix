@@ -21,7 +21,7 @@ export function LibraryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? "local-user-1");
-  const { photos, loading, error, addPhoto, assignToAlbum, toggleFavorite, deletePhoto } =
+  const { photos, loading, error, addPhoto, assignToAlbum, bulkAddToAlbum, toggleFavorite, deletePhoto } =
     useLibrary(libraryId);
   const { albums } = useAlbums();
 
@@ -84,23 +84,26 @@ export function LibraryPage() {
   async function handleBulkAddToAlbum() {
     if (!bulkAlbumId || selectedPhotoIds.size === 0) return;
 
-    const selectedPhotos = photos.filter((p) => selectedPhotoIds.has(p.id));
-    const alreadyInAlbum = selectedPhotos.filter((p) => p.albumIds.includes(bulkAlbumId));
-    const assignable = selectedPhotos.filter((p) => !p.albumIds.includes(bulkAlbumId));
+    const result = await bulkAddToAlbum([...selectedPhotoIds], bulkAlbumId);
+    const albumName = albums.find((album) => album.id === bulkAlbumId)?.name ?? "album";
 
-    for (const photo of assignable) {
-      await assignToAlbum(photo.id, bulkAlbumId, photo);
+    const addedCount = result.results.filter((item) => item.status === "added").length;
+    const alreadyInAlbumCount = result.results.filter(
+      (item) => item.status === "skipped" && item.code === "already_in_album",
+    ).length;
+    const missingCount = result.results.filter(
+      (item) => item.status === "skipped" && item.code === "not_found",
+    ).length;
+
+    const messageParts = [`Added ${addedCount} photo(s) to “${albumName}”.`];
+    if (alreadyInAlbumCount > 0) {
+      messageParts.push(`${alreadyInAlbumCount} already in album.`);
+    }
+    if (missingCount > 0) {
+      messageParts.push(`${missingCount} no longer available.`);
     }
 
-    const albumName = albums.find((album) => album.id === bulkAlbumId)?.name ?? "album";
-    const addedCount = assignable.length;
-    const skippedCount = alreadyInAlbum.length;
-
-    setBulkActionMessage(
-      skippedCount > 0
-        ? `Added ${addedCount} photo(s) to “${albumName}”. Skipped ${skippedCount} already in that album.`
-        : `Added ${addedCount} photo(s) to “${albumName}”.`,
-    );
+    setBulkActionMessage(messageParts.join(" "));
     setSelectedPhotoIds(new Set());
   }
 

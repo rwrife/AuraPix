@@ -1,5 +1,7 @@
 import type {
   AddPhotoInput,
+  BulkAddToAlbumInput,
+  BulkAddToAlbumResult,
   ListPhotosInput,
   ListPhotosResult,
   Photo,
@@ -12,4 +14,5 @@ export interface LibraryService {
   addPhoto(input: AddPhotoInput): Promise<Photo>;
   updatePhoto(photoId: string, input: UpdatePhotoInput): Promise<Photo>;
   deletePhoto(photoId: string): Promise<void>;
+  bulkAddToAlbum(input: BulkAddToAlbumInput): Promise<BulkAddToAlbumResult>;
 }

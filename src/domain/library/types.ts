@@ -53,3 +53,22 @@ export interface UpdatePhotoInput {
   tags?: string[];
   albumIds?: string[];
 }
+
+export type BulkAddToAlbumErrorCode = 'not_found' | 'already_in_album';
+
+export interface BulkAddToAlbumItemResult {
+  photoId: string;
+  status: 'added' | 'skipped';
+  code?: BulkAddToAlbumErrorCode;
+}
+
+export interface BulkAddToAlbumInput {
+  libraryId: string;
+  albumId: string;
+  photoIds: string[];
+}
+
+export interface BulkAddToAlbumResult {
+  albumId: string;
+  results: BulkAddToAlbumItemResult[];
+}
