@@ -1,8 +1,10 @@
+import { vi } from 'vitest';
 import { InMemoryAuthService } from './inMemoryAuthService';
 
 describe('InMemoryAuthService', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.useRealTimers();
   });
 
   it('auto signs in as the local user on first construction', async () => {
@@ -37,6 +39,46 @@ describe('InMemoryAuthService', () => {
     await expect(svc.signIn({ email: 'local@aurapix.local', password: 'wrong' })).rejects.toThrow(
       'Invalid email or password.'
     );
+  });
+
+  it('locks an account temporarily after repeated failed sign-in attempts', async () => {
+    const svc = new InMemoryAuthService();
+
+    for (let i = 0; i < 4; i++) {
+      await expect(svc.signIn({ email: 'local@aurapix.local', password: 'wrong' })).rejects.toThrow(
+        'Invalid email or password.'
+      );
+    }
+
+    await expect(svc.signIn({ email: 'local@aurapix.local', password: 'wrong' })).rejects.toThrow(
+      'Too many failed sign-in attempts. Try again later.'
+    );
+
+    await expect(svc.signIn({ email: 'local@aurapix.local', password: 'local' })).rejects.toThrow(
+      'Too many failed sign-in attempts.'
+    );
+  });
+
+  it('allows sign-in again after lockout duration passes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-26T12:00:00.000Z'));
+
+    const svc = new InMemoryAuthService();
+
+    for (let i = 0; i < 5; i++) {
+      await expect(svc.signIn({ email: 'local@aurapix.local', password: 'wrong' })).rejects.toThrow();
+    }
+
+    vi.advanceTimersByTime(10 * 60 * 1000 + 1000);
+
+    await expect(
+      svc.signIn({
+        email: 'local@aurapix.local',
+        password: 'local',
+      })
+    ).resolves.toMatchObject({
+      user: { email: 'local@aurapix.local' },
+    });
   });
 
   it('registers a new account via signUp', async () => {
