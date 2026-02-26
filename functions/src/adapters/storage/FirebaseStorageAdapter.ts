@@ -1,15 +1,20 @@
 import { Bucket, Storage } from '@google-cloud/storage';
-import { StorageAdapter, FileMetadata } from './StorageAdapter.js';
+import { StorageAdapter, StorageMetadata } from './StorageAdapter.js';
 import { logger } from '../../utils/logger.js';
 import { AppError } from '../../middleware/errorHandler.js';
+
+export interface FileMetadata {
+  contentType?: string;
+  size?: number;
+  lastModified?: Date;
+  customMetadata?: Record<string, string>;
+}
 
 export class FirebaseStorageAdapter implements StorageAdapter {
   private storage: Storage;
   private bucket: Bucket;
-  private bucketName: string;
 
   constructor(bucketName: string) {
-    this.bucketName = bucketName;
     this.storage = new Storage();
     this.bucket = this.storage.bucket(bucketName);
     
@@ -19,7 +24,7 @@ export class FirebaseStorageAdapter implements StorageAdapter {
   async storeFile(
     path: string,
     data: Buffer,
-    metadata?: FileMetadata
+    metadata?: StorageMetadata
   ): Promise<void> {
     try {
       const file = this.bucket.file(path);

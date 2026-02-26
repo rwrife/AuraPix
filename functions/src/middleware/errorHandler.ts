@@ -4,10 +4,12 @@ import { logger } from '../utils/logger.js';
 export class AppError extends Error {
   constructor(
     public statusCode: number,
+    public code: string,
     message: string,
     public isOperational = true
   ) {
     super(message);
+    this.name = code;
     Object.setPrototypeOf(this, AppError.prototype);
   }
 }

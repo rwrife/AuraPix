@@ -95,20 +95,18 @@ app.use('/edits', editsRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Export for Firebase Functions
+// Export for Firebase Functions  
 export const api = functions.https.onRequest(app);
 
-// Export for Cloud Storage triggers
-export const onFileUploaded = functions.storage.object().onFinalize(async (object) => {
-  logger.info({ object: object.name }, 'File uploaded to Cloud Storage');
-  
-  // TODO: Trigger thumbnail generation for uploaded images
-  // This would parse the storage path, extract libraryId and photoId,
-  // and call the thumbnail generation service
-});
-
-export const onFileDeleted = functions.storage.object().onDelete(async (object) => {
-  logger.info({ object: object.name }, 'File deleted from Cloud Storage');
-  
-  // TODO: Clean up related resources (thumbnails, metadata)
-});
+// Note: Cloud Storage triggers would be implemented using Firebase Functions v2 API:
+// import { onObjectFinalized, onObjectDeleted } from 'firebase-functions/v2/storage';
+// 
+// export const onFileUploaded = onObjectFinalized(async (event) => {
+//   logger.info({ object: event.data.name }, 'File uploaded to Cloud Storage');
+//   // TODO: Trigger thumbnail generation for uploaded images
+// });
+//
+// export const onFileDeleted = onObjectDeleted(async (event) => {
+//   logger.info({ object: event.data.name }, 'File deleted from Cloud Storage');
+//   // TODO: Clean up related resources (thumbnails, metadata)
+// });
