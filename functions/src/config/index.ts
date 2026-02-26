@@ -55,4 +55,8 @@ export const securityConfig = {
     windowMs: parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || '60000', 10),
     maxRequests: parseInt(process.env.UPLOAD_RATE_LIMIT_MAX_REQUESTS || '30', 10),
   },
+  appCheck: {
+    enforceUploads: process.env.APP_CHECK_ENFORCE_UPLOADS === 'true',
+    bypassTokens: process.env.APP_CHECK_BYPASS_TOKENS || '',
+  },
 } as const;
