@@ -33,12 +33,22 @@ function savePhotos(photos: Photo[]): void {
   }
 }
 
+interface InMemoryLibraryServiceOptions {
+  seed?: Photo[];
+  /**
+   * Optional hard quota per library in bytes. Omit/undefined to disable quotas.
+   */
+  quotaBytesByLibraryId?: Record<string, number>;
+}
+
 export class InMemoryLibraryService implements LibraryService {
   private photos: Photo[];
+  private readonly quotaBytesByLibraryId: Record<string, number>;
 
-  constructor(seed: Photo[] = []) {
+  constructor(options: InMemoryLibraryServiceOptions = {}) {
     const stored = loadPhotos();
-    this.photos = stored.length > 0 ? stored : [...seed];
+    this.photos = stored.length > 0 ? stored : [...(options.seed ?? [])];
+    this.quotaBytesByLibraryId = options.quotaBytesByLibraryId ?? {};
   }
 
   async listPhotos(input: ListPhotosInput): Promise<ListPhotosResult> {
@@ -108,7 +118,26 @@ export class InMemoryLibraryService implements LibraryService {
     return this.photos.find((p) => p.id === photoId) ?? null;
   }
 
+  private calculateLibraryUsageBytes(libraryId: string): number {
+    return this.photos
+      .filter((photo) => photo.libraryId === libraryId)
+      .reduce((total, photo) => total + (photo.metadata?.sizeBytes ?? 0), 0);
+  }
+
   async addPhoto(input: AddPhotoInput): Promise<Photo> {
+    const incomingSizeBytes = input.metadata?.sizeBytes ?? 0;
+    const configuredQuota = this.quotaBytesByLibraryId[input.libraryId];
+
+    if (configuredQuota !== undefined) {
+      const usedBytes = this.calculateLibraryUsageBytes(input.libraryId);
+      if (usedBytes + incomingSizeBytes > configuredQuota) {
+        const formatMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        throw new Error(
+          `Storage quota exceeded for this library (${formatMb(usedBytes)} used of ${formatMb(configuredQuota)}).`
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const id = `photo-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 

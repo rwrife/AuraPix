@@ -122,6 +122,30 @@ describe('InMemoryLibraryService', () => {
     expect(photos[0].id).toBe(newer.id);
   });
 
+  it('rejects uploads that exceed configured library quota', async () => {
+    const svc = new InMemoryLibraryService({
+      quotaBytesByLibraryId: {
+        [LIBRARY_ID]: 1024,
+      },
+    });
+
+    await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'within-limit.jpg',
+      dataUrl: 'data:image/jpeg;base64,a',
+      metadata: { sizeBytes: 800 },
+    });
+
+    await expect(
+      svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'over-limit.jpg',
+        dataUrl: 'data:image/jpeg;base64,b',
+        metadata: { sizeBytes: 500 },
+      })
+    ).rejects.toThrow('Storage quota exceeded');
+  });
+
   it('deletes a photo', async () => {
     const svc = new InMemoryLibraryService();
     const photo = await svc.addPhoto({
