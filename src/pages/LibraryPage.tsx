@@ -9,6 +9,7 @@ import { ViewerToolbar } from "../components/toolbar";
 import { createViewerToolbarConfig } from "../components/toolbar/examples/viewerToolbarConfig";
 import type { ToolbarButton, ModalContentProps } from "../components/toolbar";
 import { useAuth } from "../features/auth/useAuth";
+import { useAlbums } from "../features/albums/useAlbums";
 import { useLibrary } from "../features/library/useLibrary";
 
 function toLibraryId(userId: string) {
@@ -22,11 +23,14 @@ export function LibraryPage() {
   const libraryId = toLibraryId(user?.id ?? "local-user-1");
   const { photos, loading, error, addPhoto, assignToAlbum, toggleFavorite, deletePhoto } =
     useLibrary(libraryId);
+  const { albums } = useAlbums();
 
   const [isFilmstrip, setIsFilmstrip] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [gridMode, setGridMode] = useState<GridMode>("medium");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const [bulkAlbumId, setBulkAlbumId] = useState<string>("");
+  const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
   const viewerStateRef = useRef<ViewerState | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
 
@@ -77,10 +81,33 @@ export function LibraryPage() {
     }
   }
 
+  async function handleBulkAddToAlbum() {
+    if (!bulkAlbumId || selectedPhotoIds.size === 0) return;
+
+    const selectedPhotos = photos.filter((p) => selectedPhotoIds.has(p.id));
+    const alreadyInAlbum = selectedPhotos.filter((p) => p.albumIds.includes(bulkAlbumId));
+    const assignable = selectedPhotos.filter((p) => !p.albumIds.includes(bulkAlbumId));
+
+    for (const photo of assignable) {
+      await assignToAlbum(photo.id, bulkAlbumId, photo);
+    }
+
+    const albumName = albums.find((album) => album.id === bulkAlbumId)?.name ?? "album";
+    const addedCount = assignable.length;
+    const skippedCount = alreadyInAlbum.length;
+
+    setBulkActionMessage(
+      skippedCount > 0
+        ? `Added ${addedCount} photo(s) to “${albumName}”. Skipped ${skippedCount} already in that album.`
+        : `Added ${addedCount} photo(s) to “${albumName}”.`,
+    );
+    setSelectedPhotoIds(new Set());
+  }
+
   // Viewer toolbar configuration
   const viewerToolbarButtons = useMemo<ToolbarButton[]>(() => {
     if (!viewerState) return [];
-    
+
     return createViewerToolbarConfig({
       currentPhoto: viewerState.currentPhoto,
       onToggleFavorite: viewerState.onToggleFavorite,
@@ -241,6 +268,28 @@ export function LibraryPage() {
             >
               ♥
             </button>
+            <select
+              className="btn-ghost btn-sm"
+              aria-label="Select album for bulk add"
+              value={bulkAlbumId}
+              onChange={(e) => setBulkAlbumId(e.target.value)}
+              disabled={albums.length === 0}
+            >
+              <option value="">Add to album…</option>
+              {albums.map((album) => (
+                <option key={album.id} value={album.id}>
+                  {album.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn-ghost btn-sm"
+              onClick={handleBulkAddToAlbum}
+              title="Add selected photos to album"
+              disabled={!bulkAlbumId || selectedPhotoIds.size === 0}
+            >
+              + Album
+            </button>
             <button
               className="btn-danger-ghost btn-sm"
               onClick={async () => {
@@ -263,6 +312,11 @@ export function LibraryPage() {
               Clear
             </button>
           </div>
+          {bulkActionMessage && (
+            <span className="state-message" role="status" aria-live="polite">
+              {bulkActionMessage}
+            </span>
+          )}
         </div>
       )}
 
