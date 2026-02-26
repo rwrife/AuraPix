@@ -16,6 +16,7 @@ describe('quickViewPreferences', () => {
       quickCollection: 'all',
       activeTagFilter: '',
       cameraMakeFilter: '',
+      gridMode: 'medium',
     });
   });
 
@@ -24,6 +25,7 @@ describe('quickViewPreferences', () => {
       quickCollection: 'favorites',
       activeTagFilter: 'trip',
       cameraMakeFilter: 'Canon',
+      gridMode: 'large',
     };
 
     saveQuickViewPreferences(LIBRARY_ID, preferences);
@@ -38,6 +40,7 @@ describe('quickViewPreferences', () => {
         quickCollection: 'not-a-real-collection',
         activeTagFilter: 'family',
         cameraMakeFilter: 'Nikon',
+        gridMode: 'giant',
       })
     );
 
@@ -45,6 +48,7 @@ describe('quickViewPreferences', () => {
       quickCollection: 'all',
       activeTagFilter: 'family',
       cameraMakeFilter: 'Nikon',
+      gridMode: 'medium',
     });
   });
 });

@@ -40,6 +40,7 @@ export function LibraryPage() {
   const [activeTagFilter, setActiveTagFilter] = useState<string>(
     initialQuickViewPreferences.activeTagFilter
   );
+  const [gridMode, setGridMode] = useState<GridMode>(initialQuickViewPreferences.gridMode);
   const metadataFilters = useMemo(
     () => ({
       metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined,
@@ -55,8 +56,9 @@ export function LibraryPage() {
       quickCollection,
       activeTagFilter,
       cameraMakeFilter,
+      gridMode,
     });
-  }, [libraryId, quickCollection, activeTagFilter, cameraMakeFilter]);
+  }, [libraryId, quickCollection, activeTagFilter, cameraMakeFilter, gridMode]);
 
   const {
     photos,
@@ -85,7 +87,6 @@ export function LibraryPage() {
 
   const [isFilmstrip, setIsFilmstrip] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [gridMode, setGridMode] = useState<GridMode>('medium');
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [bulkAlbumId, setBulkAlbumId] = useState<string>('');
   const [bulkTagInput, setBulkTagInput] = useState<string>('');

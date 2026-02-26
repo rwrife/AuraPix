@@ -1,9 +1,12 @@
+import type { GridMode } from '../../components/photoGalleryConfig';
+
 export type LibraryQuickCollectionSelection = 'all' | 'favorites' | 'untagged' | 'recent';
 
 export interface LibraryQuickViewPreferences {
   quickCollection: LibraryQuickCollectionSelection;
   activeTagFilter: string;
   cameraMakeFilter: string;
+  gridMode: GridMode;
 }
 
 const STORAGE_KEY_PREFIX = 'aurapix.library.quick-view';
@@ -12,6 +15,7 @@ const DEFAULT_PREFERENCES: LibraryQuickViewPreferences = {
   quickCollection: 'all',
   activeTagFilter: '',
   cameraMakeFilter: '',
+  gridMode: 'medium',
 };
 
 function toStorageKey(libraryId: string) {
@@ -24,6 +28,14 @@ function normalizeQuickCollection(value: unknown): LibraryQuickCollectionSelecti
   }
 
   return DEFAULT_PREFERENCES.quickCollection;
+}
+
+function normalizeGridMode(value: unknown): GridMode {
+  if (value === 'small' || value === 'medium' || value === 'large') {
+    return value;
+  }
+
+  return DEFAULT_PREFERENCES.gridMode;
 }
 
 export function loadQuickViewPreferences(libraryId: string): LibraryQuickViewPreferences {
@@ -42,6 +54,7 @@ export function loadQuickViewPreferences(libraryId: string): LibraryQuickViewPre
       quickCollection: normalizeQuickCollection(parsed.quickCollection),
       activeTagFilter: typeof parsed.activeTagFilter === 'string' ? parsed.activeTagFilter : '',
       cameraMakeFilter: typeof parsed.cameraMakeFilter === 'string' ? parsed.cameraMakeFilter : '',
+      gridMode: normalizeGridMode(parsed.gridMode),
     };
   } catch {
     return DEFAULT_PREFERENCES;
