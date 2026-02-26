@@ -2,6 +2,7 @@ import type { SharingService } from '../../domain/sharing/contract';
 import type {
   CreateShareLinkInput,
   ResolveShareLinkInput,
+  ShareAccessEvent,
   ShareLink,
 } from '../../domain/sharing/types';
 
@@ -13,6 +14,8 @@ import type {
 
 export class InMemorySharingService implements SharingService {
   private links: ShareLink[] = [];
+  private linkPasswords = new Map<string, string>();
+  private events: ShareAccessEvent[] = [];
 
   async createShareLink(input: CreateShareLinkInput): Promise<ShareLink> {
     const now = new Date().toISOString();
@@ -35,6 +38,10 @@ export class InMemorySharingService implements SharingService {
       createdBy: 'local-user-1',
     };
 
+    if (input.password) {
+      this.linkPasswords.set(link.id, input.password);
+    }
+
     this.links = [link, ...this.links];
     return link;
   }
@@ -43,25 +50,73 @@ export class InMemorySharingService implements SharingService {
     return this.links.filter((l) => l.resourceId === resourceId && !l.revoked);
   }
 
+  async listAccessEvents(resourceId: string): Promise<ShareAccessEvent[]> {
+    const linkIds = new Set(this.links.filter((l) => l.resourceId === resourceId).map((l) => l.id));
+
+    return this.events.filter((event) => (event.linkId ? linkIds.has(event.linkId) : false));
+  }
+
   async revokeShareLink(linkId: string): Promise<void> {
     this.links = this.links.map((l) => (l.id === linkId ? { ...l, revoked: true } : l));
   }
 
   async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
     const link = this.links.find((l) => l.token === input.token);
-    if (!link || link.revoked) return null;
+    if (!link) {
+      this.recordEvent({ token: input.token, linkId: null, outcome: 'denied_not_found' });
+      return null;
+    }
+
+    if (link.revoked) {
+      this.recordEvent({ token: input.token, linkId: link.id, outcome: 'denied_revoked' });
+      return null;
+    }
 
     if (link.policy.expiresAt && new Date(link.policy.expiresAt) < new Date()) {
+      this.recordEvent({ token: input.token, linkId: link.id, outcome: 'denied_expired' });
       return null;
     }
 
     if (link.policy.maxUses !== null && link.useCount >= link.policy.maxUses) {
+      this.recordEvent({ token: input.token, linkId: link.id, outcome: 'denied_max_uses' });
       return null;
     }
 
-    // Increment use count
-    this.links = this.links.map((l) => (l.id === link.id ? { ...l, useCount: l.useCount + 1 } : l));
+    if (link.policy.passwordProtected) {
+      const expected = this.linkPasswords.get(link.id);
+      if (!expected || input.password !== expected) {
+        this.recordEvent({
+          token: input.token,
+          linkId: link.id,
+          outcome: 'denied_invalid_password',
+        });
+        return null;
+      }
+    }
 
-    return { ...link, useCount: link.useCount + 1 };
+    const resolved = { ...link, useCount: link.useCount + 1 };
+
+    // Increment use count
+    this.links = this.links.map((l) => (l.id === link.id ? resolved : l));
+    this.recordEvent({ token: input.token, linkId: link.id, outcome: 'granted' });
+
+    return resolved;
+  }
+
+  private recordEvent(input: {
+    token: string;
+    linkId: string | null;
+    outcome: ShareAccessEvent['outcome'];
+  }): void {
+    this.events = [
+      {
+        id: `share-event-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+        token: input.token,
+        linkId: input.linkId,
+        outcome: input.outcome,
+        occurredAt: new Date().toISOString(),
+      },
+      ...this.events,
+    ];
   }
 }
