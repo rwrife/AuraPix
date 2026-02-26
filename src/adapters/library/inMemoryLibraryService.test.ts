@@ -122,6 +122,31 @@ describe('InMemoryLibraryService', () => {
     expect(photos[0].id).toBe(newer.id);
   });
 
+  it('supports quick collection filters for untagged and favorites', async () => {
+    const svc = new InMemoryLibraryService();
+
+    const untaggedFavorite = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'untagged-favorite.jpg',
+      dataUrl: 'data:image/jpeg;base64,uf',
+    });
+
+    const tagged = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'tagged.jpg',
+      dataUrl: 'data:image/jpeg;base64,t',
+    });
+
+    await svc.updatePhoto(untaggedFavorite.id, { isFavorite: true });
+    await svc.updatePhoto(tagged.id, { tags: ['trip'] });
+
+    const untagged = await svc.listPhotos({ libraryId: LIBRARY_ID, collection: 'untagged' });
+    expect(untagged.photos.map((photo) => photo.id)).toEqual([untaggedFavorite.id]);
+
+    const favorites = await svc.listPhotos({ libraryId: LIBRARY_ID, collection: 'favorites' });
+    expect(favorites.photos.map((photo) => photo.id)).toEqual([untaggedFavorite.id]);
+  });
+
   it('paginates results using nextPageToken', async () => {
     const svc = new InMemoryLibraryService();
 

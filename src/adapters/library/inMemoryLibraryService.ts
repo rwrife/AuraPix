@@ -5,6 +5,7 @@ import type {
   BulkAddToAlbumResult,
   ListPhotosInput,
   ListPhotosResult,
+  LibraryQuickCollection,
   Photo,
   UpdatePhotoInput,
 } from '../../domain/library/types';
@@ -41,6 +42,26 @@ interface InMemoryLibraryServiceOptions {
   quotaBytesByLibraryId?: Record<string, number>;
 }
 
+function applyCollectionFilter(photos: Photo[], collection?: LibraryQuickCollection): Photo[] {
+  if (!collection) {
+    return photos;
+  }
+
+  if (collection === 'favorites') {
+    return photos.filter((photo) => photo.isFavorite);
+  }
+
+  if (collection === 'untagged') {
+    return photos.filter((photo) => photo.tags.length === 0);
+  }
+
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return photos.filter((photo) => {
+    const createdAt = Date.parse(photo.createdAt);
+    return !Number.isNaN(createdAt) && createdAt >= thirtyDaysAgo;
+  });
+}
+
 export class InMemoryLibraryService implements LibraryService {
   private photos: Photo[];
   private readonly quotaBytesByLibraryId: Record<string, number>;
@@ -59,7 +80,10 @@ export class InMemoryLibraryService implements LibraryService {
     if (input.albumId) {
       results = results.filter((p) => p.albumIds.includes(input.albumId!));
     }
+    results = applyCollectionFilter(results, input.collection);
+
     if (input.favoritesOnly) {
+      // Backward compatibility for legacy callers.
       results = results.filter((p) => p.isFavorite);
     }
     if (input.tags && input.tags.length > 0) {
