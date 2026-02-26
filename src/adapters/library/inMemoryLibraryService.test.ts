@@ -122,6 +122,62 @@ describe('InMemoryLibraryService', () => {
     expect(photos[0].id).toBe(newer.id);
   });
 
+  it('paginates results using nextPageToken', async () => {
+    const svc = new InMemoryLibraryService();
+
+    const oldest = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'oldest.jpg',
+      dataUrl: 'data:image/jpeg;base64,oldest',
+    });
+    const middle = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'middle.jpg',
+      dataUrl: 'data:image/jpeg;base64,middle',
+    });
+    const newest = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'newest.jpg',
+      dataUrl: 'data:image/jpeg;base64,newest',
+    });
+
+    const firstPage = await svc.listPhotos({ libraryId: LIBRARY_ID, pageSize: 2 });
+    expect(firstPage.photos.map((photo) => photo.id)).toEqual([newest.id, middle.id]);
+    expect(firstPage.nextPageToken).toBe(oldest.id);
+
+    const secondPage = await svc.listPhotos({
+      libraryId: LIBRARY_ID,
+      pageSize: 2,
+      pageToken: firstPage.nextPageToken ?? undefined,
+    });
+    expect(secondPage.photos.map((photo) => photo.id)).toEqual([oldest.id]);
+    expect(secondPage.nextPageToken).toBeNull();
+  });
+
+  it('falls back to first page when pageToken is unknown', async () => {
+    const svc = new InMemoryLibraryService();
+
+    await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'one.jpg',
+      dataUrl: 'data:image/jpeg;base64,one',
+    });
+    const two = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'two.jpg',
+      dataUrl: 'data:image/jpeg;base64,two',
+    });
+
+    const page = await svc.listPhotos({
+      libraryId: LIBRARY_ID,
+      pageSize: 1,
+      pageToken: 'not-a-real-photo-id',
+    });
+
+    expect(page.photos).toHaveLength(1);
+    expect(page.photos[0].id).toBe(two.id);
+  });
+
   it('rejects uploads that exceed configured library quota', async () => {
     const svc = new InMemoryLibraryService({
       quotaBytesByLibraryId: {
