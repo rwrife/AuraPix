@@ -22,6 +22,7 @@ export function LibraryPage() {
   const [isFilmstrip, setIsFilmstrip] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [gridMode, setGridMode] = useState<GridMode>('medium');
+  const [filterMode, setFilterMode] = useState<'all' | 'favorites'>('all');
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const viewerStateRef = useRef<ViewerState | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
@@ -46,6 +47,10 @@ export function LibraryPage() {
   }, [isFilmstrip]);
 
   useEffect(() => {
+    setSelectedPhotoIds(new Set());
+  }, [filterMode]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('upload') !== '1') return;
 
@@ -60,6 +65,9 @@ export function LibraryPage() {
       { replace: true }
     );
   }, [location.search, navigate]);
+
+  const filteredPhotos =
+    filterMode === 'favorites' ? photos.filter((photo) => photo.isFavorite) : photos;
 
   async function handleUpload(
     files: File[],
@@ -79,6 +87,20 @@ export function LibraryPage() {
         <h1 className="page-title">Library</h1>
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
+            <button
+              className={`btn-ghost btn-sm${filterMode === 'all' ? ' active' : ''}`}
+              title="Show all photos"
+              onClick={() => setFilterMode('all')}
+            >
+              All ({photos.length})
+            </button>
+            <button
+              className={`btn-ghost btn-sm${filterMode === 'favorites' ? ' active' : ''}`}
+              title="Show favorites only"
+              onClick={() => setFilterMode('favorites')}
+            >
+              Favorites ({photos.filter((p) => p.isFavorite).length})
+            </button>
             {selectedPhotoIds.size > 0 && (
               <button
                 className="btn-ghost btn-sm"
@@ -91,7 +113,7 @@ export function LibraryPage() {
             <button
               className="btn-ghost btn-sm"
               title="Select all"
-              onClick={() => setSelectedPhotoIds(new Set(photos.map((p) => p.id)))}
+              onClick={() => setSelectedPhotoIds(new Set(filteredPhotos.map((p) => p.id)))}
             >
               ☑
             </button>
@@ -122,9 +144,14 @@ export function LibraryPage() {
                 Click <strong>Add Photos</strong> in the top bar to add images.
               </p>
             </div>
+          ) : filteredPhotos.length === 0 ? (
+            <div className="empty-state">
+              <p>No favorites yet.</p>
+              <p>Mark photos with ♥ to see them here.</p>
+            </div>
           ) : (
             <PhotoGallery
-              photos={photos}
+              photos={filteredPhotos}
               gridMode={gridMode}
               selectedPhotoIds={selectedPhotoIds}
               onSelectionChange={setSelectedPhotoIds}
