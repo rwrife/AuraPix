@@ -16,6 +16,7 @@ interface PhotoGalleryProps {
   gridMode?: GridMode;
   selectedPhotoIds?: Set<string>;
   onSelectionChange?: (selectedIds: Set<string>) => void;
+  onGridModeChange?: (mode: GridMode) => void;
   onIsFilmstripChange?: (isFilmstrip: boolean) => void;
   onDeletePhoto?: (photo: Photo) => Promise<void> | void;
   onToggleFavorite?: (photo: Photo) => Promise<void> | void;
@@ -27,6 +28,7 @@ export function PhotoGallery({
   gridMode = "medium",
   selectedPhotoIds = new Set(),
   onSelectionChange,
+  onGridModeChange,
   onIsFilmstripChange,
   onDeletePhoto,
   onToggleFavorite,
@@ -54,7 +56,10 @@ export function PhotoGallery({
 
   useEffect(() => {
     onIsFilmstripChange?.(isFilmstrip);
-  }, [isFilmstrip, onIsFilmstripChange]);
+    if (!isFilmstrip) {
+      onGridModeChange?.(mode as GridMode);
+    }
+  }, [isFilmstrip, mode, onGridModeChange, onIsFilmstripChange]);
 
   function enterFilmstrip(idx: number) {
     if (mode !== "filmstrip") prevGridMode.current = mode as GridMode;
