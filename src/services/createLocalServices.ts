@@ -11,13 +11,33 @@ import type { Services } from './ServiceContext';
 
 let _cached: Services | null = null;
 
+function resolveLocalLibraryQuota(): number | undefined {
+  const raw = import.meta.env.VITE_LOCAL_LIBRARY_QUOTA_BYTES;
+  if (!raw) return undefined;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return Math.floor(parsed);
+}
+
 export function createLocalServices(): Services {
   if (_cached) return _cached;
+
+  const localLibraryQuotaBytes = resolveLocalLibraryQuota();
 
   _cached = {
     auth: new InMemoryAuthService(),
     albums: new InMemoryAlbumsService(),
-    library: new InMemoryLibraryService(),
+    library: new InMemoryLibraryService({
+      quotaBytesByLibraryId: localLibraryQuotaBytes
+        ? {
+            'library-local-user-1': localLibraryQuotaBytes,
+          }
+        : undefined,
+    }),
     sharing: new InMemorySharingService(),
   };
 
