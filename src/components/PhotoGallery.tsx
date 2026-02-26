@@ -1,19 +1,29 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Photo } from "../domain/library/types";
-import { PhotoViewer } from "./PhotoViewer";
+import { PhotoViewer, type ViewerState } from "./PhotoViewer";
 
-type GridMode = "small" | "medium" | "large";
+export type GridMode = "small" | "medium" | "large";
 type ViewMode = GridMode | "filmstrip";
 
 interface PhotoGalleryProps {
   photos: Photo[];
-  /** Overlay action buttons rendered on each tile (stop-propagation is handled internally) */
-  renderOverlayActions?: (photo: Photo) => ReactNode;
+  /** Current grid mode */
+  gridMode?: GridMode;
+  /** Called when grid mode changes */
+  onGridModeChange?: (mode: GridMode) => void;
+  /** Selected photo IDs */
+  selectedPhotoIds?: Set<string>;
+  /** Called when selection changes */
+  onSelectionChange?: (selectedIds: Set<string>) => void;
   /** Called when filmstrip mode is entered or exited */
   onIsFilmstripChange?: (isFilmstrip: boolean) => void;
+  onDeletePhoto?: (photo: Photo) => Promise<void> | void;
+  onToggleFavorite?: (photo: Photo) => Promise<void> | void;
+  /** Ref to access viewer state for rendering tools in parent */
+  viewerStateRef?: React.MutableRefObject<ViewerState | null>;
 }
 
-const GRID_BTNS: { mode: GridMode; icon: string; title: string }[] = [
+export const GRID_BUTTONS: { mode: GridMode; icon: string; title: string }[] = [
   { mode: "small", icon: "⊟", title: "Small tiles (128×128)" },
   { mode: "medium", icon: "⊞", title: "Medium tiles (256×256)" },
   { mode: "large", icon: "▣", title: "Large tiles (320×320)" },
@@ -21,14 +31,27 @@ const GRID_BTNS: { mode: GridMode; icon: string; title: string }[] = [
 
 export function PhotoGallery({
   photos,
-  renderOverlayActions,
+  gridMode = "medium",
+  selectedPhotoIds = new Set(),
+  onSelectionChange,
   onIsFilmstripChange,
+  onDeletePhoto,
+  onToggleFavorite,
+  viewerStateRef,
 }: PhotoGalleryProps) {
-  const [mode, setMode] = useState<ViewMode>("medium");
+  const [mode, setMode] = useState<ViewMode>(gridMode);
   const [viewerIndex, setViewerIndex] = useState(0);
-  const prevGridMode = useRef<GridMode>("medium");
+  const prevGridMode = useRef<GridMode>(gridMode);
 
   const isFilmstrip = mode === "filmstrip";
+
+  // Sync external gridMode changes
+  useEffect(() => {
+    if (mode !== "filmstrip") {
+      setMode(gridMode);
+      prevGridMode.current = gridMode;
+    }
+  }, [gridMode, mode]);
 
   useEffect(() => {
     onIsFilmstripChange?.(isFilmstrip);
@@ -44,9 +67,24 @@ export function PhotoGallery({
     setMode(prevGridMode.current);
   }
 
-  function switchGrid(newMode: GridMode) {
-    prevGridMode.current = newMode;
-    setMode(newMode);
+  function togglePhotoSelection(photoId: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    const newSelection = new Set(selectedPhotoIds);
+    if (newSelection.has(photoId)) {
+      newSelection.delete(photoId);
+    } else {
+      newSelection.add(photoId);
+    }
+    onSelectionChange?.(newSelection);
+  }
+
+  function handleTileClick(idx: number, event: React.MouseEvent) {
+    // If shift/ctrl/cmd key is held, toggle selection instead of opening viewer
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      togglePhotoSelection(photos[idx].id, event);
+    } else {
+      enterFilmstrip(idx);
+    }
   }
 
   if (photos.length === 0) return null;
@@ -58,6 +96,9 @@ export function PhotoGallery({
         photos={photos}
         initialIndex={viewerIndex}
         onClose={exitFilmstrip}
+        onDeletePhoto={onDeletePhoto}
+        onToggleFavorite={onToggleFavorite}
+        viewerStateRef={viewerStateRef}
       />
     );
   }
@@ -65,57 +106,45 @@ export function PhotoGallery({
   // ── Grid view ───────────────────────────────────────────────────────────
   return (
     <div className="photo-gallery">
-      {/* View-mode toolbar */}
-      <div className="photo-gallery-toolbar">
-        {GRID_BTNS.map(({ mode: m, icon, title }) => (
-          <button
-            key={m}
-            className={`btn-ghost btn-sm gallery-mode-btn${mode === m ? " active" : ""}`}
-            title={title}
-            onClick={() => switchGrid(m)}
-          aria-pressed={mode === m ? "true" : "false"}
-          >
-            {icon}
-          </button>
-        ))}
-        <button
-          className="btn-ghost btn-sm gallery-mode-btn"
-          title="Filmstrip view"
-          onClick={() => enterFilmstrip(0)}
-          aria-pressed="false"
-        >
-          ▶
-        </button>
-      </div>
-
       {/* Tiles */}
       <div className={`photo-grid-gallery photo-grid-gallery--${mode}`}>
-        {photos.map((photo, idx) => (
-          <div
-            key={photo.id}
-            className={`gallery-tile${mode === "large" ? " gallery-tile--large" : ""}`}
-            onClick={() => enterFilmstrip(idx)}
-            title={photo.originalName}
-          >
-            <img
-              src={photo.thumbnailPath ?? photo.storagePath}
-              alt={photo.originalName}
-              className="gallery-tile-img"
-              loading="lazy"
-            />
-            {mode === "large" && (
-              <p className="gallery-tile-name">{photo.originalName}</p>
-            )}
-            {renderOverlayActions && (
-              <div
-                className="gallery-tile-overlay"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {renderOverlayActions(photo)}
+        {photos.map((photo, idx) => {
+          const isSelected = selectedPhotoIds.has(photo.id);
+          return (
+            <div
+              key={photo.id}
+              className={`gallery-tile${mode === "large" ? " gallery-tile--large" : ""}${isSelected ? " gallery-tile--selected" : ""}`}
+              onClick={(e) => handleTileClick(idx, e)}
+              title={photo.originalName}
+            >
+              {/* Selection checkbox */}
+              <div className="gallery-tile-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  className="gallery-tile-checkbox"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    const mouseEvent = e as unknown as React.MouseEvent;
+                    togglePhotoSelection(photo.id, mouseEvent);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Select ${photo.originalName}`}
+                />
               </div>
-            )}
-          </div>
-        ))}
+
+              <img
+                src={photo.thumbnailPath ?? photo.storagePath}
+                alt={photo.originalName}
+                className="gallery-tile-img"
+                loading="lazy"
+              />
+              {mode === "large" && (
+                <p className="gallery-tile-name">{photo.originalName}</p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

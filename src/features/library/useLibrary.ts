@@ -11,10 +11,10 @@ interface UseLibraryState {
 
 interface UseLibraryReturn extends UseLibraryState {
   refresh(): void;
-  addPhoto(file: File): Promise<void>;
+  addPhoto(file: File): Promise<Photo>;
   toggleFavorite(photoId: string): Promise<void>;
   deletePhoto(photoId: string): Promise<void>;
-  assignToAlbum(photoId: string, albumId: string): Promise<void>;
+  assignToAlbum(photoId: string, albumId: string, hint?: Photo): Promise<void>;
 }
 
 /** Reads a File into a base64 data URL */
@@ -61,9 +61,9 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
   }, [library, libraryId, tick]);
 
   const addPhoto = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<Photo> => {
       const dataUrl = await readFileAsDataUrl(file);
-      await library.addPhoto({
+      const photo = await library.addPhoto({
         libraryId,
         originalName: file.name,
         dataUrl,
@@ -73,6 +73,7 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
         },
       });
       refresh();
+      return photo;
     },
     [library, libraryId, refresh],
   );
@@ -100,8 +101,8 @@ export function useLibrary(libraryId: string): UseLibraryReturn {
   );
 
   const assignToAlbum = useCallback(
-    async (photoId: string, albumId: string) => {
-      const photo = photos.find((p) => p.id === photoId);
+    async (photoId: string, albumId: string, hint?: Photo) => {
+      const photo = hint ?? photos.find((p) => p.id === photoId);
       if (!photo) return;
       const albumIds = photo.albumIds.includes(albumId)
         ? photo.albumIds

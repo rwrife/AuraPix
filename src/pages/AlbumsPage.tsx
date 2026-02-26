@@ -10,6 +10,17 @@ function toLibraryId(userId: string) {
   return `library-${userId}`;
 }
 
+function NewFolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="mono-icon-svg" aria-hidden="true">
+      <path d="M3 9h6l1.8 2H21v7.3A1.7 1.7 0 0 1 19.3 20H4.7A1.7 1.7 0 0 1 3 18.3V9Z" />
+      <path d="M3 9V7A2 2 0 0 1 5 5h4l1.5 2H19a2 2 0 0 1 2 2" />
+      <path d="M14.5 14h3" />
+      <path d="M16 12.5v3" />
+    </svg>
+  );
+}
+
 // ── Placeholder SVG ──────────────────────────────────────────────────────
 function AlbumPlaceholder() {
   return (
@@ -211,7 +222,12 @@ function FolderSection({
         {folder ? (
           <>
             <span className="folder-section-icon">📂</span>
-            <span className="folder-section-name">{folder.name}</span>
+            <Link
+              to={`/albums/folders/${folder.id}`}
+              className="folder-section-name folder-section-link"
+            >
+              {folder.name}
+            </Link>
             <span className="folder-album-count">
               {folderAlbums.length} album{folderAlbums.length !== 1 ? "s" : ""}
             </span>
@@ -326,15 +342,18 @@ export function AlbumsPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
+    <>
+      <div className="page-titlebar">
         <h1 className="page-title">Albums</h1>
         <div className="header-actions">
           <button
             className="btn-ghost btn-sm"
             onClick={() => setShowFolderForm((v) => !v)}
           >
-            📂 New Folder
+            <span className="btn-inline-icon" aria-hidden="true">
+              <NewFolderIcon />
+            </span>
+            New Folder
           </button>
           <button
             className={`btn-ghost btn-sm${viewMode === "grid" ? " active" : ""}`}
@@ -353,7 +372,8 @@ export function AlbumsPage() {
         </div>
       </div>
 
-      {/* Create folder form */}
+      <div className="page-content">
+        {/* Create folder form */}
       {showFolderForm && (
         <form className="album-form" onSubmit={handleCreateFolder}>
           <input
@@ -430,6 +450,7 @@ export function AlbumsPage() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

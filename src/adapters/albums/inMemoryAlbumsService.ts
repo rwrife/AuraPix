@@ -48,6 +48,26 @@ export class InMemoryAlbumsService implements AlbumsService {
     return folder;
   }
 
+  async updateFolder(
+    folderId: string,
+    updates: Partial<Pick<AlbumFolder, "name">>,
+  ): Promise<AlbumFolder> {
+    const idx = this.folders.findIndex((f) => f.id === folderId);
+    if (idx === -1) throw new Error("Folder not found.");
+
+    const nextName =
+      updates.name !== undefined ? updates.name.trim() : this.folders[idx].name;
+    if (!nextName) throw new Error("Folder name is required.");
+
+    const updated: AlbumFolder = {
+      ...this.folders[idx],
+      ...updates,
+      name: nextName,
+    };
+    this.folders = this.folders.map((f) => (f.id === folderId ? updated : f));
+    return updated;
+  }
+
   async deleteFolder(folderId: string): Promise<void> {
     this.folders = this.folders.filter((f) => f.id !== folderId);
     // Un-fold albums that were in this folder
@@ -82,11 +102,15 @@ export class InMemoryAlbumsService implements AlbumsService {
 
   async updateAlbum(
     albumId: string,
-    updates: Partial<Pick<Album, "folderId">>,
+    updates: Partial<Pick<Album, "name" | "folderId">>,
   ): Promise<Album> {
     const idx = this.albums.findIndex((a) => a.id === albumId);
     if (idx === -1) throw new Error("Album not found.");
-    const updated: Album = { ...this.albums[idx], ...updates };
+    const nextName =
+      updates.name !== undefined ? updates.name.trim() : this.albums[idx].name;
+    if (!nextName) throw new Error("Album name is required.");
+
+    const updated: Album = { ...this.albums[idx], ...updates, name: nextName };
     this.albums = this.albums.map((a) => (a.id === albumId ? updated : a));
     return updated;
   }

@@ -39,4 +39,39 @@ describe("InMemoryAlbumsService", () => {
     expect(albums).toHaveLength(1);
     expect(albums[0].name).toBe("Custom");
   });
+
+  it("updates album name and folder", async () => {
+    const svc = new InMemoryAlbumsService([
+      {
+        id: "a1",
+        name: "Before",
+        folderId: null,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    const updated = await svc.updateAlbum("a1", {
+      name: "  After  ",
+      folderId: "folder-1",
+    });
+
+    expect(updated.name).toBe("After");
+    expect(updated.folderId).toBe("folder-1");
+  });
+
+  it("updates folder name", async () => {
+    const svc = new InMemoryAlbumsService([], [
+      {
+        id: "f1",
+        name: "Old",
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    const updated = await svc.updateFolder("f1", { name: "  New Name " });
+    expect(updated.name).toBe("New Name");
+
+    const folders = await svc.listFolders();
+    expect(folders[0].name).toBe("New Name");
+  });
 });

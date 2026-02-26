@@ -14,9 +14,11 @@ export interface AlbumsState {
   folders: AlbumFolder[];
   loading: boolean;
   error: string | null;
-  createAlbum(name: string, folderId?: string | null): Promise<void>;
+  createAlbum(name: string, folderId?: string | null): Promise<Album | null>;
+  renameAlbum(albumId: string, name: string): Promise<void>;
   deleteAlbum(albumId: string): Promise<void>;
   createFolder(name: string): Promise<void>;
+  renameFolder(folderId: string, name: string): Promise<void>;
   deleteFolder(folderId: string): Promise<void>;
   moveAlbum(albumId: string, folderId: string | null): Promise<void>;
 }
@@ -53,15 +55,17 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
   }, [albumsService]);
 
   const createAlbum = useCallback(
-    async (name: string, folderId?: string | null) => {
+    async (name: string, folderId?: string | null): Promise<Album | null> => {
       setError(null);
       try {
         const created = await albumsService.createAlbum({ name, folderId });
         setAlbums((prev) => [created, ...prev]);
+        return created;
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Unable to create album.",
         );
+        return null;
       }
     },
     [albumsService],
@@ -76,6 +80,21 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Unable to delete album.",
+        );
+      }
+    },
+    [albumsService],
+  );
+
+  const renameAlbum = useCallback(
+    async (albumId: string, name: string) => {
+      setError(null);
+      try {
+        const updated = await albumsService.updateAlbum(albumId, { name });
+        setAlbums((prev) => prev.map((a) => (a.id === albumId ? updated : a)));
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Unable to rename album.",
         );
       }
     },
@@ -119,6 +138,25 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
     [albumsService],
   );
 
+  const renameFolder = useCallback(
+    async (folderId: string, name: string) => {
+      setError(null);
+      try {
+        const updated = await albumsService.updateFolder(folderId, { name });
+        setFolders((prev) =>
+          prev
+            .map((f) => (f.id === folderId ? updated : f))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Unable to rename folder.",
+        );
+      }
+    },
+    [albumsService],
+  );
+
   const moveAlbum = useCallback(
     async (albumId: string, folderId: string | null) => {
       setError(null);
@@ -140,8 +178,10 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         createAlbum,
+        renameAlbum,
         deleteAlbum,
         createFolder,
+        renameFolder,
         deleteFolder,
         moveAlbum,
       }}
