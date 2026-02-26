@@ -21,6 +21,12 @@ export function LibraryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
+  const [cameraMakeFilter, setCameraMakeFilter] = useState<string>('');
+  const metadataFilters = useMemo(
+    () => ({ metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined }),
+    [cameraMakeFilter]
+  );
+
   const {
     photos,
     loading,
@@ -30,7 +36,7 @@ export function LibraryPage() {
     bulkAddToAlbum,
     toggleFavorite,
     deletePhoto,
-  } = useLibrary(libraryId);
+  } = useLibrary(libraryId, metadataFilters);
   const { albums } = useAlbums();
 
   const [isFilmstrip, setIsFilmstrip] = useState(false);
@@ -198,6 +204,21 @@ export function LibraryPage() {
         <h1 className="page-title">Library</h1>
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
+            <select
+              className="btn-ghost btn-sm"
+              aria-label="Filter by camera make"
+              value={cameraMakeFilter}
+              onChange={(e) => setCameraMakeFilter(e.target.value)}
+            >
+              <option value="">All cameras</option>
+              {[...new Set(photos.map((photo) => photo.metadata?.cameraMake).filter(Boolean))].map(
+                (cameraMake) => (
+                  <option key={cameraMake} value={cameraMake ?? ''}>
+                    {cameraMake}
+                  </option>
+                )
+              )}
+            </select>
             <button
               className="btn-ghost btn-sm"
               title="Select all"

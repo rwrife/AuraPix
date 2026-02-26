@@ -26,11 +26,20 @@ export interface Photo {
   tags: string[];
 }
 
+export interface MetadataFilterInput {
+  cameraMake?: string;
+  cameraModel?: string;
+  hasLocation?: boolean;
+  takenAfter?: string;
+  takenBefore?: string;
+}
+
 export interface ListPhotosInput {
   libraryId: string;
   albumId?: string;
   favoritesOnly?: boolean;
   tags?: string[];
+  metadata?: MetadataFilterInput;
   pageSize?: number;
   pageToken?: string;
 }
