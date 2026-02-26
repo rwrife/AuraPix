@@ -49,3 +49,10 @@ export const imageConfig = {
 export const authConfig = {
   mode: (process.env.AUTH_MODE || 'mock') as 'mock' | 'firebase',
 } as const;
+
+export const securityConfig = {
+  uploadRateLimit: {
+    windowMs: parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || '60000', 10),
+    maxRequests: parseInt(process.env.UPLOAD_RATE_LIMIT_MAX_REQUESTS || '30', 10),
+  },
+} as const;
