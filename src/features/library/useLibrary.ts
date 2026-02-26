@@ -7,10 +7,12 @@ interface UseLibraryState {
   loading: boolean;
   error: string | null;
   hasMore: boolean;
+  loadingMore: boolean;
 }
 
 interface UseLibraryReturn extends UseLibraryState {
   refresh(): void;
+  loadMore(): Promise<void>;
   addPhoto(file: File): Promise<Photo>;
   toggleFavorite(photoId: string): Promise<void>;
   setTags(photoId: string, tags: string[]): Promise<void>;
@@ -38,6 +40,8 @@ export function useLibrary(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
@@ -51,11 +55,13 @@ export function useLibrary(
         metadata: filters?.metadata,
         favoritesOnly: filters?.favoritesOnly,
         tags: filters?.tags,
+        pageSize: 24,
       })
-      .then(({ photos: p, nextPageToken }) => {
+      .then(({ photos: p, nextPageToken: token }) => {
         if (!cancelled) {
           setPhotos(p);
-          setHasMore(nextPageToken !== null);
+          setNextPageToken(token);
+          setHasMore(token !== null);
           setLoading(false);
         }
       })
@@ -160,12 +166,44 @@ export function useLibrary(
     [library, libraryId]
   );
 
+  const loadMore = useCallback(async () => {
+    if (!nextPageToken || loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const { photos: morePhotos, nextPageToken: token } = await library.listPhotos({
+        libraryId,
+        metadata: filters?.metadata,
+        favoritesOnly: filters?.favoritesOnly,
+        tags: filters?.tags,
+        pageSize: 24,
+        pageToken: nextPageToken,
+      });
+
+      setPhotos((prev) => [...prev, ...morePhotos]);
+      setNextPageToken(token);
+      setHasMore(token !== null);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    nextPageToken,
+    loadingMore,
+    library,
+    libraryId,
+    filters?.metadata,
+    filters?.favoritesOnly,
+    filters?.tags,
+  ]);
+
   return {
     photos,
     loading,
     error,
     hasMore,
+    loadingMore,
     refresh,
+    loadMore,
     addPhoto,
     toggleFavorite,
     setTags,

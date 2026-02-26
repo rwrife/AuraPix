@@ -879,6 +879,12 @@ input:focus {
   font-size: 0.9rem;
 }
 
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;

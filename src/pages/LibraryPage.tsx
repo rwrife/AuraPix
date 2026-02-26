@@ -37,6 +37,9 @@ export function LibraryPage() {
     photos,
     loading,
     error,
+    hasMore,
+    loadingMore,
+    loadMore,
     addPhoto,
     assignToAlbum,
     bulkAddToAlbum,
@@ -321,6 +324,14 @@ export function LibraryPage() {
               onToggleFavorite={(photo) => toggleFavorite(photo.id)}
               viewerStateRef={viewerStateRef}
             />
+          )}
+
+          {!loading && hasMore && !isFilmstrip && (
+            <div className="pagination-controls">
+              <button className="btn-ghost btn-sm" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
           )}
         </div>
         {isFilmstrip ? (

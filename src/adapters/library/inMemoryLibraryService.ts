@@ -106,7 +106,15 @@ export class InMemoryLibraryService implements LibraryService {
     results = results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     const pageSize = input.pageSize ?? results.length;
-    const startIndex = input.pageToken ? results.findIndex((p) => p.id === input.pageToken) : 0;
+    const startIndex = input.pageToken
+      ? Math.max(
+          0,
+          (() => {
+            const tokenIndex = results.findIndex((p) => p.id === input.pageToken);
+            return tokenIndex === -1 ? 0 : tokenIndex;
+          })()
+        )
+      : 0;
     const page = results.slice(startIndex, startIndex + pageSize);
     const nextPageToken =
       startIndex + pageSize < results.length ? results[startIndex + pageSize].id : null;
