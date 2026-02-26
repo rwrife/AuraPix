@@ -1089,6 +1089,11 @@ input:focus {
 .photo-grid-gallery {
   display: grid;
   gap: 12px;
+  outline: none;
+}
+
+.photo-grid-gallery:focus-visible {
+  outline: none;
 }
 
 .photo-grid-gallery--small {
@@ -1122,9 +1127,18 @@ input:focus {
   transform: translateY(-2px);
 }
 
+.gallery-tile:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
 .gallery-tile--selected {
   border-color: #6366f1;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+.gallery-tile[data-focused="true"] {
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.7);
 }
 
 .gallery-tile-img {

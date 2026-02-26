@@ -1,33 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type MutableRefObject,
+} from "react";
 import type { Photo } from "../domain/library/types";
 import { PhotoViewer, type ViewerState } from "./PhotoViewer";
-
-export type GridMode = "small" | "medium" | "large";
+import type { GridMode } from "./photoGalleryConfig";
 type ViewMode = GridMode | "filmstrip";
 
 interface PhotoGalleryProps {
   photos: Photo[];
-  /** Current grid mode */
   gridMode?: GridMode;
-  /** Called when grid mode changes */
-  onGridModeChange?: (mode: GridMode) => void;
-  /** Selected photo IDs */
   selectedPhotoIds?: Set<string>;
-  /** Called when selection changes */
   onSelectionChange?: (selectedIds: Set<string>) => void;
-  /** Called when filmstrip mode is entered or exited */
   onIsFilmstripChange?: (isFilmstrip: boolean) => void;
   onDeletePhoto?: (photo: Photo) => Promise<void> | void;
   onToggleFavorite?: (photo: Photo) => Promise<void> | void;
-  /** Ref to access viewer state for rendering tools in parent */
-  viewerStateRef?: React.MutableRefObject<ViewerState | null>;
+  viewerStateRef?: MutableRefObject<ViewerState | null>;
 }
-
-export const GRID_BUTTONS: { mode: GridMode; icon: string; title: string }[] = [
-  { mode: "small", icon: "⊟", title: "Small tiles (128×128)" },
-  { mode: "medium", icon: "⊞", title: "Medium tiles (256×256)" },
-  { mode: "large", icon: "▣", title: "Large tiles (320×320)" },
-];
 
 export function PhotoGallery({
   photos,
@@ -41,7 +34,9 @@ export function PhotoGallery({
 }: PhotoGalleryProps) {
   const [mode, setMode] = useState<ViewMode>(gridMode);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const prevGridMode = useRef<GridMode>(gridMode);
+  const tileRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   const isFilmstrip = mode === "filmstrip";
 
@@ -52,6 +47,10 @@ export function PhotoGallery({
       prevGridMode.current = gridMode;
     }
   }, [gridMode, mode]);
+
+  useEffect(() => {
+    setFocusedIndex((idx) => Math.max(0, Math.min(idx, photos.length - 1)));
+  }, [photos.length]);
 
   useEffect(() => {
     onIsFilmstripChange?.(isFilmstrip);
@@ -67,8 +66,7 @@ export function PhotoGallery({
     setMode(prevGridMode.current);
   }
 
-  function togglePhotoSelection(photoId: string, event: React.MouseEvent) {
-    event.stopPropagation();
+  function togglePhotoSelection(photoId: string) {
     const newSelection = new Set(selectedPhotoIds);
     if (newSelection.has(photoId)) {
       newSelection.delete(photoId);
@@ -78,12 +76,70 @@ export function PhotoGallery({
     onSelectionChange?.(newSelection);
   }
 
-  function handleTileClick(idx: number, event: React.MouseEvent) {
+  function handleTileClick(idx: number, event: MouseEvent<HTMLDivElement>) {
+    setFocusedIndex(idx);
     // If shift/ctrl/cmd key is held, toggle selection instead of opening viewer
     if (event.shiftKey || event.ctrlKey || event.metaKey) {
-      togglePhotoSelection(photos[idx].id, event);
+      event.stopPropagation();
+      togglePhotoSelection(photos[idx].id);
     } else {
       enterFilmstrip(idx);
+    }
+  }
+
+  function getColumnCount() {
+    if (tileRefs.current.length === 0) return 1;
+    const first = tileRefs.current[0];
+    if (!first) return 1;
+    const firstTop = first.offsetTop;
+    let count = 0;
+    for (const tile of tileRefs.current) {
+      if (!tile) continue;
+      if (tile.offsetTop !== firstTop) break;
+      count += 1;
+    }
+    return Math.max(1, count);
+  }
+
+  function moveFocus(nextIndex: number) {
+    const clamped = Math.max(0, Math.min(nextIndex, photos.length - 1));
+    setFocusedIndex(clamped);
+  }
+
+  function handleGridKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement | null;
+    if (target?.tagName === "INPUT") return;
+
+    const idx = focusedIndex;
+    const columns = getColumnCount();
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        moveFocus(idx + 1);
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        moveFocus(idx - 1);
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        moveFocus(idx + columns);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveFocus(idx - columns);
+        break;
+      case " ":
+      case "Spacebar":
+        event.preventDefault();
+        togglePhotoSelection(photos[idx].id);
+        break;
+      case "Enter":
+        event.preventDefault();
+        enterFilmstrip(idx);
+        break;
+      default:
+        break;
     }
   }
 
@@ -107,14 +163,23 @@ export function PhotoGallery({
   return (
     <div className="photo-gallery">
       {/* Tiles */}
-      <div className={`photo-grid-gallery photo-grid-gallery--${mode}`}>
+      <div
+        className={`photo-grid-gallery photo-grid-gallery--${mode}`}
+        tabIndex={0}
+        onKeyDown={handleGridKeyDown}
+      >
         {photos.map((photo, idx) => {
           const isSelected = selectedPhotoIds.has(photo.id);
           return (
             <div
               key={photo.id}
+              ref={(el) => {
+                tileRefs.current[idx] = el;
+              }}
               className={`gallery-tile${mode === "large" ? " gallery-tile--large" : ""}${isSelected ? " gallery-tile--selected" : ""}`}
               onClick={(e) => handleTileClick(idx, e)}
+              onMouseEnter={() => setFocusedIndex(idx)}
+              data-focused={idx === focusedIndex ? "true" : "false"}
               title={photo.originalName}
             >
               {/* Selection checkbox */}
@@ -125,8 +190,7 @@ export function PhotoGallery({
                   checked={isSelected}
                   onChange={(e) => {
                     e.stopPropagation();
-                    const mouseEvent = e as unknown as React.MouseEvent;
-                    togglePhotoSelection(photo.id, mouseEvent);
+                    togglePhotoSelection(photo.id);
                   }}
                   onClick={(e) => e.stopPropagation()}
                   aria-label={`Select ${photo.originalName}`}

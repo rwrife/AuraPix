@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { PhotoGallery, GRID_BUTTONS, type GridMode } from "../components/PhotoGallery";
+import { PhotoGallery } from "../components/PhotoGallery";
+import { GRID_BUTTONS, type GridMode } from "../components/photoGalleryConfig";
+import type { ViewerState } from "../components/PhotoViewer";
 import { UploadModal } from "../components/UploadModal";
 import { useAuth } from "../features/auth/useAuth";
 import { useLibrary } from "../features/library/useLibrary";
@@ -21,6 +23,27 @@ export function LibraryPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [gridMode, setGridMode] = useState<GridMode>("medium");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const viewerStateRef = useRef<ViewerState | null>(null);
+  const [viewerState, setViewerState] = useState<ViewerState | null>(null);
+
+  // Sync viewer state for rendering
+  useEffect(() => {
+    if (!isFilmstrip) {
+      setViewerState(null);
+      return;
+    }
+    // Initial sync
+    if (viewerStateRef.current) {
+      setViewerState({ ...viewerStateRef.current });
+    }
+    // Poll for updates
+    const interval = setInterval(() => {
+      if (viewerStateRef.current) {
+        setViewerState({ ...viewerStateRef.current });
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isFilmstrip]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -109,11 +132,162 @@ export function LibraryPage() {
               onIsFilmstripChange={setIsFilmstrip}
               onDeletePhoto={(photo) => deletePhoto(photo.id)}
               onToggleFavorite={(photo) => toggleFavorite(photo.id)}
+              viewerStateRef={viewerStateRef}
             />
           )}
         </div>
         <aside className="page-right-column" aria-label="Library tools">
-          {!isFilmstrip && (
+          {isFilmstrip ? (
+            viewerState ? (
+            <>
+              <button
+                className="right-toolbar-icon btn-danger-ghost"
+                title="Delete"
+                onClick={() => viewerState.showDeleteConfirm()}
+              >
+                🗑
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Info"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "info" ? null : "info")}
+              >
+                ℹ
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Versions"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "versions" ? null : "versions")}
+              >
+                ⧉
+              </button>
+              <button
+                className={`right-toolbar-icon btn-ghost${viewerState.currentPhoto.isFavorite ? " active" : ""}`}
+                title={viewerState.currentPhoto.isFavorite ? "Unfavorite" : "Favorite"}
+                onClick={() => viewerState.onToggleFavorite()}
+              >
+                ♥
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Comments"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "comments" ? null : "comments")}
+              >
+                💬
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Tags"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "tags" ? null : "tags")}
+              >
+                #
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Presets"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "presets" ? null : "presets")}
+              >
+                ✶
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Edit"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "edit" ? null : "edit")}
+              >
+                🎚
+              </button>
+              <button
+                className="right-toolbar-icon btn-ghost"
+                title="Crop"
+                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "crop" ? null : "crop")}
+              >
+                ⬚
+              </button>
+
+              {viewerState.activeTool && (
+                <section className="settings-panel">
+                  {viewerState.activeTool === "info" && (
+                    <>
+                      <h3 className="settings-panel-title">Info</h3>
+                      <p className="state-message">Name: {viewerState.currentPhoto.originalName}</p>
+                      <p className="state-message">ID: {viewerState.currentPhoto.id}</p>
+                    </>
+                  )}
+                  {viewerState.activeTool === "versions" && (
+                    <>
+                      <h3 className="settings-panel-title">Versions</h3>
+                      <p className="state-message">Version history tools coming soon.</p>
+                    </>
+                  )}
+                  {viewerState.activeTool === "comments" && (
+                    <>
+                      <h3 className="settings-panel-title">Comments</h3>
+                      <p className="state-message">Comments tools coming soon.</p>
+                    </>
+                  )}
+                  {viewerState.activeTool === "tags" && (
+                    <>
+                      <h3 className="settings-panel-title">Tags</h3>
+                      <p className="state-message">Tag management tools coming soon.</p>
+                    </>
+                  )}
+                  {viewerState.activeTool === "presets" && (
+                    <>
+                      <h3 className="settings-panel-title">Presets</h3>
+                      <p className="state-message">Preset tools coming soon.</p>
+                    </>
+                  )}
+                  {viewerState.activeTool === "edit" && (
+                    <>
+                      <h3 className="settings-panel-title">Edit</h3>
+                      <label className="settings-label" htmlFor="edit-brightness">
+                        Brightness
+                      </label>
+                      <input
+                        id="edit-brightness"
+                        type="range"
+                        min={-100}
+                        max={100}
+                        value={viewerState.brightness}
+                        onChange={(e) => viewerState.setBrightness(Number(e.target.value))}
+                      />
+                      <label className="settings-label" htmlFor="edit-contrast">
+                        Contrast
+                      </label>
+                      <input
+                        id="edit-contrast"
+                        type="range"
+                        min={-100}
+                        max={100}
+                        value={viewerState.contrast}
+                        onChange={(e) => viewerState.setContrast(Number(e.target.value))}
+                      />
+                      <label className="settings-label" htmlFor="edit-saturation">
+                        Saturation
+                      </label>
+                      <input
+                        id="edit-saturation"
+                        type="range"
+                        min={-100}
+                        max={100}
+                        value={viewerState.saturation}
+                        onChange={(e) => viewerState.setSaturation(Number(e.target.value))}
+                      />
+                    </>
+                  )}
+                  {viewerState.activeTool === "crop" && (
+                    <>
+                      <h3 className="settings-panel-title">Crop</h3>
+                      <p className="state-message">Crop tools coming soon.</p>
+                    </>
+                  )}
+                </section>
+              )}
+            </>
+            ) : (
+              <p className="state-message">Loading tools...</p>
+            )
+          ) : (
             <>
               <button
                 className="btn-ghost right-toolbar-icon"

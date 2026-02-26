@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { PhotoGallery, GRID_BUTTONS, type GridMode } from "../components/PhotoGallery";
+import { PhotoGallery } from "../components/PhotoGallery";
+import { GRID_BUTTONS, type GridMode } from "../components/photoGalleryConfig";
 import type { ViewerState } from "../components/PhotoViewer";
 import { UploadModal } from "../components/UploadModal";
 import type { Photo } from "../domain/library/types";
@@ -69,6 +70,11 @@ export function AlbumDetailPage() {
       setViewerState(null);
       return;
     }
+    // Initial sync
+    if (viewerStateRef.current) {
+      setViewerState({ ...viewerStateRef.current });
+    }
+    // Poll for updates
     const interval = setInterval(() => {
       if (viewerStateRef.current) {
         setViewerState({ ...viewerStateRef.current });
@@ -209,7 +215,8 @@ export function AlbumDetailPage() {
         </div>
 
         <aside className="page-right-column" aria-label="Album tools">
-          {isFilmstrip && viewerState ? (
+          {isFilmstrip ? (
+            viewerState ? (
             <>
               <button
                 className="right-toolbar-icon btn-danger-ghost"
@@ -355,7 +362,10 @@ export function AlbumDetailPage() {
                 </section>
               )}
             </>
-          ) : !isFilmstrip && (
+            ) : (
+              <p className="state-message">Loading tools...</p>
+            )
+          ) : (
             <>
             <button
               className="btn-primary right-toolbar-icon"
