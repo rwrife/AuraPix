@@ -11,6 +11,10 @@ import type { ToolbarButton, ModalContentProps } from '../components/toolbar';
 import { useAuth } from '../features/auth/useAuth';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useLibrary } from '../features/library/useLibrary';
+import {
+  loadQuickViewPreferences,
+  saveQuickViewPreferences,
+} from '../features/library/quickViewPreferences';
 import { useUploadSessions } from '../features/uploads/useUploadSessions';
 import { useServices } from '../services/useServices';
 
@@ -23,11 +27,19 @@ export function LibraryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
-  const [cameraMakeFilter, setCameraMakeFilter] = useState<string>('');
+  const initialQuickViewPreferences = useMemo(
+    () => loadQuickViewPreferences(libraryId),
+    [libraryId]
+  );
+  const [cameraMakeFilter, setCameraMakeFilter] = useState<string>(
+    initialQuickViewPreferences.cameraMakeFilter
+  );
   const [quickCollection, setQuickCollection] = useState<
     'all' | 'favorites' | 'untagged' | 'recent'
-  >('all');
-  const [activeTagFilter, setActiveTagFilter] = useState<string>('');
+  >(initialQuickViewPreferences.quickCollection);
+  const [activeTagFilter, setActiveTagFilter] = useState<string>(
+    initialQuickViewPreferences.activeTagFilter
+  );
   const metadataFilters = useMemo(
     () => ({
       metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined,
@@ -37,6 +49,14 @@ export function LibraryPage() {
     }),
     [cameraMakeFilter, quickCollection, activeTagFilter]
   );
+
+  useEffect(() => {
+    saveQuickViewPreferences(libraryId, {
+      quickCollection,
+      activeTagFilter,
+      cameraMakeFilter,
+    });
+  }, [libraryId, quickCollection, activeTagFilter, cameraMakeFilter]);
 
   const {
     photos,
