@@ -335,8 +335,8 @@ export function LibraryPage() {
 
           {(pendingSession || uploadedMetadata.length > 0) && (
             <div className="state-message" role="status" aria-live="polite">
-              <strong>Upload pipeline:</strong>{' '}
-              {uploadedMetadata.length} finalized · {derivativeJobs.length} derivative job(s) queued
+              <strong>Upload pipeline:</strong> {uploadedMetadata.length} finalized ·{' '}
+              {derivativeJobs.length} derivative job(s) queued
               {pendingSession ? ` · latest key ${pendingSession.objectKey}` : ''}
               {replayedFinalize ? ' · idempotent replay detected' : ''}
             </div>
