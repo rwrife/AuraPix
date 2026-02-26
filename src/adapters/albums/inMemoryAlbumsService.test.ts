@@ -57,6 +57,42 @@ describe('InMemoryAlbumsService', () => {
     expect(updated.folderId).toBe('folder-1');
   });
 
+  it('rejects duplicate album names case-insensitively on create', async () => {
+    const svc = new InMemoryAlbumsService([
+      {
+        id: 'a1',
+        name: 'Road Trip',
+        folderId: null,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    await expect(svc.createAlbum({ name: '  road trip ' })).rejects.toThrow(
+      'An album with this name already exists.'
+    );
+  });
+
+  it('rejects duplicate album names case-insensitively on rename', async () => {
+    const svc = new InMemoryAlbumsService([
+      {
+        id: 'a1',
+        name: 'Road Trip',
+        folderId: null,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'a2',
+        name: 'Family',
+        folderId: null,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    await expect(svc.updateAlbum('a2', { name: 'road trip' })).rejects.toThrow(
+      'An album with this name already exists.'
+    );
+  });
+
   it('updates folder name', async () => {
     const svc = new InMemoryAlbumsService(
       [],
