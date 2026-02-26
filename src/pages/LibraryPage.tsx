@@ -60,6 +60,7 @@ export function LibraryPage() {
     jobs: derivativeJobs,
     replayedFinalize,
     createAndFinalizeSession,
+    processNextDerivativeJob,
   } = useUploadSessions(uploadSessionsService);
 
   const [isFilmstrip, setIsFilmstrip] = useState(false);
@@ -190,6 +191,9 @@ export function LibraryPage() {
     () => [...new Set(photos.flatMap((photo) => photo.tags))].sort((a, b) => a.localeCompare(b)),
     [photos]
   );
+
+  const queuedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'queued').length;
+  const completedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'completed').length;
 
   // Gallery toolbar configuration
   const galleryToolbarButtons = useMemo<ToolbarButton[]>(() => {
@@ -336,9 +340,23 @@ export function LibraryPage() {
           {(pendingSession || uploadedMetadata.length > 0) && (
             <div className="state-message" role="status" aria-live="polite">
               <strong>Upload pipeline:</strong> {uploadedMetadata.length} finalized ·{' '}
-              {derivativeJobs.length} derivative job(s) queued
+              {queuedDerivativeJobs} queued · {completedDerivativeJobs} completed
               {pendingSession ? ` · latest key ${pendingSession.objectKey}` : ''}
               {replayedFinalize ? ' · idempotent replay detected' : ''}
+              {queuedDerivativeJobs > 0 ? (
+                <>
+                  {' '}
+                  ·{' '}
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => void processNextDerivativeJob()}
+                  >
+                    Run derivative worker tick
+                  </button>
+                </>
+              ) : (
+                ''
+              )}
             </div>
           )}
 
