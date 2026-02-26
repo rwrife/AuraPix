@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { GRID_BUTTONS, type GridMode } from "../components/photoGalleryConfig";
 import type { ViewerState } from "../components/PhotoViewer";
 import { UploadModal } from "../components/UploadModal";
+import { Toolbar } from "../components/toolbar";
+import { ViewerToolbar } from "../components/toolbar";
+import { createViewerToolbarConfig } from "../components/toolbar/examples/viewerToolbarConfig";
+import type { ToolbarButton, ModalContentProps } from "../components/toolbar";
 import { useAuth } from "../features/auth/useAuth";
 import { useLibrary } from "../features/library/useLibrary";
 
@@ -73,21 +77,90 @@ export function LibraryPage() {
     }
   }
 
+  // Viewer toolbar configuration
+  const viewerToolbarButtons = useMemo<ToolbarButton[]>(() => {
+    if (!viewerState) return [];
+    
+    return createViewerToolbarConfig({
+      currentPhoto: viewerState.currentPhoto,
+      onToggleFavorite: viewerState.onToggleFavorite,
+      onDelete: async () => {
+        await deletePhoto(viewerState.currentPhoto.id);
+        if (photos.length <= 1) {
+          setIsFilmstrip(false);
+        }
+      },
+      brightness: viewerState.brightness,
+      setBrightness: viewerState.setBrightness,
+      contrast: viewerState.contrast,
+      setContrast: viewerState.setContrast,
+      saturation: viewerState.saturation,
+      setSaturation: viewerState.setSaturation,
+    });
+  }, [viewerState, deletePhoto, photos.length]);
+
+  // Gallery toolbar configuration
+  const galleryToolbarButtons = useMemo<ToolbarButton[]>(() => {
+    return [
+      {
+        type: "toggle",
+        id: "favorite",
+        icon: "♥",
+        title: "Toggle favorite",
+        disabled: selectedPhotoIds.size === 0,
+        onClick: async () => {
+          if (selectedPhotoIds.size === 0) return;
+          const selectedPhotos = photos.filter((p) => selectedPhotoIds.has(p.id));
+          for (const photo of selectedPhotos) {
+            await toggleFavorite(photo.id);
+          }
+          setSelectedPhotoIds(new Set());
+        },
+      },
+      {
+        type: "modal",
+        id: "delete",
+        icon: "✕",
+        title: "Delete selected",
+        className: "btn-danger-ghost",
+        disabled: selectedPhotoIds.size === 0,
+        modalTitle: `Delete ${selectedPhotoIds.size} photo(s)?`,
+        modalContent: ({ onClose }: ModalContentProps) => (
+          <>
+            <p className="state-message">
+              This will permanently delete {selectedPhotoIds.size} selected photo(s).
+            </p>
+            <div className="confirm-modal-actions">
+              <button className="btn-ghost" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                className="btn-danger-ghost"
+                onClick={async () => {
+                  const selectedPhotos = photos.filter((p) => selectedPhotoIds.has(p.id));
+                  for (const photo of selectedPhotos) {
+                    await deletePhoto(photo.id);
+                  }
+                  setSelectedPhotoIds(new Set());
+                  onClose();
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        ),
+      },
+    ];
+  }, [selectedPhotoIds, photos, toggleFavorite, deletePhoto]);
+
   return (
     <>
       <div className="page-titlebar">
         <h1 className="page-title">Library</h1>
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
-            {selectedPhotoIds.size > 0 && (
-              <button
-                className="btn-ghost btn-sm"
-                title="Select none"
-                onClick={() => setSelectedPhotoIds(new Set())}
-              >
-                ☐
-              </button>
-            )}
+
             <button
               className="btn-ghost btn-sm"
               title="Select all"
@@ -136,279 +209,17 @@ export function LibraryPage() {
             />
           )}
         </div>
-        {/* Slide-out panel for viewer tools */}
-        {isFilmstrip && (
-          <div className={`viewer-slide-panel${viewerState?.activeTool ? " open" : ""}`}>
-            <div className="viewer-slide-panel-header">
-              <h3 className="viewer-slide-panel-title">
-                {viewerState?.activeTool === "info" && "Info"}
-                {viewerState?.activeTool === "versions" && "Versions"}
-                {viewerState?.activeTool === "comments" && "Comments"}
-                {viewerState?.activeTool === "tags" && "Tags"}
-                {viewerState?.activeTool === "presets" && "Presets"}
-                {viewerState?.activeTool === "edit" && "Edit"}
-                {viewerState?.activeTool === "crop" && "Crop"}
-              </h3>
-              <button
-                className="viewer-slide-panel-close"
-                onClick={() => viewerState?.setActiveTool(null)}
-                title="Close (Esc)"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="viewer-slide-panel-body">
-              {viewerState?.activeTool === "info" && (
-                <>
-                  <p className="state-message">Name: {viewerState?.currentPhoto.originalName}</p>
-                  <p className="state-message">ID: {viewerState?.currentPhoto.id}</p>
-                </>
-              )}
-              {viewerState?.activeTool === "versions" && (
-                <p className="state-message">Version history tools coming soon.</p>
-              )}
-              {viewerState?.activeTool === "comments" && (
-                <p className="state-message">Comments tools coming soon.</p>
-              )}
-              {viewerState?.activeTool === "tags" && (
-                <p className="state-message">Tag management tools coming soon.</p>
-              )}
-              {viewerState?.activeTool === "presets" && (
-                <p className="state-message">Preset tools coming soon.</p>
-              )}
-              {viewerState?.activeTool === "edit" && (
-                <>
-                  <label className="settings-label" htmlFor="edit-brightness">
-                    Brightness
-                  </label>
-                  <input
-                    id="edit-brightness"
-                    type="range"
-                    min={-100}
-                    max={100}
-                    value={viewerState?.brightness ?? 0}
-                    onChange={(e) => viewerState?.setBrightness(Number(e.target.value))}
-                  />
-                  <label className="settings-label" htmlFor="edit-contrast">
-                    Contrast
-                  </label>
-                  <input
-                    id="edit-contrast"
-                    type="range"
-                    min={-100}
-                    max={100}
-                    value={viewerState?.contrast ?? 0}
-                    onChange={(e) => viewerState?.setContrast(Number(e.target.value))}
-                  />
-                  <label className="settings-label" htmlFor="edit-saturation">
-                    Saturation
-                  </label>
-                  <input
-                    id="edit-saturation"
-                    type="range"
-                    min={-100}
-                    max={100}
-                    value={viewerState?.saturation ?? 0}
-                    onChange={(e) => viewerState?.setSaturation(Number(e.target.value))}
-                  />
-                </>
-              )}
-              {viewerState?.activeTool === "crop" && (
-                <p className="state-message">Crop tools coming soon.</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        <aside className="page-right-column" aria-label="Library tools">
-          {isFilmstrip ? (
-            viewerState ? (
-            <>
-              <button
-                className="right-toolbar-icon btn-danger-ghost"
-                title="Delete"
-                onClick={() => viewerState.showDeleteConfirm()}
-              >
-                🗑
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Info"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "info" ? null : "info")}
-              >
-                ℹ
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Versions"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "versions" ? null : "versions")}
-              >
-                ⧉
-              </button>
-              <button
-                className={`right-toolbar-icon btn-ghost${viewerState.currentPhoto.isFavorite ? " active" : ""}`}
-                title={viewerState.currentPhoto.isFavorite ? "Unfavorite" : "Favorite"}
-                onClick={() => viewerState.onToggleFavorite()}
-              >
-                ♥
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Comments"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "comments" ? null : "comments")}
-              >
-                💬
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Tags"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "tags" ? null : "tags")}
-              >
-                #
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Presets"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "presets" ? null : "presets")}
-              >
-                ✶
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Edit"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "edit" ? null : "edit")}
-              >
-                🎚
-              </button>
-              <button
-                className="right-toolbar-icon btn-ghost"
-                title="Crop"
-                onClick={() => viewerState.setActiveTool(viewerState.activeTool === "crop" ? null : "crop")}
-              >
-                ⬚
-              </button>
-
-              {viewerState.activeTool && (
-                <section className="settings-panel">
-                  {viewerState.activeTool === "info" && (
-                    <>
-                      <h3 className="settings-panel-title">Info</h3>
-                      <p className="state-message">Name: {viewerState.currentPhoto.originalName}</p>
-                      <p className="state-message">ID: {viewerState.currentPhoto.id}</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "versions" && (
-                    <>
-                      <h3 className="settings-panel-title">Versions</h3>
-                      <p className="state-message">Version history tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "comments" && (
-                    <>
-                      <h3 className="settings-panel-title">Comments</h3>
-                      <p className="state-message">Comments tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "tags" && (
-                    <>
-                      <h3 className="settings-panel-title">Tags</h3>
-                      <p className="state-message">Tag management tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "presets" && (
-                    <>
-                      <h3 className="settings-panel-title">Presets</h3>
-                      <p className="state-message">Preset tools coming soon.</p>
-                    </>
-                  )}
-                  {viewerState.activeTool === "edit" && (
-                    <>
-                      <h3 className="settings-panel-title">Edit</h3>
-                      <label className="settings-label" htmlFor="edit-brightness">
-                        Brightness
-                      </label>
-                      <input
-                        id="edit-brightness"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        value={viewerState.brightness}
-                        onChange={(e) => viewerState.setBrightness(Number(e.target.value))}
-                      />
-                      <label className="settings-label" htmlFor="edit-contrast">
-                        Contrast
-                      </label>
-                      <input
-                        id="edit-contrast"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        value={viewerState.contrast}
-                        onChange={(e) => viewerState.setContrast(Number(e.target.value))}
-                      />
-                      <label className="settings-label" htmlFor="edit-saturation">
-                        Saturation
-                      </label>
-                      <input
-                        id="edit-saturation"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        value={viewerState.saturation}
-                        onChange={(e) => viewerState.setSaturation(Number(e.target.value))}
-                      />
-                    </>
-                  )}
-                  {viewerState.activeTool === "crop" && (
-                    <>
-                      <h3 className="settings-panel-title">Crop</h3>
-                      <p className="state-message">Crop tools coming soon.</p>
-                    </>
-                  )}
-                </section>
-              )}
-            </>
-            ) : (
-              <p className="state-message">Loading tools...</p>
-            )
+        {isFilmstrip ? (
+          viewerState ? (
+            <ViewerToolbar buttons={viewerToolbarButtons} ariaLabel="Viewer tools" />
           ) : (
-            <>
-              <button
-                className="btn-ghost right-toolbar-icon"
-                onClick={async () => {
-                  if (selectedPhotoIds.size === 0) return;
-                  const selectedPhotos = photos.filter((p) => selectedPhotoIds.has(p.id));
-                  for (const photo of selectedPhotos) {
-                    await toggleFavorite(photo.id);
-                  }
-                  setSelectedPhotoIds(new Set());
-                }}
-                disabled={selectedPhotoIds.size === 0}
-                title="Toggle favorite"
-                aria-label="Toggle favorite"
-              >
-                ♥
-              </button>
-              <button
-                className="btn-danger-ghost right-toolbar-icon"
-                onClick={async () => {
-                  if (selectedPhotoIds.size === 0) return;
-                  if (!confirm(`Delete ${selectedPhotoIds.size} selected photo(s)?`)) return;
-                  const selectedPhotos = photos.filter((p) => selectedPhotoIds.has(p.id));
-                  for (const photo of selectedPhotos) {
-                    await deletePhoto(photo.id);
-                  }
-                  setSelectedPhotoIds(new Set());
-                }}
-                disabled={selectedPhotoIds.size === 0}
-                title="Delete selected"
-                aria-label="Delete selected"
-              >
-                ✕
-              </button>
-            </>
-          )}
-        </aside>
+            <aside className="page-right-column" aria-label="Library tools">
+              <p className="state-message">Loading tools...</p>
+            </aside>
+          )
+        ) : (
+          <Toolbar buttons={galleryToolbarButtons} ariaLabel="Library tools" />
+        )}
       </div>
 
       {!isFilmstrip && selectedPhotoIds.size > 0 && (

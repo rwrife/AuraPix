@@ -166,9 +166,6 @@ export function AlbumDetailPage() {
   return (
     <>
       <div className="page-titlebar">
-        <Link to="/albums" className="btn-ghost btn-sm">
-          ← Albums
-        </Link>
         <h1 className="page-title">{album.name}</h1>
         {!isFilmstrip && albumPhotos.length > 0 && (
           <div className="titlebar-controls">
