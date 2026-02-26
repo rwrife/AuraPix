@@ -1,8 +1,10 @@
 import type { SharingService } from '../../domain/sharing/contract';
 import type {
   CreateShareLinkInput,
+  ResolveShareDownloadInput,
   ResolveShareLinkInput,
   ShareAccessEvent,
+  ShareDownloadResolution,
   ShareLink,
 } from '../../domain/sharing/types';
 
@@ -21,16 +23,21 @@ export class InMemorySharingService implements SharingService {
     const now = new Date().toISOString();
     const token = `local-share-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
+    const permission = input.policy.permission ?? 'view';
     const link: ShareLink = {
       id: `link-${Date.now()}`,
       token,
       resourceType: input.resourceType,
       resourceId: input.resourceId,
       policy: {
-        permission: input.policy.permission ?? 'view',
+        permission,
         expiresAt: input.policy.expiresAt ?? null,
         passwordProtected: !!input.password,
         maxUses: input.policy.maxUses ?? null,
+        downloadPolicy:
+          input.policy.downloadPolicy ??
+          (permission === 'download' ? 'original_and_derivative' : 'none'),
+        watermarkEnabled: input.policy.watermarkEnabled ?? false,
       },
       useCount: 0,
       revoked: false,
@@ -61,6 +68,48 @@ export class InMemorySharingService implements SharingService {
   }
 
   async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
+    const link = this.validateAccess(input);
+    if (!link) {
+      return null;
+    }
+
+    return this.markGranted(link, input.token, 'granted');
+  }
+
+  async resolveShareDownload(input: ResolveShareDownloadInput): Promise<ShareDownloadResolution | null> {
+    const link = this.validateAccess(input);
+    if (!link) {
+      return null;
+    }
+
+    if (link.policy.downloadPolicy === 'none') {
+      this.recordEvent({
+        token: input.token,
+        linkId: link.id,
+        outcome: 'denied_download_disallowed',
+      });
+      return null;
+    }
+
+    if (link.policy.downloadPolicy === 'derivative_only' && input.assetKind === 'original') {
+      this.recordEvent({
+        token: input.token,
+        linkId: link.id,
+        outcome: 'denied_download_disallowed',
+      });
+      return null;
+    }
+
+    const resolved = this.markGranted(link, input.token, 'granted_download');
+
+    return {
+      link: resolved,
+      assetKind: input.assetKind,
+      watermarkApplied: input.assetKind === 'derivative' && resolved.policy.watermarkEnabled,
+    };
+  }
+
+  private validateAccess(input: ResolveShareLinkInput): ShareLink | null {
     const link = this.links.find((l) => l.token === input.token);
     if (!link) {
       this.recordEvent({ token: input.token, linkId: null, outcome: 'denied_not_found' });
@@ -94,11 +143,19 @@ export class InMemorySharingService implements SharingService {
       }
     }
 
+    return link;
+  }
+
+  private markGranted(
+    link: ShareLink,
+    token: string,
+    outcome: Extract<ShareAccessEvent['outcome'], 'granted' | 'granted_download'>
+  ): ShareLink {
     const resolved = { ...link, useCount: link.useCount + 1 };
 
     // Increment use count
     this.links = this.links.map((l) => (l.id === link.id ? resolved : l));
-    this.recordEvent({ token: input.token, linkId: link.id, outcome: 'granted' });
+    this.recordEvent({ token, linkId: link.id, outcome });
 
     return resolved;
   }

@@ -1,7 +1,9 @@
 import type {
   CreateShareLinkInput,
+  ResolveShareDownloadInput,
   ResolveShareLinkInput,
   ShareAccessEvent,
+  ShareDownloadResolution,
   ShareLink,
 } from '../../domain/sharing/types';
 
@@ -25,6 +27,11 @@ export interface ListShareAccessEventsResponse {
 export type ResolveShareLinkRequest = ResolveShareLinkInput;
 export interface ResolveShareLinkResponse {
   link: ShareLink | null;
+}
+
+export type ResolveShareDownloadRequest = ResolveShareDownloadInput;
+export interface ResolveShareDownloadResponse {
+  resolution: ShareDownloadResolution | null;
 }
 
 export interface RevokeShareLinkRequest {
