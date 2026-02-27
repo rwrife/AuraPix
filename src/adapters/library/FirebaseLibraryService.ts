@@ -33,7 +33,7 @@ import type {
   UpdatePhotoInput,
 } from '../../domain/library/types';
 import { COLLECTIONS } from '../../config/collections';
-import { generatePhotoStoragePath, getThumbnailPath } from '../../utils/storage-paths';
+import { generatePhotoStoragePath } from '../../utils/storage-paths';
 import type { OperationAuthorizer } from '../../domain/authorization/contract';
 
 /**
