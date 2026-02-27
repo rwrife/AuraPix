@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type {
   ShareAccessEvent,
   ShareDownloadPolicy,
+  ShareDownloadResolution,
   ShareLink,
   SharePermission,
 } from '../../domain/sharing/types';
@@ -33,6 +34,11 @@ interface UseSharingReturn extends UseSharingState {
   revokeLink(linkId: string): Promise<void>;
   refreshAccessEvents(): Promise<void>;
   updateLinkPolicy(linkId: string, policy: Partial<ShareLink['policy']>): Promise<ShareLink>;
+  resolveDownload(
+    token: string,
+    assetKind: 'original' | 'derivative',
+    password?: string
+  ): Promise<ShareDownloadResolution | null>;
 }
 
 export function useSharing(resourceId: string): UseSharingReturn {
@@ -127,6 +133,13 @@ export function useSharing(resourceId: string): UseSharingReturn {
     [sharing]
   );
 
+  const resolveDownload = useCallback(
+    async (token: string, assetKind: 'original' | 'derivative', password?: string) => {
+      return sharing.resolveShareDownload({ token, assetKind, password });
+    },
+    [sharing]
+  );
+
   return {
     links,
     accessEvents,
@@ -138,5 +151,6 @@ export function useSharing(resourceId: string): UseSharingReturn {
     revokeLink,
     updateLinkPolicy,
     refreshAccessEvents,
+    resolveDownload,
   };
 }
