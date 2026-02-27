@@ -153,16 +153,17 @@ export class FirebaseLibraryService implements LibraryService {
     const storageRef = ref(this.storage, storagePath);
     await uploadString(storageRef, input.dataUrl, 'data_url');
 
-    // Get authenticated download URL
-    const downloadURL = await getDownloadURL(storageRef);
+    // Generate thumbnail path (backend will handle actual thumbnail generation)
+    const thumbnailPath = getThumbnailPath(storagePath);
 
-    // Create photo document with download URL
+    // Create photo document with storage paths (not URLs)
+    // Images will be served through the API endpoint with authentication
     const photoData: Omit<Photo, 'id'> = {
       libraryId: input.libraryId,
       albumIds: [],
       originalName: input.originalName,
-      storagePath: downloadURL, // Store the authenticated download URL instead of path
-      thumbnailPath: downloadURL, // Use same URL for thumbnail for now
+      storagePath, // Store the storage path, not the URL
+      thumbnailPath, // Store thumbnail path for future use
       status: 'ready' as const,
       metadata: (input.metadata as Photo['metadata']) || null,
       createdAt: new Date().toISOString(),

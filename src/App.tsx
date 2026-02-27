@@ -10,6 +10,7 @@ import { ServiceProvider } from './services/ServiceContext';
 import { HealthBanner } from './components/HealthBanner';
 import { initializeHealthCheck, cleanupHealthCheck } from './services/healthCheck';
 import { setupHealthDebug } from './utils/debugHealth';
+import { useImageAuth } from './hooks/useImageAuth';
 
 export default function App() {
   const services = useMemo(() => {
@@ -20,6 +21,9 @@ export default function App() {
     }
     return createLocalServices();
   }, []);
+
+  // Initialize image authentication Service Worker
+  useImageAuth();
 
   // Initialize health check monitoring
   useEffect(() => {

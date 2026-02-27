@@ -29,8 +29,7 @@ function LazyImage({ photo, className, alt }: LazyImageProps) {
   const [isVisible, setIsVisible] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // Determine if this is a Firebase Storage URL, legacy in-memory photo, or API-based photo
-  const isFirebaseStorageUrl = photo.storagePath?.startsWith('https://firebasestorage.googleapis.com');
+  // Check if this is a legacy in-memory photo (data URLs or blob URLs)
   const isLegacyPhoto = photo.storagePath?.startsWith('data:') || photo.storagePath?.startsWith('blob:');
 
   useEffect(() => {
@@ -58,11 +57,11 @@ function LazyImage({ photo, className, alt }: LazyImageProps) {
     };
   }, []);
 
-  // Use Firebase Storage URLs directly if available, otherwise fall back to API or legacy URLs
-  const blurUrl = isFirebaseStorageUrl || isLegacyPhoto
+  // Use legacy URLs directly for in-memory photos, otherwise use API endpoints
+  const blurUrl = isLegacyPhoto
     ? (photo.thumbnailPath ?? photo.storagePath)
     : getBlurPlaceholderUrl(photo.libraryId, photo.id);
-  const thumbnailUrl = isFirebaseStorageUrl || isLegacyPhoto
+  const thumbnailUrl = isLegacyPhoto
     ? (photo.thumbnailPath ?? photo.storagePath)
     : getThumbnailUrl(photo.libraryId, photo.id);
 
