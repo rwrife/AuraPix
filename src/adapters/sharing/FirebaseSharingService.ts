@@ -154,6 +154,7 @@ export class FirebaseSharingService implements SharingService {
     await this.logAccessEvent(input.token, link.id, 'granted');
 
     return link;
+  }
 
   async resolveShareDownload(
     input: ResolveShareDownloadInput
