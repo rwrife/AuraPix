@@ -421,6 +421,9 @@ export function AlbumDetailPage() {
                     <div>
                       <div className="album-name">{event.outcome}</div>
                       <div className="album-date">
+                        {`${event.attempt} • ${event.linkId ?? 'unknown-link'}`}
+                      </div>
+                      <div className="album-date">
                         {new Date(event.occurredAt).toLocaleString()}
                       </div>
                     </div>
