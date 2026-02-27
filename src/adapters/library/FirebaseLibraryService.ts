@@ -18,7 +18,6 @@ import {
 import {
   ref,
   uploadString,
-  getDownloadURL,
   deleteObject,
   type FirebaseStorage,
 } from 'firebase/storage';
