@@ -39,7 +39,7 @@ export function createFirebaseServices(
     authorizer
   );
   const albums = new FirebaseAlbumsService(firebaseInstances.db, userId);
-  const sharing = new FirebaseSharingService();
+  const sharing = new FirebaseSharingService(firebaseInstances.db);
   const uploads = new FirebaseUploadService();
 
   return {

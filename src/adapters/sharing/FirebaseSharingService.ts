@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   query,
   where,
@@ -17,6 +16,7 @@ import type {
   ResolveShareDownloadInput,
   ResolveShareLinkInput,
   UpdateShareLinkPolicyInput,
+  ShareAccessAttempt,
   ShareAccessEvent,
   ShareAccessOutcome,
   ShareDownloadResolution,
@@ -56,7 +56,9 @@ export class FirebaseSharingService implements SharingService {
     };
 
     // Store password hash if provided
-    const docData: any = { ...shareLink };
+    const docData: Omit<ShareLink, 'id'> & { passwordHash?: string } = {
+      ...shareLink,
+    };
     if (input.password) {
       // In production, hash the password before storing
       docData.passwordHash = input.password; // TODO: Use bcrypt or similar
@@ -92,6 +94,36 @@ export class FirebaseSharingService implements SharingService {
     });
   }
 
+  async updateShareLinkPolicy(
+    input: UpdateShareLinkPolicyInput
+  ): Promise<ShareLink> {
+    const docRef = doc(this.db, 'shareLinks', input.linkId);
+    const existing = await getDocs(
+      query(collection(this.db, 'shareLinks'), where('__name__', '==', input.linkId))
+    );
+
+    if (existing.empty) {
+      throw new Error('Share link not found');
+    }
+
+    const linkDoc = existing.docs[0];
+    const current = { id: linkDoc.id, ...linkDoc.data() } as ShareLink;
+    const nextPolicy: SharePolicy = {
+      ...current.policy,
+      ...input.policy,
+    };
+
+    await updateDoc(docRef, {
+      policy: nextPolicy,
+      updatedAt: serverTimestamp(),
+    });
+
+    return {
+      ...current,
+      policy: nextPolicy,
+    };
+  }
+
   async resolveShareLink(
     input: ResolveShareLinkInput
   ): Promise<ShareLink | null> {
@@ -102,7 +134,7 @@ export class FirebaseSharingService implements SharingService {
 
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
-      await this.logAccessEvent(input.token, null, 'denied_not_found');
+      await this.logAccessEvent(input.token, null, 'denied_not_found', 'link_resolve', null);
       return null;
     }
 
@@ -111,7 +143,7 @@ export class FirebaseSharingService implements SharingService {
 
     // Check if revoked
     if (link.revoked) {
-      await this.logAccessEvent(input.token, link.id, 'denied_revoked');
+      await this.logAccessEvent(input.token, link.id, 'denied_revoked', 'link_resolve', link);
       return null;
     }
 
@@ -119,28 +151,28 @@ export class FirebaseSharingService implements SharingService {
     if (link.policy.expiresAt) {
       const expiresAt = new Date(link.policy.expiresAt);
       if (expiresAt <= new Date()) {
-        await this.logAccessEvent(input.token, link.id, 'denied_expired');
+        await this.logAccessEvent(input.token, link.id, 'denied_expired', 'link_resolve', link);
         return null;
       }
     }
 
     // Check max uses
     if (link.policy.maxUses && link.useCount >= link.policy.maxUses) {
-      await this.logAccessEvent(input.token, link.id, 'denied_max_uses');
+      await this.logAccessEvent(input.token, link.id, 'denied_max_uses', 'link_resolve', link);
       return null;
     }
 
     // Check password if required
     if (link.policy.passwordProtected) {
       if (!input.password) {
-        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password');
+        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', 'link_resolve', link);
         return null;
       }
 
       // Verify password (in production, compare hashes)
-      const linkData: any = linkDoc.data();
+      const linkData = linkDoc.data() as { passwordHash?: string };
       if (linkData.passwordHash !== input.password) {
-        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password');
+        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', 'link_resolve', link);
         return null;
       }
     }
@@ -151,7 +183,7 @@ export class FirebaseSharingService implements SharingService {
       lastAccessedAt: serverTimestamp(),
     });
 
-    await this.logAccessEvent(input.token, link.id, 'granted');
+    await this.logAccessEvent(input.token, link.id, 'granted', 'link_resolve', link);
 
     return link;
   }
@@ -167,7 +199,13 @@ export class FirebaseSharingService implements SharingService {
     // Check download policy
     const { downloadPolicy } = link.policy;
     if (downloadPolicy === 'none') {
-      await this.logAccessEvent(input.token, link.id, 'denied_download_disallowed');
+      await this.logAccessEvent(
+        input.token,
+        link.id,
+        'denied_download_disallowed',
+        input.assetKind === 'original' ? 'download_original' : 'download_derivative',
+        link
+      );
       return null;
     }
 
@@ -175,11 +213,17 @@ export class FirebaseSharingService implements SharingService {
       downloadPolicy === 'derivative_only' &&
       input.assetKind === 'original'
     ) {
-      await this.logAccessEvent(input.token, link.id, 'denied_download_disallowed');
+      await this.logAccessEvent(
+        input.token,
+        link.id,
+        'denied_download_disallowed',
+        input.assetKind === 'original' ? 'download_original' : 'download_derivative',
+        link
+      );
       return null;
     }
 
-    await this.logAccessEvent(input.token, link.id, 'granted_download');
+    await this.logAccessEvent(input.token, link.id, 'granted_download', input.assetKind === 'original' ? 'download_original' : 'download_derivative', link);
 
     return {
       link,
@@ -222,11 +266,16 @@ export class FirebaseSharingService implements SharingService {
   private async logAccessEvent(
     token: string,
     linkId: string | null,
-    outcome: ShareAccessOutcome
+    outcome: ShareAccessOutcome,
+    attempt: ShareAccessAttempt,
+    link: ShareLink | null
   ): Promise<void> {
     const event: Omit<ShareAccessEvent, 'id'> = {
       linkId,
       token,
+      resourceType: link?.resourceType ?? null,
+      resourceId: link?.resourceId ?? null,
+      attempt,
       outcome,
       occurredAt: new Date().toISOString(),
     };
