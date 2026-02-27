@@ -37,11 +37,8 @@ export function generateSignedImageUrl(
     ...(signingKey.shareToken && { shareToken: signingKey.shareToken }),
   };
 
-  // Create canonical string for signing (must match backend format)
-  const canonicalString = `${libraryId}:${photoId}:${size}:${format}:${expiresAt}`;
-
-  // Generate HMAC signature using Web Crypto API
-  const signature = generateHmacSignature(signingKey.key, canonicalString);
+  // Generate HMAC signature using Web Crypto API (placeholder)
+  void generateHmacSignature();
 
   // Encode signature payload as base64url
   const encodedSignature = base64UrlEncode(JSON.stringify(signaturePayload));
@@ -63,10 +60,7 @@ export function generateSignedImageUrl(
  * @param data - Data to sign
  * @returns Base64-encoded signature
  */
-function generateHmacSignature(key: string, data: string): string {
-  // Decode base64 key
-  const keyBuffer = base64ToArrayBuffer(key);
-  
+function generateHmacSignature(): string {
   // For now, we'll use a simpler approach that doesn't require async
   // In production, consider using a sync HMAC library or pre-computing signatures
   // This is a placeholder - we'll actually compute this async in the manager
