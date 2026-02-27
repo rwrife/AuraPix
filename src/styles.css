@@ -1970,6 +1970,16 @@ input:focus {
   font-weight: 600;
 }
 
+.teams-inline-error {
+  margin: 0;
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fecaca;
+  border-radius: 8px;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.9rem;
+}
+
 .teams-panel {
   border: 1px solid #334155;
   border-radius: 10px;
