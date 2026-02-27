@@ -299,7 +299,7 @@ export function AlbumsPage() {
   const [albumName, setAlbumName] = useState('');
   const [albumFolderId, setAlbumFolderId] = useState('');
   const [albumFormError, setAlbumFormError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creatingCount, setCreatingCount] = useState(0);
   const [folderName, setFolderName] = useState('');
   const [showFolderForm, setShowFolderForm] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -314,16 +314,20 @@ export function AlbumsPage() {
       return;
     }
 
+    const selectedFolderId = albumFolderId || null;
+
     setAlbumFormError(null);
-    setCreating(true);
     setAlbumName('');
-    const created = await createAlbum(trimmedName, albumFolderId || null);
+    setAlbumFolderId('');
+    setCreatingCount((count) => count + 1);
+
+    const created = await createAlbum(trimmedName, selectedFolderId);
     if (!created) {
       setAlbumName(trimmedName);
-    } else {
-      setAlbumFolderId('');
+      setAlbumFolderId(selectedFolderId ?? '');
     }
-    setCreating(false);
+
+    setCreatingCount((count) => Math.max(0, count - 1));
   }
 
   async function handleCreateFolder(e: React.FormEvent) {
@@ -407,12 +411,10 @@ export function AlbumsPage() {
               setAlbumName(e.target.value);
               if (albumFormError) setAlbumFormError(null);
             }}
-            disabled={creating}
           />
           <select
             value={albumFolderId}
             onChange={(e) => setAlbumFolderId(e.target.value)}
-            disabled={creating}
             aria-label="Album folder"
             title="Place album in a folder"
           >
@@ -423,8 +425,8 @@ export function AlbumsPage() {
               </option>
             ))}
           </select>
-          <button type="submit" disabled={creating || !albumName.trim()}>
-            {creating ? 'Creating…' : 'Create album'}
+          <button type="submit" disabled={!albumName.trim()}>
+            {creatingCount > 0 ? `Create album (${creatingCount} pending)` : 'Create album'}
           </button>
         </form>
 
