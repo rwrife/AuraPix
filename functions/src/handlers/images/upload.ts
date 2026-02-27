@@ -8,9 +8,13 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { logger } from '../../utils/logger.js';
 import { extractExifData } from '../../utils/exif.js';
 import {
-  generatePhotoPaths,
-  getFileExtension,
-} from '../../config/storage-paths.js';
+  createUploadFingerprint,
+  getNormalizedIdempotencyKey,
+  getUploadIdempotencyRecord,
+  storeUploadIdempotencyRecord,
+  uploadFingerprintMatches,
+} from './uploadIdempotency.js';
+import { generatePhotoPaths } from '../../config/storage-paths.js';
 import { createPhotoDocument } from '../../models/Photo.js';
 import type { PhotoMetadata } from '../../models/Photo.js';
 
@@ -98,6 +102,36 @@ export async function handleUpload(
 
   // TODO: Verify user has access to this library
   const userId = req.user?.uid || 'anonymous';
+  const idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
+  const uploadFingerprint = createUploadFingerprint(file);
+
+  if (idempotencyKey) {
+    const existingRecord = await getUploadIdempotencyRecord(
+      dataAdapter,
+      userId,
+      libraryId,
+      idempotencyKey
+    );
+
+    if (existingRecord) {
+      if (!uploadFingerprintMatches(existingRecord.request, uploadFingerprint)) {
+        throw new AppError(
+          409,
+          'IDEMPOTENCY_KEY_REUSE_MISMATCH',
+          'Idempotency key was already used with a different upload payload'
+        );
+      }
+
+      res.status(200).json({
+        ...(existingRecord.responseBody as Record<string, unknown>),
+        idempotency: {
+          key: idempotencyKey,
+          replayed: true,
+        },
+      });
+      return;
+    }
+  }
 
   try {
     // Generate unique photo ID
@@ -138,8 +172,7 @@ export async function handleUpload(
     logger.info({ photoId }, 'Saving photo document');
     await dataAdapter.storeData('photos', photoId, photo);
 
-    // Return response immediately
-    res.status(202).json({
+    const responseBody = {
       photoId,
       status: 'processing',
       message: 'Photo uploaded successfully, thumbnails are being generated',
@@ -151,6 +184,30 @@ export async function handleUpload(
         metadata: photo.metadata,
         createdAt: photo.createdAt,
       },
+    };
+
+    if (idempotencyKey) {
+      await storeUploadIdempotencyRecord(dataAdapter, {
+        key: idempotencyKey,
+        userId,
+        libraryId,
+        request: uploadFingerprint,
+        responseBody,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Return response immediately
+    res.status(202).json({
+      ...responseBody,
+      ...(idempotencyKey
+        ? {
+            idempotency: {
+              key: idempotencyKey,
+              replayed: false,
+            },
+          }
+        : {}),
     });
 
     // Trigger thumbnail generation in background
