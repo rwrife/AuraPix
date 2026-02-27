@@ -32,6 +32,7 @@ interface UseSharingReturn extends UseSharingState {
   ): Promise<ShareLink>;
   revokeLink(linkId: string): Promise<void>;
   refreshAccessEvents(): Promise<void>;
+  updateLinkPolicy(linkId: string, policy: Partial<ShareLink['policy']>): Promise<ShareLink>;
 }
 
 export function useSharing(resourceId: string): UseSharingReturn {
@@ -109,6 +110,15 @@ export function useSharing(resourceId: string): UseSharingReturn {
     [sharing]
   );
 
+  const updateLinkPolicy = useCallback(
+    async (linkId: string, policy: Partial<ShareLink['policy']>) => {
+      const updated = await sharing.updateShareLinkPolicy({ linkId, policy });
+      setLinks((prev) => prev.map((link) => (link.id === updated.id ? updated : link)));
+      return updated;
+    },
+    [sharing]
+  );
+
   const revokeLink = useCallback(
     async (linkId: string) => {
       await sharing.revokeShareLink(linkId);
@@ -126,6 +136,7 @@ export function useSharing(resourceId: string): UseSharingReturn {
     accessEventsError,
     createLink,
     revokeLink,
+    updateLinkPolicy,
     refreshAccessEvents,
   };
 }

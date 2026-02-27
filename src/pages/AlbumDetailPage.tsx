@@ -68,6 +68,7 @@ export function AlbumDetailPage() {
     accessEventsError,
     createLink,
     revokeLink,
+    updateLinkPolicy,
     refreshAccessEvents,
   } = useSharing(albumId ?? '');
 
@@ -171,6 +172,33 @@ export function AlbumDetailPage() {
       await moveAlbum(albumId, nextFolderId);
     }
     setSaving(false);
+  }
+
+
+
+  async function toggleShareWatermark(linkId: string, enabled: boolean) {
+    setShareError(null);
+    try {
+      await updateLinkPolicy(linkId, { watermarkEnabled: enabled });
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to update share link.');
+    }
+  }
+
+  async function cycleShareDownloadPolicy(link: (typeof shareLinks)[number]) {
+    const sequence: ShareDownloadPolicy[] = ['none', 'derivative_only', 'original_and_derivative'];
+    const current = sequence.indexOf(link.policy.downloadPolicy);
+    const next = sequence[(current + 1) % sequence.length];
+
+    setShareError(null);
+    try {
+      await updateLinkPolicy(link.id, {
+        downloadPolicy: next,
+        watermarkEnabled: next === 'none' ? false : link.policy.watermarkEnabled,
+      });
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to update share link.');
+    }
   }
 
   async function handleCreateShareLink() {
@@ -342,6 +370,21 @@ export function AlbumDetailPage() {
                     {` • Permission: ${link.policy.permission}`}
                     {` • Download: ${link.policy.downloadPolicy}`}
                     {link.policy.watermarkEnabled ? ' • Watermark derivatives' : ''}
+                  </div>
+                  <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn-ghost btn-sm"
+                      onClick={() => void cycleShareDownloadPolicy(link)}
+                    >
+                      Cycle download policy
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={link.policy.downloadPolicy === 'none'}
+                      onClick={() => void toggleShareWatermark(link.id, !link.policy.watermarkEnabled)}
+                    >
+                      {link.policy.watermarkEnabled ? 'Disable watermark' : 'Enable watermark'}
+                    </button>
                   </div>
                 </div>
                 <button className="btn-ghost btn-sm" onClick={() => revokeLink(link.id)}>

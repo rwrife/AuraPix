@@ -3,6 +3,7 @@ import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
   ResolveShareLinkInput,
+  UpdateShareLinkPolicyInput,
   ShareAccessEvent,
   ShareDownloadResolution,
   ShareLink,
@@ -32,6 +33,11 @@ export class FirebaseSharingService implements SharingService {
 
   async revokeShareLink(linkId: string): Promise<void> {
     void linkId;
+    throw new Error('Sharing not yet implemented');
+  }
+
+  async updateShareLinkPolicy(input: UpdateShareLinkPolicyInput): Promise<ShareLink> {
+    void input;
     throw new Error('Sharing not yet implemented');
   }
 

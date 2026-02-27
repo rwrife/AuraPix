@@ -2,6 +2,7 @@ import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
   ResolveShareLinkInput,
+  UpdateShareLinkPolicyInput,
   ShareAccessEvent,
   ShareDownloadResolution,
   ShareLink,
@@ -36,4 +37,9 @@ export interface ResolveShareDownloadResponse {
 
 export interface RevokeShareLinkRequest {
   linkId: string;
+}
+
+export type UpdateShareLinkPolicyRequest = UpdateShareLinkPolicyInput;
+export interface UpdateShareLinkPolicyResponse {
+  link: ShareLink;
 }

@@ -93,3 +93,27 @@ describe('InMemorySharingService', () => {
     ]);
   });
 });
+
+
+  it('updates share link download policy with safe defaults', async () => {
+    const service = new InMemorySharingService();
+
+    const link = await service.createShareLink({
+      resourceType: 'album',
+      resourceId: 'album-2',
+      policy: { permission: 'download', downloadPolicy: 'derivative_only', watermarkEnabled: true },
+    });
+
+    const disabledDownloads = await service.updateShareLinkPolicy({
+      linkId: link.id,
+      policy: { downloadPolicy: 'none' },
+    });
+    expect(disabledDownloads.policy.downloadPolicy).toBe('none');
+    expect(disabledDownloads.policy.watermarkEnabled).toBe(false);
+
+    const restored = await service.updateShareLinkPolicy({
+      linkId: link.id,
+      policy: { permission: 'download' },
+    });
+    expect(restored.policy.downloadPolicy).toBe('original_and_derivative');
+  });

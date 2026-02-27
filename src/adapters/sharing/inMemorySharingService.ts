@@ -3,6 +3,7 @@ import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
   ResolveShareLinkInput,
+  UpdateShareLinkPolicyInput,
   ShareAccessEvent,
   ShareDownloadResolution,
   ShareLink,
@@ -65,6 +66,37 @@ export class InMemorySharingService implements SharingService {
 
   async revokeShareLink(linkId: string): Promise<void> {
     this.links = this.links.map((l) => (l.id === linkId ? { ...l, revoked: true } : l));
+  }
+
+  async updateShareLinkPolicy(input: UpdateShareLinkPolicyInput): Promise<ShareLink> {
+    const link = this.links.find((l) => l.id === input.linkId);
+    if (!link) {
+      throw new Error('Share link not found.');
+    }
+
+    const permission = input.policy.permission ?? link.policy.permission;
+    const nextDownloadPolicy =
+      input.policy.downloadPolicy ??
+      (permission === 'download'
+        ? link.policy.downloadPolicy === 'none'
+          ? 'original_and_derivative'
+          : link.policy.downloadPolicy
+        : 'none');
+
+    const nextPolicy = {
+      ...link.policy,
+      ...input.policy,
+      permission,
+      downloadPolicy: nextDownloadPolicy,
+      watermarkEnabled:
+        nextDownloadPolicy === 'none'
+          ? false
+          : input.policy.watermarkEnabled ?? link.policy.watermarkEnabled,
+    };
+
+    const updated = { ...link, policy: nextPolicy };
+    this.links = this.links.map((l) => (l.id === link.id ? updated : l));
+    return updated;
   }
 
   async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
