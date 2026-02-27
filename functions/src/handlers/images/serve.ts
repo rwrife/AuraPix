@@ -1,10 +1,7 @@
 import type { Request, Response } from 'express';
 import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
-import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
-import type { Photo } from '../../models/Photo.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { logger } from '../../utils/logger.js';
-import { getThumbnailPath } from '../../config/storage-paths.js';
 import { getImageCache } from '../../services/caching/ImageCache.js';
 import { ServeImageQuerySchema } from '../../utils/validation.js';
 import { applyEdits } from '../../services/edits/EditProcessor.js';
@@ -18,7 +15,6 @@ export async function handleServeImage(
   res: Response
 ): Promise<void> {
   const storageAdapter = req.app.locals.storageAdapter as StorageAdapter;
-  const dataAdapter = req.app.locals.dataAdapter as DataAdapter;
   const imageCache = getImageCache();
 
   const libraryId = req.params.libraryId as string;
@@ -32,19 +28,28 @@ export async function handleServeImage(
 
   const { size, format } = queryResult.data;
 
-  // TODO: Verify user has access to this library/photo
-  const userId = req.user?.uid || 'anonymous';
+  // Photo and authorization already verified by signedUrlMiddleware
+  const photo = req.imageAuth?.photo;
+  if (!photo) {
+    throw new AppError(500, 'INTERNAL_ERROR', 'Image authorization not set by middleware');
+  }
 
   try {
-    // Fetch photo document
-    const photo = await dataAdapter.fetchData<Photo>('photos', photoId);
-    if (!photo) {
-      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found');
-    }
-
+    // Verify photo belongs to requested library (extra safety check)
     if (photo.libraryId !== libraryId) {
       throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found in this library');
     }
+
+    logger.debug(
+      {
+        photoId,
+        libraryId,
+        size,
+        format,
+        authorized: req.imageAuth?.authorized,
+      },
+      'Serving authorized image'
+    );
 
     // Check if thumbnails are outdated
     if (photo.thumbnailsOutdated && size !== 'original') {

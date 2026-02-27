@@ -159,4 +159,32 @@ export class FirestoreDataAdapter implements DataAdapter {
       );
     }
   }
+
+  async getPhoto(libraryId: string, photoId: string): Promise<any | null> {
+    try {
+      const photoRef = this.firestore
+        .collection('libraries')
+        .doc(libraryId)
+        .collection('photos')
+        .doc(photoId);
+      
+      const doc = await photoRef.get();
+      
+      if (!doc.exists) {
+        logger.debug({ libraryId, photoId }, 'Photo not found in Firestore');
+        return null;
+      }
+
+      const data = doc.data();
+      logger.debug({ libraryId, photoId }, 'Photo fetched from Firestore');
+      return data;
+    } catch (error) {
+      logger.error({ error, libraryId, photoId }, 'Failed to fetch photo from Firestore');
+      throw new AppError(
+        500,
+        'DATA_READ_ERROR',
+        'Failed to fetch photo from Firestore'
+      );
+    }
+  }
 }

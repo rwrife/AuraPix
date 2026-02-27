@@ -1,139 +1,194 @@
-# AuraPix Functions
+# AuraPix Backend Functions
 
-Node.js service for image processing, serving, and storage operations. Designed to run locally for development and deploy to Firebase Functions for production.
+Backend API for AuraPix photo management system with HMAC-signed URL authentication.
 
-## Architecture
+## Quick Start
 
-### Adapter Pattern
+### 1. Install Dependencies
 
-The service uses adapters to remain host-agnostic:
-
-- **StorageAdapter**: File storage operations (LocalDiskStorage / FirebaseStorage)
-- **DataAdapter**: Database operations (LocalJsonData / FirestoreData)
-- **CacheLayer**: Multi-tier caching (MemoryCache / DiskCache)
-
-### Directory Structure
-
-```
-functions/
-├── src/
-│   ├── server.ts              # Local Express server
-│   ├── index.ts              # Firebase Functions entry (future)
-│   ├── adapters/             # Storage, data, and cache adapters
-│   ├── config/               # Environment configuration
-│   ├── middleware/           # Auth, error handling, logging
-│   ├── models/               # Domain models
-│   ├── services/             # Business logic
-│   ├── handlers/             # Request handlers
-│   ├── routes/               # Express routes
-│   └── utils/                # Utilities
-├── local-data/               # Local development data (git-ignored)
-│   ├── storage/              # Image files
-│   ├── database/             # JSON data files
-│   └── cache/                # Cached images
-└── test/                     # Tests
+```bash
+npm install
 ```
 
-## Setup
+### 2. Generate Signing Secret
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+**IMPORTANT**: The backend requires a signing secret for HMAC-signed URLs.
 
-2. **Create environment file**:
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+# Generate a secure random secret
+node generate-signing-secret.js
+```
 
-3. **Start development server**:
-   ```bash
-   npm run dev
-   ```
+Save the generated secret - you'll need it for all deployments!
 
-   Server will run on http://localhost:3001
+### 3. Configure Environment
 
-## Features
+```bash
+# Copy the example environment file
+cp .env.example .env
 
-### Implemented (Phase 1)
+# Edit .env and paste your SIGNING_MASTER_SECRET
+# (The 64-character hex string from step 2)
+nano .env  # or use your preferred editor
+```
 
-- ✅ Adapter pattern for storage and data
-- ✅ Local disk storage implementation
-- ✅ Local JSON database implementation
-- ✅ Multi-tier caching (memory + disk)
-- ✅ Mock authentication middleware
-- ✅ Structured logging
-- ✅ Express server setup
-- ✅ Photo domain model with edit versioning
+### 4. Run Development Server
 
-### Planned
+```bash
+npm run dev
+```
 
-- [ ] Image upload endpoint
-- [ ] Thumbnail generation
-- [ ] Image serving with caching
-- [ ] Non-destructive editing
-- [ ] Firebase adapters
-- [ ] Firebase Functions deployment
+The API will be available at `http://localhost:3001`
+
+## Production Deployment
+
+### Cloud Run Deployment
+
+The deployment script will automatically handle the signing secret:
+
+```bash
+# From project root
+./deploy-aurapix-cloudrun.sh
+```
+
+Or on Windows:
+
+```powershell
+.\deploy-aurapix-cloudrun.ps1
+```
+
+**First deployment**: The script will generate a signing secret automatically. Save it for future deployments!
+
+**Subsequent deployments**: Set the secret in your environment:
+
+```bash
+export SIGNING_MASTER_SECRET="your-saved-secret-here"
+./deploy-aurapix-cloudrun.sh
+```
+
+### Manual Cloud Run Deployment
+
+```bash
+# Build the Docker image
+docker build -t gcr.io/YOUR_PROJECT_ID/aurapix-api:latest .
+
+# Push to Google Container Registry
+docker push gcr.io/YOUR_PROJECT_ID/aurapix-api:latest
+
+# Deploy to Cloud Run with environment variables
+gcloud run deploy aurapix-api \
+  --image gcr.io/YOUR_PROJECT_ID/aurapix-api:latest \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --update-env-vars "NODE_ENV=production,SIGNING_MASTER_SECRET=your-secret-here"
+```
+
+### Firebase Functions Deployment
+
+```bash
+# Set the signing secret
+firebase functions:config:set signing.master_secret="your-secret-here"
+
+# Or add to .env file
+echo "SIGNING_MASTER_SECRET=your-secret-here" >> .env
+
+# Deploy
+firebase deploy --only functions
+```
+
+## Environment Variables
+
+### Required
+
+- `SIGNING_MASTER_SECRET`: 64-character hex string (256 bits). Generate with `node generate-signing-secret.js`
+  - **Must be set in production** - the app will refuse to start without it
+  - Must remain consistent across deployments
+  - Store securely in your deployment platform's environment variables
+
+### Optional
+
+- `PORT`: Server port (default: 3001)
+- `NODE_ENV`: Environment ('development' or 'production')
+- `STORAGE_MODE`: Storage backend ('local' or 'firebase')
+- `SIGNING_KEY_EXPIRATION`: Key lifetime in seconds (default: 3600 = 1 hour)
+- `SIGNED_URL_EXPIRATION`: URL lifetime in seconds (default: 600 = 10 minutes)
+
+See `.env.example` for complete list.
 
 ## API Endpoints
 
 ### Health Check
-```
-GET /health
-```
+- `GET /health` - Service health status
 
-### Images (Coming Soon)
-```
-GET  /images/:libraryId/:photoId
-POST /images/:libraryId
-```
+### Images
+- `GET /api/images/:libraryId/:photoId` - Get image with signed URL validation
+  - Query params: `size`, `format`, `sig`, `expiresAt`
 
-### Internal (Coming Soon)
-```
-POST /internal/generate-thumbnails/:libraryId/:photoId
-POST /internal/regenerate-thumbnails/:libraryId/:photoId/:version
-```
+### Signing Keys
+- `POST /api/signing/key` - Get signing key (requires Bearer token)
+- `POST /api/signing/key/share/:token` - Get signing key for share access
+
+## Security
+
+### HMAC-Signed URLs
+
+All image URLs must be signed with HMAC-SHA256 to prevent unauthorized access:
+
+1. Client requests signing key from backend
+2. Client generates signed URLs using the key
+3. Backend validates signature and expiration on each image request
+4. Keys expire after 1 hour, URLs after 10 minutes
+
+See `../docs/features/hmac-signed-urls.md` for detailed documentation.
 
 ## Development
 
-### Running Tests
+### Run Tests
+
 ```bash
 npm test
-npm run test:watch
 ```
 
-### Code Quality
-```bash
-npm run lint
-npm run format
-npm run format:check
-```
+### Build
 
-### Building
 ```bash
 npm run build
-node dist/server.js
 ```
 
-## Configuration
+### Lint
 
-See `.env.example` for all available configuration options.
+```bash
+npm run lint
+```
 
-Key settings:
-- `STORAGE_MODE`: `local` or `firebase`
-- `AUTH_MODE`: `mock` or `firebase`
-- `PORT`: Server port (default: 3001)
-- Thumbnail sizes and quality settings
-- Cache TTL and size limits
+## Troubleshooting
 
-## Non-Destructive Editing
+### "SIGNING_MASTER_SECRET is required in production"
 
-Photos support versioned, non-destructive edits:
+The app requires a signing secret to start. Generate one:
 
-1. Original images are never modified
-2. Edits are stored as operations in metadata
-3. Thumbnails are regenerated when edits change
-4. Full-size edited images are cached
-5. Can revert to any previous version
+```bash
+node generate-signing-secret.js
+```
 
-See `src/models/Photo.ts` for the data model.
+Then set it in your environment variables.
+
+### "Failed to get signing key: 401 Unauthorized"
+
+Check that:
+1. Your auth token is valid
+2. The `Authorization: Bearer <token>` header is included in the request
+3. The auth service is properly configured
+
+### Images not loading
+
+Verify that:
+1. The signing key is valid and not expired
+2. The image URLs include valid `sig` and `expiresAt` parameters
+3. The backend can access the storage location (local files or Cloud Storage)
+
+## Documentation
+
+- [HMAC Signed URLs](../docs/features/hmac-signed-urls.md)
+- [Implementation Status](./IMPLEMENTATION_STATUS.md)
+- [Deployment Guide](../../HMAC_SIGNED_URLS_DEPLOYMENT.md)

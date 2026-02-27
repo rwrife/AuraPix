@@ -5,36 +5,53 @@ import { requireAuth } from '../middleware/auth.js';
 import { createSlidingWindowRateLimiter } from '../middleware/rateLimit.js';
 import { appCheckUploadMiddleware } from '../middleware/appCheck.js';
 import { securityConfig } from '../config/index.js';
+import { createSignedUrlMiddleware } from '../middleware/signedUrl.js';
+import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 
 const router = Router();
 
-const uploadRateLimiter = createSlidingWindowRateLimiter({
-  windowMs: securityConfig.uploadRateLimit.windowMs,
-  maxRequests: securityConfig.uploadRateLimit.maxRequests,
-});
-
 /**
- * Upload a photo
- * POST /images/:libraryId
+ * Factory function to create image routes with injected dependencies
+ * @param dataAdapter - Data adapter for database operations
  */
-router.post('/:libraryId', requireAuth, appCheckUploadMiddleware, uploadRateLimiter, uploadMiddleware, async (req, res, next) => {
-  try {
-    await handleUpload(req, res);
-  } catch (error) {
-    next(error);
-  }
-});
+export function createImageRoutes(dataAdapter: DataAdapter) {
+  const router = Router();
 
-/**
- * Serve a photo
- * GET /images/:libraryId/:photoId
- */
-router.get('/:libraryId/:photoId', requireAuth, async (req, res, next) => {
-  try {
-    await handleServeImage(req, res);
-  } catch (error) {
-    next(error);
-  }
-});
+  const uploadRateLimiter = createSlidingWindowRateLimiter({
+    windowMs: securityConfig.uploadRateLimit.windowMs,
+    maxRequests: securityConfig.uploadRateLimit.maxRequests,
+  });
+
+  // Create signed URL middleware with injected data adapter
+  const signedUrlMiddleware = createSignedUrlMiddleware(dataAdapter);
+
+  /**
+   * Upload a photo
+   * POST /images/:libraryId
+   * Requires Firebase authentication
+   */
+  router.post('/:libraryId', requireAuth, appCheckUploadMiddleware, uploadRateLimiter, uploadMiddleware, async (req, res, next) => {
+    try {
+      await handleUpload(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * Serve a photo
+   * GET /images/:libraryId/:photoId
+   * Requires signed URL with valid signature
+   */
+  router.get('/:libraryId/:photoId', signedUrlMiddleware, async (req, res, next) => {
+    try {
+      await handleServeImage(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  return router;
+}
 
 export default router;

@@ -1,128 +1,101 @@
 /**
- * React hook for managing image authentication via Service Worker
+ * React hook for managing image authentication via HMAC-signed URLs
+ * 
+ * Replaces Service Worker approach with signing key management
+ * Provides signing keys to components for generating signed image URLs
  */
 
-import { useEffect, useState } from 'react';
-import { getAuth } from 'firebase/auth';
-
-const SW_PATH = '/image-auth-sw.js';
-
-// Log for debugging
-console.log('[ImageAuth] Attempting to register Service Worker at:', SW_PATH);
+import { useEffect, useState, createContext, useContext, createElement, type ReactNode, type ReactElement } from 'react';
+import { SigningKeyManager } from '../services/imageAuth/SigningKeyManager.js';
+import type { ClientSigningKey } from '../domain/imageAuth/types.js';
+import type { AuthService } from '../domain/auth/contract.js';
 
 /**
- * Hook to register and manage the image authentication Service Worker
- * Returns whether the service worker is ready
+ * Context for sharing signing key manager across components
  */
-export function useImageAuth(): boolean {
+interface ImageAuthContextValue {
+  signingKeyManager: SigningKeyManager | null;
+  signingKey: ClientSigningKey | null;
+  isReady: boolean;
+}
+
+const ImageAuthContext = createContext<ImageAuthContextValue>({
+  signingKeyManager: null,
+  signingKey: null,
+  isReady: false,
+});
+
+/**
+ * Provider component that manages signing key lifecycle
+ */
+export function ImageAuthProvider({ 
+  children, 
+  authService 
+}: { 
+  children: ReactNode; 
+  authService: AuthService;
+}): ReactElement {
+  const [signingKeyManager] = useState(() => new SigningKeyManager(authService));
+  const [signingKey, setSigningKey] = useState<ClientSigningKey | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Check if Service Workers are supported
-    if (!('serviceWorker' in navigator)) {
-      console.warn('Service Workers not supported in this browser');
-      setIsReady(true); // Continue anyway, images will work without auth
-      return;
-    }
+    let mounted = true;
 
-    let registration: ServiceWorkerRegistration | null = null;
-
-    const setupServiceWorker = async () => {
+    const initializeSigningKey = async () => {
       try {
-        // Register the service worker
-        console.log('[ImageAuth] Registering Service Worker...');
-        registration = await navigator.serviceWorker.register(SW_PATH, {
-          scope: '/',
-        });
-
-        console.log('[ImageAuth] Service Worker registered successfully:', registration.scope);
-        console.log('[ImageAuth] Service Worker state:', registration.active?.state);
-
-        // Wait for service worker to be active
-        await navigator.serviceWorker.ready;
-
-        // Set up auth token updates
-        const auth = getAuth();
+        // Check if user is authenticated
+        const currentUser = await authService.getCurrentUser();
         
-        // Send initial token if user is logged in
-        if (auth.currentUser) {
-          console.log('[ImageAuth] Current user found:', auth.currentUser.uid);
-          const token = await auth.currentUser.getIdToken();
-          console.log('[ImageAuth] Got initial token, length:', token.length);
-          sendTokenToServiceWorker(token);
+        if (currentUser) {
+          console.debug('[ImageAuth] User authenticated, fetching signing key');
+          const key = await signingKeyManager.getSigningKey();
+          
+          if (mounted) {
+            setSigningKey(key);
+            setIsReady(true);
+            console.debug('[ImageAuth] Signing key ready, expires at:', key.expiresAt.toISOString());
+          }
         } else {
-          console.log('[ImageAuth] No current user at registration time');
+          console.debug('[ImageAuth] No authenticated user, images require share tokens');
+          setIsReady(true);
         }
-
-        // Listen for auth state changes
-        const unsubscribe = auth.onAuthStateChanged(async (user) => {
-          console.log('[ImageAuth] Auth state changed, user:', user ? user.uid : 'null');
-          if (user) {
-            try {
-              const token = await user.getIdToken();
-              console.log('[ImageAuth] Got token from auth state change, length:', token.length);
-              sendTokenToServiceWorker(token);
-            } catch (error) {
-              console.error('[ImageAuth] Failed to get auth token:', error);
-            }
-          } else {
-            console.log('[ImageAuth] User logged out, clearing token');
-            sendTokenToServiceWorker(null);
-          }
-        });
-
-        // Periodically refresh token (every 50 minutes, tokens expire after 1 hour)
-        const refreshInterval = setInterval(async () => {
-          const user = auth.currentUser;
-          if (user) {
-            try {
-              const token = await user.getIdToken(true); // Force refresh
-              sendTokenToServiceWorker(token);
-            } catch (error) {
-              console.error('[ImageAuth] Failed to refresh token:', error);
-            }
-          }
-        }, 50 * 60 * 1000);
-
-        setIsReady(true);
-
-        // Cleanup
-        return () => {
-          unsubscribe();
-          clearInterval(refreshInterval);
-        };
       } catch (error) {
-        console.error('[ImageAuth] Service Worker registration failed:', error);
-        console.error('[ImageAuth] Error details:', error instanceof Error ? error.message : error);
-        setIsReady(true); // Continue anyway
+        console.error('[ImageAuth] Failed to initialize signing key:', error);
+        if (mounted) {
+          setIsReady(true); // Mark ready even on error so app doesn't hang
+        }
       }
     };
 
-    setupServiceWorker();
+    initializeSigningKey();
+
+    // Note: Auth state change monitoring not implemented in contract
+    // Future: Add onAuthStateChanged to AuthService contract for real-time updates
 
     return () => {
-      // Cleanup will be handled by the inner return
+      mounted = false;
+      signingKeyManager.clear();
     };
-  }, []);
+  }, [authService, signingKeyManager]);
 
-  return isReady;
+  return createElement(
+    ImageAuthContext.Provider,
+    { value: { signingKeyManager, signingKey, isReady } },
+    children
+  );
 }
 
 /**
- * Send auth token to the Service Worker
+ * Hook to access image authentication context
+ * @returns Image auth context with signing key manager and current key
  */
-function sendTokenToServiceWorker(token: string | null): void {
-  console.log('[ImageAuth] sendTokenToServiceWorker called');
-  console.log('[ImageAuth] Service Worker controller exists:', !!navigator.serviceWorker.controller);
+export function useImageAuth(): ImageAuthContextValue {
+  const context = useContext(ImageAuthContext);
   
-  if (navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: 'UPDATE_TOKEN',
-      token,
-    });
-    console.log('[ImageAuth] Token sent to Service Worker, token length:', token ? token.length : 0);
-    console.log('[ImageAuth] Token preview:', token ? token.substring(0, 50) + '...' : 'null');
-  } else {
-    console.warn('[ImageAuth] No Service Worker controller available to send token to');
+  if (!context) {
+    throw new Error('useImageAuth must be used within ImageAuthProvider');
   }
+  
+  return context;
 }
