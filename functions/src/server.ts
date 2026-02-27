@@ -66,7 +66,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-const port = serverConfig.port;
+const port = process.env.PORT || serverConfig.port;
 app.listen(port, () => {
   logger.info(
     {
