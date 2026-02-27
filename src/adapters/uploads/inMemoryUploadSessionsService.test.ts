@@ -2,6 +2,7 @@ import {
   buildCanonicalObjectKey,
   InMemoryUploadSessionsService,
   isValidCanonicalObjectKey,
+  UploadSessionRateLimitError,
 } from './inMemoryUploadSessionsService';
 
 describe('InMemoryUploadSessionsService', () => {
@@ -67,5 +68,46 @@ describe('InMemoryUploadSessionsService', () => {
 
     const nothingLeft = await service.processNextDerivativeJob();
     expect(nothingLeft).toBeNull();
+  });
+
+  it('keeps upload session creation backward-compatible with rate limiting disabled by default', async () => {
+    const service = new InMemoryUploadSessionsService();
+
+    await expect(
+      Promise.all(
+        Array.from({ length: 20 }).map((_, index) =>
+          service.createUploadSession({ fileName: `photo-${index}.jpg` }),
+        ),
+      ),
+    ).resolves.toHaveLength(20);
+  });
+
+  it('enforces upload session creation rate limits when enabled', async () => {
+    let now = 1000;
+    const service = new InMemoryUploadSessionsService({
+      now: () => now,
+      rateLimit: {
+        enabled: true,
+        maxRequests: 2,
+        windowMs: 5_000,
+      },
+    });
+
+    await service.createUploadSession({ fileName: 'one.jpg' });
+    await service.createUploadSession({ fileName: 'two.jpg' });
+
+    await expect(service.createUploadSession({ fileName: 'three.jpg' })).rejects.toBeInstanceOf(
+      UploadSessionRateLimitError,
+    );
+
+    await expect(service.createUploadSession({ fileName: 'three.jpg' })).rejects.toMatchObject({
+      retryAfterSeconds: 5,
+    });
+
+    now += 5_001;
+
+    await expect(service.createUploadSession({ fileName: 'three.jpg' })).resolves.toMatchObject({
+      objectKey: expect.stringMatching(/^uploads\/\d{4}\/\d{2}\/\d{2}\/three.jpg$/),
+    });
   });
 });
