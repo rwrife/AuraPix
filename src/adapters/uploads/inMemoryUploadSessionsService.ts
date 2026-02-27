@@ -12,6 +12,11 @@ interface StoredFinalizeResult {
   result: FinalizeUploadResult;
 }
 
+interface StoredSessionResult {
+  fileName: string;
+  session: UploadSession;
+}
+
 interface UploadSessionRateLimitConfig {
   enabled: boolean;
   maxRequests: number;
@@ -72,6 +77,7 @@ export function isValidCanonicalObjectKey(key: string): boolean {
 export class InMemoryUploadSessionsService implements UploadSessionsService {
   private readonly sessions = new Map<string, UploadSession>();
   private readonly finalizeByIdempotency = new Map<string, StoredFinalizeResult>();
+  private readonly sessionsByClientRequestId = new Map<string, StoredSessionResult>();
   private readonly metadata = new Map<string, UploadMetadata>();
   private readonly jobs = new Map<string, DerivativeJobEnvelope>();
   private readonly now: () => number;
@@ -92,6 +98,18 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
       throw new Error('File name is required.');
     }
 
+    const clientRequestId = input.clientRequestId?.trim();
+    if (clientRequestId) {
+      const replay = this.sessionsByClientRequestId.get(clientRequestId);
+      if (replay) {
+        if (replay.fileName !== fileName) {
+          throw new Error('Client request id already used for a different file name.');
+        }
+
+        return replay.session;
+      }
+    }
+
     this.enforceUploadSessionRateLimit();
 
     const sessionId = `uplsess_${crypto.randomUUID()}`;
@@ -107,6 +125,14 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
     };
 
     this.sessions.set(sessionId, session);
+
+    if (clientRequestId) {
+      this.sessionsByClientRequestId.set(clientRequestId, {
+        fileName,
+        session,
+      });
+    }
+
     return session;
   }
 
