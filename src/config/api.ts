@@ -14,7 +14,7 @@ export const API_CONFIG = {
  */
 export const getApiUrl = (path: string): string => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${AURAPIX_API_BASE_URL}${normalizedPath}`;
+  return `${API_CONFIG.baseUrl}${normalizedPath}`;
 };
 
 // Export individual endpoint builders if needed
@@ -22,7 +22,7 @@ export const buildImageUrl = (libraryId: string, photoId: string, params?: {
   size?: 'small' | 'medium' | 'large' | 'original';
   format?: 'webp' | 'jpeg';
 }): string => {
-  const url = new URL(`${AURAPIX_API_BASE_URL}/images/${libraryId}/${photoId}`);
+  const url = new URL(`${API_CONFIG.baseUrl}/images/${libraryId}/${photoId}`);
   if (params?.size) url.searchParams.set('size', params.size);
   if (params?.format) url.searchParams.set('format', params.format);
   return url.toString();

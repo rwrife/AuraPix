@@ -29,7 +29,7 @@ router.post('/:libraryId', requireAuth, appCheckUploadMiddleware, uploadRateLimi
  * Serve a photo
  * GET /images/:libraryId/:photoId
  */
-router.get('/:libraryId/:photoId', async (req, res, next) => {
+router.get('/:libraryId/:photoId', requireAuth, async (req, res, next) => {
   try {
     await handleServeImage(req, res);
   } catch (error) {

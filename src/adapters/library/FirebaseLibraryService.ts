@@ -153,16 +153,16 @@ export class FirebaseLibraryService implements LibraryService {
     const storageRef = ref(this.storage, storagePath);
     await uploadString(storageRef, input.dataUrl, 'data_url');
 
-    // Verify object is readable in storage
-    await getDownloadURL(storageRef);
+    // Get authenticated download URL
+    const downloadURL = await getDownloadURL(storageRef);
 
-    // Create photo document
+    // Create photo document with download URL
     const photoData: Omit<Photo, 'id'> = {
       libraryId: input.libraryId,
       albumIds: [],
       originalName: input.originalName,
-      storagePath,
-      thumbnailPath: getThumbnailPath(storagePath),
+      storagePath: downloadURL, // Store the authenticated download URL instead of path
+      thumbnailPath: downloadURL, // Use same URL for thumbnail for now
       status: 'ready' as const,
       metadata: (input.metadata as Photo['metadata']) || null,
       createdAt: new Date().toISOString(),

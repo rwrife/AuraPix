@@ -28,15 +28,20 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    console.log('[AlbumsContext] Starting to load albums and folders...');
     Promise.all([albumsService.listAlbums(), albumsService.listFolders()])
       .then(([a, f]) => {
+        console.log('[AlbumsContext] Successfully loaded:', { albums: a.length, folders: f.length });
+        console.log('[AlbumsContext] Albums:', a);
+        console.log('[AlbumsContext] Folders:', f);
         if (!cancelled) {
           setAlbums(a);
           setFolders(f);
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[AlbumsContext] Error loading albums:', err);
         if (!cancelled) {
           setError('Unable to load albums.');
           setLoading(false);
