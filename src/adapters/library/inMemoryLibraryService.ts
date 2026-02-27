@@ -51,6 +51,10 @@ function applyCollectionFilter(photos: Photo[], collection?: LibraryQuickCollect
     return photos.filter((photo) => photo.isFavorite);
   }
 
+  if (collection === 'tagged') {
+    return photos.filter((photo) => photo.tags.length > 0);
+  }
+
   if (collection === 'untagged') {
     return photos.filter((photo) => photo.tags.length === 0);
   }

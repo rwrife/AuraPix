@@ -153,8 +153,8 @@ export class FirebaseLibraryService implements LibraryService {
     const storageRef = ref(this.storage, storagePath);
     await uploadString(storageRef, input.dataUrl, 'data_url');
 
-    // Get download URL
-    const downloadUrl = await getDownloadURL(storageRef);
+    // Verify object is readable in storage
+    await getDownloadURL(storageRef);
 
     // Create photo document
     const photoData: Omit<Photo, 'id'> = {

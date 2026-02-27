@@ -22,7 +22,7 @@ describe('quickViewPreferences', () => {
 
   it('saves and loads preferences for a library id', () => {
     const preferences: LibraryQuickViewPreferences = {
-      quickCollection: 'favorites',
+      quickCollection: 'tagged',
       activeTagFilter: 'trip',
       cameraMakeFilter: 'Canon',
       gridMode: 'large',

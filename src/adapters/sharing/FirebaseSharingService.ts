@@ -20,27 +20,33 @@ export class FirebaseSharingService implements SharingService {
   // All methods throw "not implemented" for now
   // This allows the app to run while sharing features are developed
 
-  async createShareLink(_input: CreateShareLinkInput): Promise<ShareLink> {
+  async createShareLink(input: CreateShareLinkInput): Promise<ShareLink> {
+    void input;
     throw new Error('Sharing not yet implemented');
   }
 
-  async listShareLinks(_resourceId: string): Promise<ShareLink[]> {
+  async listShareLinks(resourceId: string): Promise<ShareLink[]> {
+    void resourceId;
     throw new Error('Sharing not yet implemented');
   }
 
-  async revokeShareLink(_linkId: string): Promise<void> {
+  async revokeShareLink(linkId: string): Promise<void> {
+    void linkId;
     throw new Error('Sharing not yet implemented');
   }
 
-  async resolveShareLink(_input: ResolveShareLinkInput): Promise<ShareLink | null> {
+  async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
+    void input;
     throw new Error('Sharing not yet implemented');
   }
 
-  async resolveShareDownload(_input: ResolveShareDownloadInput): Promise<ShareDownloadResolution | null> {
+  async resolveShareDownload(input: ResolveShareDownloadInput): Promise<ShareDownloadResolution | null> {
+    void input;
     throw new Error('Sharing not yet implemented');
   }
 
-  async listAccessEvents(_resourceId: string): Promise<ShareAccessEvent[]> {
+  async listAccessEvents(resourceId: string): Promise<ShareAccessEvent[]> {
+    void resourceId;
     throw new Error('Sharing not yet implemented');
   }
 }

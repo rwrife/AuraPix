@@ -35,7 +35,7 @@ export function LibraryPage() {
     initialQuickViewPreferences.cameraMakeFilter
   );
   const [quickCollection, setQuickCollection] = useState<
-    'all' | 'favorites' | 'untagged' | 'recent'
+    'all' | 'favorites' | 'tagged' | 'untagged' | 'recent'
   >(initialQuickViewPreferences.quickCollection);
   const [activeTagFilter, setActiveTagFilter] = useState<string>(
     initialQuickViewPreferences.activeTagFilter
@@ -304,6 +304,13 @@ export function LibraryPage() {
               onClick={() => setQuickCollection('favorites')}
             >
               Favorites
+            </button>
+            <button
+              className={`btn-ghost btn-sm${quickCollection === 'tagged' ? ' active' : ''}`}
+              title="Show tagged photos"
+              onClick={() => setQuickCollection('tagged')}
+            >
+              Tagged
             </button>
             <button
               className={`btn-ghost btn-sm${quickCollection === 'untagged' ? ' active' : ''}`}

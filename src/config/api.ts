@@ -18,6 +18,11 @@ export const API_CONFIG = {
   },
 } as const;
 
+export const getApiUrl = (path: string): string => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${AURAPIX_API_BASE_URL}${normalizedPath}`;
+};
+
 // Export individual endpoint builders if needed
 export const buildImageUrl = (libraryId: string, photoId: string, params?: {
   size?: 'small' | 'medium' | 'large' | 'original';
