@@ -34,15 +34,14 @@ export class FirebaseSharingService implements SharingService {
     const token = nanoid(32); // Generate unique token
     const now = new Date().toISOString();
 
-    // Build complete policy with defaults
-    const policy: SharePolicy = {
-      permission: input.policy.permission || 'view',
-      expiresAt: input.policy.expiresAt || null,
+    const policy = this.normalizePolicy({
+      permission: input.policy.permission ?? 'view',
+      expiresAt: input.policy.expiresAt ?? null,
       passwordProtected: !!input.password,
-      maxUses: input.policy.maxUses || null,
-      downloadPolicy: input.policy.downloadPolicy || 'derivative_only',
-      watermarkEnabled: input.policy.watermarkEnabled ?? false,
-    };
+      maxUses: input.policy.maxUses ?? null,
+      downloadPolicy: input.policy.downloadPolicy,
+      watermarkEnabled: input.policy.watermarkEnabled,
+    });
 
     const shareLink: Omit<ShareLink, 'id'> = {
       token,
@@ -108,10 +107,10 @@ export class FirebaseSharingService implements SharingService {
 
     const linkDoc = existing.docs[0];
     const current = { id: linkDoc.id, ...linkDoc.data() } as ShareLink;
-    const nextPolicy: SharePolicy = {
+    const nextPolicy = this.normalizePolicy({
       ...current.policy,
       ...input.policy,
-    };
+    });
 
     await updateDoc(docRef, {
       policy: nextPolicy,
@@ -258,6 +257,30 @@ export class FirebaseSharingService implements SharingService {
       id: doc.id,
       ...doc.data(),
     })) as ShareAccessEvent[];
+  }
+
+  private normalizePolicy(input: {
+    permission: SharePolicy['permission'];
+    expiresAt: SharePolicy['expiresAt'];
+    passwordProtected: SharePolicy['passwordProtected'];
+    maxUses: SharePolicy['maxUses'];
+    downloadPolicy?: SharePolicy['downloadPolicy'];
+    watermarkEnabled?: SharePolicy['watermarkEnabled'];
+  }): SharePolicy {
+    const downloadPolicy =
+      input.permission === 'download'
+        ? (input.downloadPolicy ?? 'original_and_derivative')
+        : 'none';
+
+    return {
+      permission: input.permission,
+      expiresAt: input.expiresAt,
+      passwordProtected: input.passwordProtected,
+      maxUses: input.maxUses,
+      downloadPolicy,
+      watermarkEnabled:
+        downloadPolicy === 'none' ? false : (input.watermarkEnabled ?? false),
+    };
   }
 
   /**
