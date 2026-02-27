@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Photo } from '../domain/library/types';
 import { getOriginalUrl, getLargeThumbnailUrl } from '../utils/imageUrls';
+import { useImageAuth } from '../hooks/useImageAuth';
 
 /**
  * Helper to determine if photo uses legacy storage (data URLs) or API-based storage
@@ -54,6 +55,7 @@ export function PhotoViewer({
   const [contrast, setContrast] = useState(0);
   const [saturation, setSaturation] = useState(0);
   const filmstripRef = useRef<HTMLDivElement>(null);
+  const { signingKey } = useImageAuth();
   const current = photos[currentIndex];
 
   // Expose viewer state to parent via ref
@@ -149,7 +151,7 @@ export function PhotoViewer({
           <div className="photo-viewer-image-wrap">
             <img
               key={current.id}
-              src={isLegacyPhoto(current) ? current.storagePath : getOriginalUrl(current.libraryId, current.id)}
+              src={isLegacyPhoto(current) ? current.storagePath : (signingKey ? getOriginalUrl(current.libraryId, current.id, signingKey) : '')}
               alt={current.originalName}
               className="photo-viewer-image"
             />
@@ -175,7 +177,7 @@ export function PhotoViewer({
               title={photo.originalName}
             >
               <img
-                src={isLegacyPhoto(photo) ? (photo.thumbnailPath ?? photo.storagePath) : getLargeThumbnailUrl(photo.libraryId, photo.id)}
+                src={isLegacyPhoto(photo) ? (photo.thumbnailPath ?? photo.storagePath) : (signingKey ? getLargeThumbnailUrl(photo.libraryId, photo.id, signingKey) : '')}
                 alt={photo.originalName}
                 loading="lazy"
               />

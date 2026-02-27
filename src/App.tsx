@@ -10,7 +10,7 @@ import { ServiceProvider } from './services/ServiceContext';
 import { HealthBanner } from './components/HealthBanner';
 import { initializeHealthCheck, cleanupHealthCheck } from './services/healthCheck';
 import { setupHealthDebug } from './utils/debugHealth';
-import { useImageAuth } from './hooks/useImageAuth';
+import { ImageAuthProvider } from './hooks/useImageAuth';
 
 export default function App() {
   const services = useMemo(() => {
@@ -21,9 +21,6 @@ export default function App() {
     }
     return createLocalServices();
   }, []);
-
-  // Initialize image authentication Service Worker
-  useImageAuth();
 
   // Initialize health check monitoring
   useEffect(() => {
@@ -37,20 +34,22 @@ export default function App() {
 
   return (
     <ServiceProvider services={services}>
-      <HealthBanner />
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Navigate to="/library" replace />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/albums" element={<AlbumsPage />} />
-            <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
-            <Route path="/albums/folders/:folderId" element={<FolderDetailPage />} />
-            {/* Catch-all: redirect unknown paths to library */}
-            <Route path="*" element={<Navigate to="/library" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <ImageAuthProvider authService={services.auth}>
+        <HealthBanner />
+        <BrowserRouter>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route index element={<Navigate to="/library" replace />} />
+              <Route path="/library" element={<LibraryPage />} />
+              <Route path="/albums" element={<AlbumsPage />} />
+              <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
+              <Route path="/albums/folders/:folderId" element={<FolderDetailPage />} />
+              {/* Catch-all: redirect unknown paths to library */}
+              <Route path="*" element={<Navigate to="/library" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ImageAuthProvider>
     </ServiceProvider>
   );
 }

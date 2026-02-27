@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+import { randomBytes } from 'crypto';
 
 // Load environment variables
 config();
@@ -59,4 +60,24 @@ export const securityConfig = {
     enforceUploads: process.env.APP_CHECK_ENFORCE_UPLOADS === 'true',
     bypassTokens: process.env.APP_CHECK_BYPASS_TOKENS || '',
   },
+} as const;
+
+// Signing configuration for HMAC-signed URLs
+// In production, SIGNING_MASTER_SECRET MUST be set in environment variables
+// The secret should be generated during deployment and stored securely
+export const signingConfig = {
+  keyExpirationSeconds: parseInt(process.env.SIGNING_KEY_EXPIRATION || '3600', 10),
+  urlExpirationSeconds: parseInt(process.env.SIGNED_URL_EXPIRATION || '600', 10),
+  masterSecret: process.env.SIGNING_MASTER_SECRET || (() => {
+    // Only generate random secret in development/local mode
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'SIGNING_MASTER_SECRET environment variable is required in production. ' +
+        'Generate a secret with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+      );
+    }
+    const generated = randomBytes(32).toString('hex');
+    console.warn('[DEV] Generated temporary signing secret. Set SIGNING_MASTER_SECRET in production.');
+    return generated;
+  })(),
 } as const;

@@ -118,4 +118,12 @@ export class LocalJsonData implements DataAdapter {
     const collectionData = await this.loadCollection(collection);
     return Object.keys(collectionData);
   }
+
+  async getPhoto(libraryId: string, photoId: string): Promise<any | null> {
+    // In local mode, photos are stored in a nested structure
+    // We'll construct the collection path as "libraries/{libraryId}/photos"
+    const photosCollection = `libraries_${libraryId}_photos`;
+    const collectionData = await this.loadCollection(photosCollection);
+    return collectionData[photoId] ?? null;
+  }
 }

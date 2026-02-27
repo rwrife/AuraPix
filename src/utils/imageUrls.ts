@@ -1,31 +1,38 @@
 /**
- * Image URL utilities for building API-based image URLs
+ * Image URL utilities for building HMAC-signed image URLs
  * 
- * Note: Authentication is handled by the Service Worker (image-auth-sw.js)
- * which intercepts requests and adds the auth token automatically.
+ * Uses cryptographically signed URLs to authenticate image requests.
+ * Each URL is signed client-side using a signing key from the backend
+ * and validated server-side with short expiration times.
  */
 
 import { getApiUrl } from '../config/api';
+import { generateSignedImageUrl } from './signedUrls';
+import type { ClientSigningKey } from '../domain/imageAuth/types';
 
 export type ThumbnailSize = 'small' | 'medium' | 'large' | 'original';
 export type ImageFormat = 'webp' | 'jpeg';
 
 /**
- * Build an image URL for the backend API
- * The Service Worker will automatically add authentication token to requests
+ * Build a signed image URL for the backend API
+ * Requires a valid signing key from ImageAuthProvider
  */
 export function buildImageUrl(
   libraryId: string,
   photoId: string,
+  signingKey: ClientSigningKey,
   size: ThumbnailSize = 'medium',
   format: ImageFormat = 'webp'
 ): string {
-  const params = new URLSearchParams({
-    size,
-    format,
-  });
-  
-  return getApiUrl(`/images/${libraryId}/${photoId}?${params.toString()}`);
+  return generateSignedImageUrl(
+    {
+      libraryId,
+      photoId,
+      size,
+      format,
+    },
+    signingKey
+  );
 }
 
 /**
@@ -34,9 +41,10 @@ export function buildImageUrl(
 export function getThumbnailUrl(
   libraryId: string,
   photoId: string,
+  signingKey: ClientSigningKey,
   format: ImageFormat = 'webp'
 ): string {
-  return buildImageUrl(libraryId, photoId, 'medium', format);
+  return buildImageUrl(libraryId, photoId, signingKey, 'medium', format);
 }
 
 /**
@@ -45,9 +53,10 @@ export function getThumbnailUrl(
 export function getBlurPlaceholderUrl(
   libraryId: string,
   photoId: string,
+  signingKey: ClientSigningKey,
   format: ImageFormat = 'jpeg'
 ): string {
-  return buildImageUrl(libraryId, photoId, 'small', format);
+  return buildImageUrl(libraryId, photoId, signingKey, 'small', format);
 }
 
 /**
@@ -56,9 +65,10 @@ export function getBlurPlaceholderUrl(
 export function getOriginalUrl(
   libraryId: string,
   photoId: string,
+  signingKey: ClientSigningKey,
   format: ImageFormat = 'jpeg'
 ): string {
-  return buildImageUrl(libraryId, photoId, 'original', format);
+  return buildImageUrl(libraryId, photoId, signingKey, 'original', format);
 }
 
 /**
@@ -67,7 +77,8 @@ export function getOriginalUrl(
 export function getLargeThumbnailUrl(
   libraryId: string,
   photoId: string,
+  signingKey: ClientSigningKey,
   format: ImageFormat = 'webp'
 ): string {
-  return buildImageUrl(libraryId, photoId, 'large', format);
+  return buildImageUrl(libraryId, photoId, signingKey, 'large', format);
 }

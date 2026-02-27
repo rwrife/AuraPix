@@ -51,4 +51,10 @@ export interface DataAdapter {
    * List all document IDs in a collection
    */
   listIds(collection: string): Promise<string[]>;
+
+  /**
+   * Fetch a photo by libraryId and photoId
+   * Convenience method for getting photos from the photos subcollection
+   */
+  getPhoto(libraryId: string, photoId: string): Promise<any | null>;
 }

@@ -10,6 +10,7 @@ import type { Photo } from '../domain/library/types';
 import { PhotoViewer, type ViewerState } from './PhotoViewer';
 import type { GridMode } from './photoGalleryConfig';
 import { getBlurPlaceholderUrl, getThumbnailUrl } from '../utils/imageUrls';
+import { useImageAuth } from '../hooks/useImageAuth';
 
 type ViewMode = GridMode | 'filmstrip';
 
@@ -28,6 +29,7 @@ function LazyImage({ photo, className, alt }: LazyImageProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const { signingKey } = useImageAuth();
 
   // Check if this is a legacy in-memory photo (data URLs or blob URLs)
   const isLegacyPhoto = photo.storagePath?.startsWith('data:') || photo.storagePath?.startsWith('blob:');
@@ -57,13 +59,13 @@ function LazyImage({ photo, className, alt }: LazyImageProps) {
     };
   }, []);
 
-  // Use legacy URLs directly for in-memory photos, otherwise use API endpoints
+  // Use legacy URLs directly for in-memory photos, otherwise use API endpoints with signing key
   const blurUrl = isLegacyPhoto
     ? (photo.thumbnailPath ?? photo.storagePath)
-    : getBlurPlaceholderUrl(photo.libraryId, photo.id);
+    : (signingKey ? getBlurPlaceholderUrl(photo.libraryId, photo.id, signingKey) : '');
   const thumbnailUrl = isLegacyPhoto
     ? (photo.thumbnailPath ?? photo.storagePath)
-    : getThumbnailUrl(photo.libraryId, photo.id);
+    : (signingKey ? getThumbnailUrl(photo.libraryId, photo.id, signingKey) : '');
 
   return (
     <>
