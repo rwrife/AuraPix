@@ -8,6 +8,7 @@ import type { Photo } from '../domain/library/types';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
 import { useLibrary } from '../features/library/useLibrary';
+import { useSharing } from '../features/sharing/useSharing';
 import { useServices } from '../services/useServices';
 
 function toLibraryId(userId: string) {
@@ -50,6 +51,11 @@ export function AlbumDetailPage() {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const viewerStateRef = useRef<ViewerState | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
+  const [shareExpiryInput, setShareExpiryInput] = useState('');
+  const [sharePasswordInput, setSharePasswordInput] = useState('');
+  const [shareError, setShareError] = useState<string | null>(null);
+
+  const { links: shareLinks, loading: shareLoading, createLink, revokeLink } = useSharing(albumId ?? '');
 
   const album = albums.find((a) => a.id === albumId) ?? null;
 
@@ -141,6 +147,21 @@ export function AlbumDetailPage() {
     setSaving(false);
   }
 
+  async function handleCreateShareLink() {
+    if (!albumId) return;
+    setShareError(null);
+
+    try {
+      await createLink('album', albumId, {
+        expiresAt: shareExpiryInput ? new Date(shareExpiryInput).toISOString() : undefined,
+        password: sharePasswordInput || undefined,
+      });
+      setSharePasswordInput('');
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to create share link.');
+    }
+  }
+
   const hasSettingsChanges =
     album != null &&
     (nameInput.trim() !== album.name ||
@@ -194,6 +215,65 @@ export function AlbumDetailPage() {
           </div>
         )}
       </div>
+
+      <section className="settings-panel" style={{ marginBottom: 12 }}>
+        <h2 className="settings-heading">Share album</h2>
+        <p className="state-message" style={{ marginTop: 0 }}>
+          Create private links with optional expiry/password. Existing links can be revoked.
+        </p>
+        <div className="settings-grid" style={{ alignItems: 'end' }}>
+          <label className="settings-label" htmlFor="share-expiry">
+            Expires at
+          </label>
+          <input
+            id="share-expiry"
+            type="datetime-local"
+            value={shareExpiryInput}
+            onChange={(e) => setShareExpiryInput(e.target.value)}
+          />
+          <label className="settings-label" htmlFor="share-password">
+            Password (optional)
+          </label>
+          <input
+            id="share-password"
+            type="password"
+            value={sharePasswordInput}
+            onChange={(e) => setSharePasswordInput(e.target.value)}
+            placeholder="Leave blank for no password"
+          />
+          <button className="btn-primary" onClick={handleCreateShareLink}>
+            Create share link
+          </button>
+        </div>
+
+        {shareError && <p className="error">{shareError}</p>}
+
+        {shareLoading ? (
+          <p className="state-message">Loading links…</p>
+        ) : shareLinks.length === 0 ? (
+          <p className="state-message">No active share links yet.</p>
+        ) : (
+          <ul className="album-list">
+            {shareLinks.map((link) => (
+              <li key={link.id} className="album-item">
+                <div>
+                  <div className="album-name">Token: {link.token}</div>
+                  <div className="album-date">
+                    Uses: {link.useCount}
+                    {link.policy.expiresAt
+                      ? ` • Expires ${new Date(link.policy.expiresAt).toLocaleString()}`
+                      : ' • No expiry'}
+                    {link.policy.passwordProtected ? ' • Password protected' : ''}
+                  </div>
+                </div>
+                <button className="btn-ghost btn-sm" onClick={() => revokeLink(link.id)}>
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div
         className={`page-with-toolbar${isFilmstrip ? ' page--viewer-mode' : ''}`}
