@@ -3,6 +3,7 @@ import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
   ResolveShareLinkInput,
+  UpdateShareLinkPolicyInput,
   ShareAccessEvent,
   ShareDownloadResolution,
   ShareLink,
@@ -67,19 +68,51 @@ export class InMemorySharingService implements SharingService {
     this.links = this.links.map((l) => (l.id === linkId ? { ...l, revoked: true } : l));
   }
 
+  async updateShareLinkPolicy(input: UpdateShareLinkPolicyInput): Promise<ShareLink> {
+    const link = this.links.find((l) => l.id === input.linkId);
+    if (!link) {
+      throw new Error('Share link not found.');
+    }
+
+    const permission = input.policy.permission ?? link.policy.permission;
+    const nextDownloadPolicy =
+      input.policy.downloadPolicy ??
+      (permission === 'download'
+        ? link.policy.downloadPolicy === 'none'
+          ? 'original_and_derivative'
+          : link.policy.downloadPolicy
+        : 'none');
+
+    const nextPolicy = {
+      ...link.policy,
+      ...input.policy,
+      permission,
+      downloadPolicy: nextDownloadPolicy,
+      watermarkEnabled:
+        nextDownloadPolicy === 'none'
+          ? false
+          : input.policy.watermarkEnabled ?? link.policy.watermarkEnabled,
+    };
+
+    const updated = { ...link, policy: nextPolicy };
+    this.links = this.links.map((l) => (l.id === link.id ? updated : l));
+    return updated;
+  }
+
   async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
-    const link = this.validateAccess(input);
+    const link = this.validateAccess(input, 'link_resolve');
     if (!link) {
       return null;
     }
 
-    return this.markGranted(link, input.token, 'granted');
+    return this.markGranted(link, input.token, 'granted', 'link_resolve');
   }
 
   async resolveShareDownload(
     input: ResolveShareDownloadInput
   ): Promise<ShareDownloadResolution | null> {
-    const link = this.validateAccess(input);
+    const attempt = input.assetKind === 'original' ? 'download_original' : 'download_derivative';
+    const link = this.validateAccess(input, attempt);
     if (!link) {
       return null;
     }
@@ -87,7 +120,8 @@ export class InMemorySharingService implements SharingService {
     if (link.policy.downloadPolicy === 'none') {
       this.recordEvent({
         token: input.token,
-        linkId: link.id,
+        link,
+        attempt,
         outcome: 'denied_download_disallowed',
       });
       return null;
@@ -96,13 +130,14 @@ export class InMemorySharingService implements SharingService {
     if (link.policy.downloadPolicy === 'derivative_only' && input.assetKind === 'original') {
       this.recordEvent({
         token: input.token,
-        linkId: link.id,
+        link,
+        attempt,
         outcome: 'denied_download_disallowed',
       });
       return null;
     }
 
-    const resolved = this.markGranted(link, input.token, 'granted_download');
+    const resolved = this.markGranted(link, input.token, 'granted_download', attempt);
 
     return {
       link: resolved,
@@ -111,25 +146,25 @@ export class InMemorySharingService implements SharingService {
     };
   }
 
-  private validateAccess(input: ResolveShareLinkInput): ShareLink | null {
+  private validateAccess(input: ResolveShareLinkInput, attempt: ShareAccessEvent['attempt']): ShareLink | null {
     const link = this.links.find((l) => l.token === input.token);
     if (!link) {
-      this.recordEvent({ token: input.token, linkId: null, outcome: 'denied_not_found' });
+      this.recordEvent({ token: input.token, attempt, link: null, outcome: 'denied_not_found' });
       return null;
     }
 
     if (link.revoked) {
-      this.recordEvent({ token: input.token, linkId: link.id, outcome: 'denied_revoked' });
+      this.recordEvent({ token: input.token, attempt, link, outcome: 'denied_revoked' });
       return null;
     }
 
     if (link.policy.expiresAt && new Date(link.policy.expiresAt) < new Date()) {
-      this.recordEvent({ token: input.token, linkId: link.id, outcome: 'denied_expired' });
+      this.recordEvent({ token: input.token, attempt, link, outcome: 'denied_expired' });
       return null;
     }
 
     if (link.policy.maxUses !== null && link.useCount >= link.policy.maxUses) {
-      this.recordEvent({ token: input.token, linkId: link.id, outcome: 'denied_max_uses' });
+      this.recordEvent({ token: input.token, attempt, link, outcome: 'denied_max_uses' });
       return null;
     }
 
@@ -138,7 +173,8 @@ export class InMemorySharingService implements SharingService {
       if (!expected || input.password !== expected) {
         this.recordEvent({
           token: input.token,
-          linkId: link.id,
+          attempt,
+          link,
           outcome: 'denied_invalid_password',
         });
         return null;
@@ -151,27 +187,32 @@ export class InMemorySharingService implements SharingService {
   private markGranted(
     link: ShareLink,
     token: string,
-    outcome: Extract<ShareAccessEvent['outcome'], 'granted' | 'granted_download'>
+    outcome: Extract<ShareAccessEvent['outcome'], 'granted' | 'granted_download'>,
+    attempt: ShareAccessEvent['attempt']
   ): ShareLink {
     const resolved = { ...link, useCount: link.useCount + 1 };
 
     // Increment use count
     this.links = this.links.map((l) => (l.id === link.id ? resolved : l));
-    this.recordEvent({ token, linkId: link.id, outcome });
+    this.recordEvent({ token, attempt, link: resolved, outcome });
 
     return resolved;
   }
 
   private recordEvent(input: {
     token: string;
-    linkId: string | null;
+    link: ShareLink | null;
+    attempt: ShareAccessEvent['attempt'];
     outcome: ShareAccessEvent['outcome'];
   }): void {
     this.events = [
       {
         id: `share-event-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
         token: input.token,
-        linkId: input.linkId,
+        linkId: input.link?.id ?? null,
+        resourceType: input.link?.resourceType ?? null,
+        resourceId: input.link?.resourceId ?? null,
+        attempt: input.attempt,
         outcome: input.outcome,
         occurredAt: new Date().toISOString(),
       },

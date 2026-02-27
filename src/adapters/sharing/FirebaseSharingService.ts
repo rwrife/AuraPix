@@ -16,6 +16,7 @@ import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
   ResolveShareLinkInput,
+  UpdateShareLinkPolicyInput,
   ShareAccessEvent,
   ShareAccessOutcome,
   ShareDownloadResolution,
@@ -153,7 +154,6 @@ export class FirebaseSharingService implements SharingService {
     await this.logAccessEvent(input.token, link.id, 'granted');
 
     return link;
-  }
 
   async resolveShareDownload(
     input: ResolveShareDownloadInput

@@ -1,6 +1,9 @@
 import {
+  deleteQuickViewPreset,
   loadQuickViewPreferences,
+  loadSavedQuickViewPresets,
   saveQuickViewPreferences,
+  saveQuickViewPreset,
   type LibraryQuickViewPreferences,
 } from './quickViewPreferences';
 
@@ -50,5 +53,35 @@ describe('quickViewPreferences', () => {
       cameraMakeFilter: 'Nikon',
       gridMode: 'medium',
     });
+  });
+
+  it('saves and loads named quick view presets', () => {
+    const preferences: LibraryQuickViewPreferences = {
+      quickCollection: 'favorites',
+      activeTagFilter: 'family',
+      cameraMakeFilter: 'Fujifilm',
+      gridMode: 'small',
+    };
+
+    const presets = saveQuickViewPreset(LIBRARY_ID, 'Family Favorites', preferences);
+
+    expect(presets).toHaveLength(1);
+    expect(loadSavedQuickViewPresets(LIBRARY_ID)[0]).toMatchObject({
+      name: 'Family Favorites',
+      preferences,
+    });
+  });
+
+  it('deletes a quick view preset by id', () => {
+    const presets = saveQuickViewPreset(LIBRARY_ID, 'To Delete', {
+      quickCollection: 'recent',
+      activeTagFilter: '',
+      cameraMakeFilter: '',
+      gridMode: 'medium',
+    });
+
+    const next = deleteQuickViewPreset(LIBRARY_ID, presets[0].id);
+    expect(next).toEqual([]);
+    expect(loadSavedQuickViewPresets(LIBRARY_ID)).toEqual([]);
   });
 });

@@ -124,6 +124,9 @@ npm --prefix functions test
 
 # Run with coverage
 npm run test:coverage
+
+# Validate API contract + breaking-change gate
+npm run contract:check
 ```
 
 ## Architecture
@@ -136,7 +139,7 @@ AuraPix follows a clean architecture approach with:
 - **Authentication**: Firebase Authentication
 - **Deployment**: Firebase App Hosting + Cloud Functions
 
-See [docs/](./docs/) for detailed architecture documentation.
+See [docs/](./docs/) for detailed architecture documentation, including [layer boundaries and import guardrails](./docs/ARCHITECTURE_BOUNDARIES.md).
 
 ## Contributing
 

@@ -26,6 +26,9 @@ describe('InMemorySharingService', () => {
       'denied_invalid_password',
       'denied_invalid_password',
     ]);
+    expect(events.every((event) => event.attempt === 'link_resolve')).toBe(true);
+    expect(events.every((event) => event.resourceType === 'album')).toBe(true);
+    expect(events.every((event) => event.resourceId === 'album-1')).toBe(true);
   });
 
   it('blocks max-use links after quota and records denial', async () => {
@@ -91,5 +94,34 @@ describe('InMemorySharingService', () => {
       'granted_download',
       'denied_download_disallowed',
     ]);
+    expect(events.map((event) => event.attempt)).toEqual([
+      'download_derivative',
+      'download_derivative',
+      'download_original',
+    ]);
   });
 });
+
+
+  it('updates share link download policy with safe defaults', async () => {
+    const service = new InMemorySharingService();
+
+    const link = await service.createShareLink({
+      resourceType: 'album',
+      resourceId: 'album-2',
+      policy: { permission: 'download', downloadPolicy: 'derivative_only', watermarkEnabled: true },
+    });
+
+    const disabledDownloads = await service.updateShareLinkPolicy({
+      linkId: link.id,
+      policy: { downloadPolicy: 'none' },
+    });
+    expect(disabledDownloads.policy.downloadPolicy).toBe('none');
+    expect(disabledDownloads.policy.watermarkEnabled).toBe(false);
+
+    const restored = await service.updateShareLinkPolicy({
+      linkId: link.id,
+      policy: { permission: 'download' },
+    });
+    expect(restored.policy.downloadPolicy).toBe('original_and_derivative');
+  });

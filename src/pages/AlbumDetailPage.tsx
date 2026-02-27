@@ -5,6 +5,11 @@ import { GRID_BUTTONS, type GridMode } from '../components/photoGalleryConfig';
 import type { ViewerState } from '../components/PhotoViewer';
 import { UploadModal } from '../components/UploadModal';
 import type { Photo } from '../domain/library/types';
+import type {
+  ResolveShareDownloadInput,
+  ShareDownloadPolicy,
+  SharePermission,
+} from '../domain/sharing/types';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
 import { useLibrary } from '../features/library/useLibrary';
@@ -53,13 +58,44 @@ export function AlbumDetailPage() {
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
   const [shareExpiryInput, setShareExpiryInput] = useState('');
   const [sharePasswordInput, setSharePasswordInput] = useState('');
+  const [sharePermissionInput, setSharePermissionInput] = useState<SharePermission>('view');
+  const [shareDownloadPolicyInput, setShareDownloadPolicyInput] =
+    useState<ShareDownloadPolicy>('none');
+  const [shareWatermarkEnabled, setShareWatermarkEnabled] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareDownloadProbeMessage, setShareDownloadProbeMessage] = useState<Record<string, string>>(
+    {}
+  );
+  const [shareDownloadProbeBusy, setShareDownloadProbeBusy] = useState<Record<string, boolean>>({});
 
-  const { links: shareLinks, loading: shareLoading, createLink, revokeLink } = useSharing(albumId ?? '');
+  const {
+    links: shareLinks,
+    accessEvents: shareAccessEvents,
+    loading: shareLoading,
+    loadingAccessEvents,
+    accessEventsError,
+    createLink,
+    revokeLink,
+    updateLinkPolicy,
+    refreshAccessEvents,
+    resolveDownload,
+  } = useSharing(albumId ?? '');
 
   const album = albums.find((a) => a.id === albumId) ?? null;
 
   const albumPhotos = allPhotos.filter((p) => albumId != null && p.albumIds.includes(albumId));
+
+  useEffect(() => {
+    if (sharePermissionInput !== 'download') {
+      setShareDownloadPolicyInput('none');
+      setShareWatermarkEnabled(false);
+      return;
+    }
+
+    if (shareDownloadPolicyInput === 'none') {
+      setShareDownloadPolicyInput('original_and_derivative');
+    }
+  }, [sharePermissionInput, shareDownloadPolicyInput]);
 
   useEffect(() => {
     if (!album) return;
@@ -147,6 +183,33 @@ export function AlbumDetailPage() {
     setSaving(false);
   }
 
+
+
+  async function toggleShareWatermark(linkId: string, enabled: boolean) {
+    setShareError(null);
+    try {
+      await updateLinkPolicy(linkId, { watermarkEnabled: enabled });
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to update share link.');
+    }
+  }
+
+  async function cycleShareDownloadPolicy(link: (typeof shareLinks)[number]) {
+    const sequence: ShareDownloadPolicy[] = ['none', 'derivative_only', 'original_and_derivative'];
+    const current = sequence.indexOf(link.policy.downloadPolicy);
+    const next = sequence[(current + 1) % sequence.length];
+
+    setShareError(null);
+    try {
+      await updateLinkPolicy(link.id, {
+        downloadPolicy: next,
+        watermarkEnabled: next === 'none' ? false : link.policy.watermarkEnabled,
+      });
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to update share link.');
+    }
+  }
+
   async function handleCreateShareLink() {
     if (!albumId) return;
     setShareError(null);
@@ -155,6 +218,9 @@ export function AlbumDetailPage() {
       await createLink('album', albumId, {
         expiresAt: shareExpiryInput ? new Date(shareExpiryInput).toISOString() : undefined,
         password: sharePasswordInput || undefined,
+        permission: sharePermissionInput,
+        downloadPolicy: shareDownloadPolicyInput,
+        watermarkEnabled: shareWatermarkEnabled,
       });
       setSharePasswordInput('');
     } catch (error) {
@@ -162,10 +228,59 @@ export function AlbumDetailPage() {
     }
   }
 
+  async function revokeExpiredLinks() {
+    if (expiredShareLinks.length === 0) return;
+
+    setShareError(null);
+    try {
+      await Promise.all(expiredShareLinks.map((link) => revokeLink(link.id)));
+      await refreshAccessEvents();
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to revoke expired links.');
+    }
+  }
+
+  async function probeShareDownload(
+    link: (typeof shareLinks)[number],
+    assetKind: ResolveShareDownloadInput['assetKind']
+  ) {
+    const probeKey = `${link.id}:${assetKind}`;
+    setShareDownloadProbeBusy((prev) => ({ ...prev, [probeKey]: true }));
+    setShareError(null);
+
+    try {
+      const password = link.policy.passwordProtected
+        ? (window.prompt(`Enter password for ${assetKind} download probe`, '') ?? undefined)
+        : undefined;
+
+      const resolution = await resolveDownload(link.token, assetKind, password);
+      const message = resolution
+        ? `${assetKind} download granted${resolution.watermarkApplied ? ' (watermarked)' : ''}`
+        : `${assetKind} download denied by policy`;
+      setShareDownloadProbeMessage((prev) => ({ ...prev, [probeKey]: message }));
+      await refreshAccessEvents();
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to probe share download policy.');
+    } finally {
+      setShareDownloadProbeBusy((prev) => ({ ...prev, [probeKey]: false }));
+    }
+  }
+
   const hasSettingsChanges =
     album != null &&
     (nameInput.trim() !== album.name ||
       (folderInput === '' ? null : folderInput) !== (album.folderId ?? null));
+
+  const grantedShareAccessCount = shareAccessEvents.filter((event) =>
+    event.outcome.startsWith('granted')
+  ).length;
+  const deniedShareAccessCount = shareAccessEvents.length - grantedShareAccessCount;
+  const nowMs = Date.now();
+  const expiredShareLinks = shareLinks.filter((link) => {
+    if (!link.policy.expiresAt) return false;
+    return new Date(link.policy.expiresAt).getTime() <= nowMs;
+  });
+  const expiredShareLinkIds = new Set(expiredShareLinks.map((link) => link.id));
 
   if (albumsLoading) return <p className="state-message">Loading album…</p>;
 
@@ -241,12 +356,67 @@ export function AlbumDetailPage() {
             onChange={(e) => setSharePasswordInput(e.target.value)}
             placeholder="Leave blank for no password"
           />
+
+          <label className="settings-label" htmlFor="share-permission">
+            Permission
+          </label>
+          <select
+            id="share-permission"
+            className="settings-select"
+            value={sharePermissionInput}
+            onChange={(e) => setSharePermissionInput(e.target.value as SharePermission)}
+          >
+            <option value="view">View only</option>
+            <option value="download">Download allowed</option>
+            <option value="collaborate">Collaborate</option>
+          </select>
+
+          <label className="settings-label" htmlFor="share-download-policy">
+            Download policy
+          </label>
+          <select
+            id="share-download-policy"
+            className="settings-select"
+            value={shareDownloadPolicyInput}
+            disabled={sharePermissionInput !== 'download'}
+            onChange={(e) => setShareDownloadPolicyInput(e.target.value as ShareDownloadPolicy)}
+          >
+            <option value="none">No downloads</option>
+            <option value="derivative_only">Derivative only</option>
+            <option value="original_and_derivative">Original + derivative</option>
+          </select>
+
+          <label className="settings-label" htmlFor="share-watermark">
+            Watermark derivatives
+          </label>
+          <input
+            id="share-watermark"
+            type="checkbox"
+            checked={shareWatermarkEnabled}
+            disabled={sharePermissionInput !== 'download' || shareDownloadPolicyInput === 'none'}
+            onChange={(e) => setShareWatermarkEnabled(e.target.checked)}
+          />
+
           <button className="btn-primary" onClick={handleCreateShareLink}>
             Create share link
           </button>
         </div>
 
         {shareError && <p className="error">{shareError}</p>}
+
+        {!shareLoading && shareLinks.length > 0 && (
+          <p className="album-date" style={{ marginTop: 8 }}>
+            {`Active links: ${shareLinks.length - expiredShareLinks.length} • Expired links: ${expiredShareLinks.length}`}
+            {expiredShareLinks.length > 0 && (
+              <>
+                {' '}
+                <button className="btn-ghost btn-sm" onClick={() => void revokeExpiredLinks()}>
+                  Revoke expired links
+                </button>
+              </>
+            )}
+          </p>
+        )}
 
         {shareLoading ? (
           <p className="state-message">Loading links…</p>
@@ -259,12 +429,60 @@ export function AlbumDetailPage() {
                 <div>
                   <div className="album-name">Token: {link.token}</div>
                   <div className="album-date">
-                    Uses: {link.useCount}
+                    {`Status: ${expiredShareLinkIds.has(link.id) ? 'expired' : 'active'}`}
+                    {` • Uses: ${link.useCount}`}
                     {link.policy.expiresAt
                       ? ` • Expires ${new Date(link.policy.expiresAt).toLocaleString()}`
                       : ' • No expiry'}
                     {link.policy.passwordProtected ? ' • Password protected' : ''}
+                    {` • Permission: ${link.policy.permission}`}
+                    {` • Download: ${link.policy.downloadPolicy}`}
+                    {link.policy.watermarkEnabled ? ' • Watermark derivatives' : ''}
                   </div>
+                  <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn-ghost btn-sm"
+                      onClick={() => void cycleShareDownloadPolicy(link)}
+                    >
+                      Cycle download policy
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={link.policy.downloadPolicy === 'none'}
+                      onClick={() => void toggleShareWatermark(link.id, !link.policy.watermarkEnabled)}
+                    >
+                      {link.policy.watermarkEnabled ? 'Disable watermark' : 'Enable watermark'}
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={!!shareDownloadProbeBusy[`${link.id}:original`]}
+                      onClick={() => void probeShareDownload(link, 'original')}
+                    >
+                      Probe original
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={!!shareDownloadProbeBusy[`${link.id}:derivative`]}
+                      onClick={() => void probeShareDownload(link, 'derivative')}
+                    >
+                      Probe derivative
+                    </button>
+                  </div>
+                  {(shareDownloadProbeMessage[`${link.id}:original`] ||
+                    shareDownloadProbeMessage[`${link.id}:derivative`]) && (
+                    <div className="album-date" style={{ marginTop: 6 }}>
+                      {shareDownloadProbeMessage[`${link.id}:original`]
+                        ? `Original: ${shareDownloadProbeMessage[`${link.id}:original`]}`
+                        : ''}
+                      {shareDownloadProbeMessage[`${link.id}:original`] &&
+                      shareDownloadProbeMessage[`${link.id}:derivative`]
+                        ? ' • '
+                        : ''}
+                      {shareDownloadProbeMessage[`${link.id}:derivative`]
+                        ? `Derivative: ${shareDownloadProbeMessage[`${link.id}:derivative`]}`
+                        : ''}
+                    </div>
+                  )}
                 </div>
                 <button className="btn-ghost btn-sm" onClick={() => revokeLink(link.id)}>
                   Revoke
@@ -273,6 +491,45 @@ export function AlbumDetailPage() {
             ))}
           </ul>
         )}
+
+        <div style={{ marginTop: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="settings-heading" style={{ margin: 0 }}>
+              Share access activity
+            </h3>
+            <button className="btn-ghost btn-sm" onClick={() => void refreshAccessEvents()}>
+              Refresh
+            </button>
+          </div>
+          {loadingAccessEvents ? (
+            <p className="state-message">Loading access activity…</p>
+          ) : accessEventsError ? (
+            <p className="error">{accessEventsError}</p>
+          ) : shareAccessEvents.length === 0 ? (
+            <p className="state-message">No share access attempts yet.</p>
+          ) : (
+            <>
+              <p className="album-date" style={{ marginTop: 8 }}>
+                {`Granted: ${grantedShareAccessCount} • Denied: ${deniedShareAccessCount}`}
+              </p>
+              <ul className="album-list">
+                {shareAccessEvents.slice(0, 5).map((event) => (
+                  <li key={event.id} className="album-item">
+                    <div>
+                      <div className="album-name">{event.outcome}</div>
+                      <div className="album-date">
+                        {`${event.attempt} • ${event.linkId ?? 'unknown-link'}`}
+                      </div>
+                      <div className="album-date">
+                        {new Date(event.occurredAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </section>
 
       <div

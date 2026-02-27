@@ -15,6 +15,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
+    "contract:validate": "node scripts/validate-contract.mjs",
+    "contract:breaking": "node scripts/check-contract-breaking.mjs",
+    "contract:check": "npm run contract:validate && npm run contract:breaking",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

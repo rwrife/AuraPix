@@ -1,27 +1,54 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ShareLink } from '../../domain/sharing/types';
+import type {
+  ShareAccessEvent,
+  ShareDownloadPolicy,
+  ShareDownloadResolution,
+  ShareLink,
+  SharePermission,
+} from '../../domain/sharing/types';
 import { useServices } from '../../services/useServices';
 
 interface UseSharingState {
   links: ShareLink[];
+  accessEvents: ShareAccessEvent[];
   loading: boolean;
+  loadingAccessEvents: boolean;
   error: string | null;
+  accessEventsError: string | null;
+}
+
+interface CreateShareLinkOptions {
+  expiresAt?: string;
+  password?: string;
+  permission?: SharePermission;
+  downloadPolicy?: ShareDownloadPolicy;
+  watermarkEnabled?: boolean;
 }
 
 interface UseSharingReturn extends UseSharingState {
   createLink(
     resourceType: ShareLink['resourceType'],
     resourceId: string,
-    options?: { expiresAt?: string; password?: string }
+    options?: CreateShareLinkOptions
   ): Promise<ShareLink>;
   revokeLink(linkId: string): Promise<void>;
+  refreshAccessEvents(): Promise<void>;
+  updateLinkPolicy(linkId: string, policy: Partial<ShareLink['policy']>): Promise<ShareLink>;
+  resolveDownload(
+    token: string,
+    assetKind: 'original' | 'derivative',
+    password?: string
+  ): Promise<ShareDownloadResolution | null>;
 }
 
 export function useSharing(resourceId: string): UseSharingReturn {
   const { sharing } = useServices();
   const [links, setLinks] = useState<ShareLink[]>([]);
+  const [accessEvents, setAccessEvents] = useState<ShareAccessEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingAccessEvents, setLoadingAccessEvents] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessEventsError, setAccessEventsError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,20 +72,55 @@ export function useSharing(resourceId: string): UseSharingReturn {
     };
   }, [sharing, resourceId]);
 
+  const refreshAccessEvents = useCallback(async () => {
+    setLoadingAccessEvents(true);
+    setAccessEventsError(null);
+    try {
+      const events = await sharing.listAccessEvents(resourceId);
+      setAccessEvents(events);
+    } catch (err: unknown) {
+      setAccessEventsError(err instanceof Error ? err.message : 'Failed to load share access events.');
+    } finally {
+      setLoadingAccessEvents(false);
+    }
+  }, [sharing, resourceId]);
+
+  useEffect(() => {
+    void refreshAccessEvents();
+  }, [refreshAccessEvents]);
+
   const createLink = useCallback(
     async (
       resourceType: ShareLink['resourceType'],
       resId: string,
-      options?: { expiresAt?: string; password?: string }
+      options?: CreateShareLinkOptions
     ): Promise<ShareLink> => {
+      const permission = options?.permission ?? 'view';
+      const defaultDownloadPolicy =
+        permission === 'download' ? 'original_and_derivative' : 'none';
+
       const link = await sharing.createShareLink({
         resourceType,
         resourceId: resId,
-        policy: { permission: 'view', expiresAt: options?.expiresAt ?? null },
+        policy: {
+          permission,
+          expiresAt: options?.expiresAt ?? null,
+          downloadPolicy: options?.downloadPolicy ?? defaultDownloadPolicy,
+          watermarkEnabled: options?.watermarkEnabled ?? false,
+        },
         password: options?.password,
       });
       setLinks((prev) => [link, ...prev]);
       return link;
+    },
+    [sharing]
+  );
+
+  const updateLinkPolicy = useCallback(
+    async (linkId: string, policy: Partial<ShareLink['policy']>) => {
+      const updated = await sharing.updateShareLinkPolicy({ linkId, policy });
+      setLinks((prev) => prev.map((link) => (link.id === updated.id ? updated : link)));
+      return updated;
     },
     [sharing]
   );
@@ -71,5 +133,24 @@ export function useSharing(resourceId: string): UseSharingReturn {
     [sharing]
   );
 
-  return { links, loading, error, createLink, revokeLink };
+  const resolveDownload = useCallback(
+    async (token: string, assetKind: 'original' | 'derivative', password?: string) => {
+      return sharing.resolveShareDownload({ token, assetKind, password });
+    },
+    [sharing]
+  );
+
+  return {
+    links,
+    accessEvents,
+    loading,
+    loadingAccessEvents,
+    error,
+    accessEventsError,
+    createLink,
+    revokeLink,
+    updateLinkPolicy,
+    refreshAccessEvents,
+    resolveDownload,
+  };
 }

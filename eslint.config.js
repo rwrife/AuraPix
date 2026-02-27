@@ -24,5 +24,33 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
+  },
+  {
+    files: ['src/domain/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            '**/adapters/**',
+            '**/features/**',
+            '**/components/**',
+            '**/pages/**',
+            '**/services/**',
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/adapters/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: ['**/features/**', '**/components/**', '**/pages/**'],
+        },
+      ],
+    },
   }
 );

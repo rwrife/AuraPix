@@ -30,5 +30,11 @@ jobs:
       - name: Build Frontend
         run: npm run build:frontend
 
+      - name: Fetch base branch for contract diff
+        run: git fetch --no-tags --depth=1 origin main
+
+      - name: Contract check
+        run: npm run contract:check
+
       - name: Format Check (temporarily informational)
         run: npm run format:check || true
