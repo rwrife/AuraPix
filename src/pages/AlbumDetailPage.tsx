@@ -5,7 +5,11 @@ import { GRID_BUTTONS, type GridMode } from '../components/photoGalleryConfig';
 import type { ViewerState } from '../components/PhotoViewer';
 import { UploadModal } from '../components/UploadModal';
 import type { Photo } from '../domain/library/types';
-import type { ShareDownloadPolicy, SharePermission } from '../domain/sharing/types';
+import type {
+  ResolveShareDownloadInput,
+  ShareDownloadPolicy,
+  SharePermission,
+} from '../domain/sharing/types';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
 import { useLibrary } from '../features/library/useLibrary';
@@ -59,6 +63,10 @@ export function AlbumDetailPage() {
     useState<ShareDownloadPolicy>('none');
   const [shareWatermarkEnabled, setShareWatermarkEnabled] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareDownloadProbeMessage, setShareDownloadProbeMessage] = useState<Record<string, string>>(
+    {}
+  );
+  const [shareDownloadProbeBusy, setShareDownloadProbeBusy] = useState<Record<string, boolean>>({});
 
   const {
     links: shareLinks,
@@ -70,6 +78,7 @@ export function AlbumDetailPage() {
     revokeLink,
     updateLinkPolicy,
     refreshAccessEvents,
+    resolveDownload,
   } = useSharing(albumId ?? '');
 
   const album = albums.find((a) => a.id === albumId) ?? null;
@@ -216,6 +225,32 @@ export function AlbumDetailPage() {
       setSharePasswordInput('');
     } catch (error) {
       setShareError(error instanceof Error ? error.message : 'Failed to create share link.');
+    }
+  }
+
+  async function probeShareDownload(
+    link: (typeof shareLinks)[number],
+    assetKind: ResolveShareDownloadInput['assetKind']
+  ) {
+    const probeKey = `${link.id}:${assetKind}`;
+    setShareDownloadProbeBusy((prev) => ({ ...prev, [probeKey]: true }));
+    setShareError(null);
+
+    try {
+      const password = link.policy.passwordProtected
+        ? (window.prompt(`Enter password for ${assetKind} download probe`, '') ?? undefined)
+        : undefined;
+
+      const resolution = await resolveDownload(link.token, assetKind, password);
+      const message = resolution
+        ? `${assetKind} download granted${resolution.watermarkApplied ? ' (watermarked)' : ''}`
+        : `${assetKind} download denied by policy`;
+      setShareDownloadProbeMessage((prev) => ({ ...prev, [probeKey]: message }));
+      await refreshAccessEvents();
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to probe share download policy.');
+    } finally {
+      setShareDownloadProbeBusy((prev) => ({ ...prev, [probeKey]: false }));
     }
   }
 
@@ -385,7 +420,36 @@ export function AlbumDetailPage() {
                     >
                       {link.policy.watermarkEnabled ? 'Disable watermark' : 'Enable watermark'}
                     </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={!!shareDownloadProbeBusy[`${link.id}:original`]}
+                      onClick={() => void probeShareDownload(link, 'original')}
+                    >
+                      Probe original
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={!!shareDownloadProbeBusy[`${link.id}:derivative`]}
+                      onClick={() => void probeShareDownload(link, 'derivative')}
+                    >
+                      Probe derivative
+                    </button>
                   </div>
+                  {(shareDownloadProbeMessage[`${link.id}:original`] ||
+                    shareDownloadProbeMessage[`${link.id}:derivative`]) && (
+                    <div className="album-date" style={{ marginTop: 6 }}>
+                      {shareDownloadProbeMessage[`${link.id}:original`]
+                        ? `Original: ${shareDownloadProbeMessage[`${link.id}:original`]}`
+                        : ''}
+                      {shareDownloadProbeMessage[`${link.id}:original`] &&
+                      shareDownloadProbeMessage[`${link.id}:derivative`]
+                        ? ' • '
+                        : ''}
+                      {shareDownloadProbeMessage[`${link.id}:derivative`]
+                        ? `Derivative: ${shareDownloadProbeMessage[`${link.id}:derivative`]}`
+                        : ''}
+                    </div>
+                  )}
                 </div>
                 <button className="btn-ghost btn-sm" onClick={() => revokeLink(link.id)}>
                   Revoke
