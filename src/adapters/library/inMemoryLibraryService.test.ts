@@ -122,7 +122,7 @@ describe('InMemoryLibraryService', () => {
     expect(photos[0].id).toBe(newer.id);
   });
 
-  it('supports quick collection filters for untagged and favorites', async () => {
+  it('supports quick collection filters for favorites/tagged/untagged', async () => {
     const svc = new InMemoryLibraryService();
 
     const untaggedFavorite = await svc.addPhoto({
@@ -139,6 +139,9 @@ describe('InMemoryLibraryService', () => {
 
     await svc.updatePhoto(untaggedFavorite.id, { isFavorite: true });
     await svc.updatePhoto(tagged.id, { tags: ['trip'] });
+
+    const taggedCollection = await svc.listPhotos({ libraryId: LIBRARY_ID, collection: 'tagged' });
+    expect(taggedCollection.photos.map((photo) => photo.id)).toEqual([tagged.id]);
 
     const untagged = await svc.listPhotos({ libraryId: LIBRARY_ID, collection: 'untagged' });
     expect(untagged.photos.map((photo) => photo.id)).toEqual([untaggedFavorite.id]);

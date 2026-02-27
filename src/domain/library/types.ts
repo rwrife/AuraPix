@@ -34,7 +34,7 @@ export interface MetadataFilterInput {
   takenBefore?: string;
 }
 
-export type LibraryQuickCollection = 'favorites' | 'untagged' | 'recent';
+export type LibraryQuickCollection = 'favorites' | 'tagged' | 'untagged' | 'recent';
 
 export interface ListPhotosInput {
   libraryId: string;
