@@ -34,6 +34,11 @@ export interface ResolveShareLinkInput {
   password?: string;
 }
 
+export interface UpdateShareLinkPolicyInput {
+  linkId: string;
+  policy: Partial<SharePolicy>;
+}
+
 export interface ResolveShareDownloadInput extends ResolveShareLinkInput {
   assetKind: 'original' | 'derivative';
 }
