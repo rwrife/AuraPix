@@ -5,6 +5,7 @@ import { storageConfig, authConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
+import { apiVersionMiddleware } from './middleware/apiVersion.js';
 import { firebaseAuthMiddleware, initializeFirebaseAuth } from './middleware/firebaseAuth.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
 import { FirestoreDataAdapter } from './adapters/data/FirestoreDataAdapter.js';
@@ -29,7 +30,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Idempotency-Key, X-API-Version'
+  );
   
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -68,6 +72,9 @@ if (storageConfig.mode === 'firebase') {
 // Make adapters available to routes
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
+
+// API version compatibility policy
+app.use(apiVersionMiddleware);
 
 // Authentication middleware
 if (authConfig.mode === 'firebase') {
