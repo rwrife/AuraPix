@@ -60,7 +60,16 @@ export function AlbumDetailPage() {
   const [shareWatermarkEnabled, setShareWatermarkEnabled] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
 
-  const { links: shareLinks, loading: shareLoading, createLink, revokeLink } = useSharing(albumId ?? '');
+  const {
+    links: shareLinks,
+    accessEvents: shareAccessEvents,
+    loading: shareLoading,
+    loadingAccessEvents,
+    accessEventsError,
+    createLink,
+    revokeLink,
+    refreshAccessEvents,
+  } = useSharing(albumId ?? '');
 
   const album = albums.find((a) => a.id === albumId) ?? null;
 
@@ -186,6 +195,11 @@ export function AlbumDetailPage() {
     album != null &&
     (nameInput.trim() !== album.name ||
       (folderInput === '' ? null : folderInput) !== (album.folderId ?? null));
+
+  const grantedShareAccessCount = shareAccessEvents.filter((event) =>
+    event.outcome.startsWith('granted')
+  ).length;
+  const deniedShareAccessCount = shareAccessEvents.length - grantedShareAccessCount;
 
   if (albumsLoading) return <p className="state-message">Loading album…</p>;
 
@@ -337,6 +351,42 @@ export function AlbumDetailPage() {
             ))}
           </ul>
         )}
+
+        <div style={{ marginTop: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="settings-heading" style={{ margin: 0 }}>
+              Share access activity
+            </h3>
+            <button className="btn-ghost btn-sm" onClick={() => void refreshAccessEvents()}>
+              Refresh
+            </button>
+          </div>
+          {loadingAccessEvents ? (
+            <p className="state-message">Loading access activity…</p>
+          ) : accessEventsError ? (
+            <p className="error">{accessEventsError}</p>
+          ) : shareAccessEvents.length === 0 ? (
+            <p className="state-message">No share access attempts yet.</p>
+          ) : (
+            <>
+              <p className="album-date" style={{ marginTop: 8 }}>
+                {`Granted: ${grantedShareAccessCount} • Denied: ${deniedShareAccessCount}`}
+              </p>
+              <ul className="album-list">
+                {shareAccessEvents.slice(0, 5).map((event) => (
+                  <li key={event.id} className="album-item">
+                    <div>
+                      <div className="album-name">{event.outcome}</div>
+                      <div className="album-date">
+                        {new Date(event.occurredAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </section>
 
       <div
