@@ -124,6 +124,9 @@ npm --prefix functions test
 
 # Run with coverage
 npm run test:coverage
+
+# Validate API contract + breaking-change gate
+npm run contract:check
 ```
 
 ## Architecture
