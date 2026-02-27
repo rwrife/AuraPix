@@ -5,6 +5,7 @@ import { GRID_BUTTONS, type GridMode } from '../components/photoGalleryConfig';
 import type { ViewerState } from '../components/PhotoViewer';
 import { UploadModal } from '../components/UploadModal';
 import type { Photo } from '../domain/library/types';
+import type { ShareDownloadPolicy, SharePermission } from '../domain/sharing/types';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
 import { useLibrary } from '../features/library/useLibrary';
@@ -53,6 +54,10 @@ export function AlbumDetailPage() {
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
   const [shareExpiryInput, setShareExpiryInput] = useState('');
   const [sharePasswordInput, setSharePasswordInput] = useState('');
+  const [sharePermissionInput, setSharePermissionInput] = useState<SharePermission>('view');
+  const [shareDownloadPolicyInput, setShareDownloadPolicyInput] =
+    useState<ShareDownloadPolicy>('none');
+  const [shareWatermarkEnabled, setShareWatermarkEnabled] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
 
   const { links: shareLinks, loading: shareLoading, createLink, revokeLink } = useSharing(albumId ?? '');
@@ -60,6 +65,18 @@ export function AlbumDetailPage() {
   const album = albums.find((a) => a.id === albumId) ?? null;
 
   const albumPhotos = allPhotos.filter((p) => albumId != null && p.albumIds.includes(albumId));
+
+  useEffect(() => {
+    if (sharePermissionInput !== 'download') {
+      setShareDownloadPolicyInput('none');
+      setShareWatermarkEnabled(false);
+      return;
+    }
+
+    if (shareDownloadPolicyInput === 'none') {
+      setShareDownloadPolicyInput('original_and_derivative');
+    }
+  }, [sharePermissionInput, shareDownloadPolicyInput]);
 
   useEffect(() => {
     if (!album) return;
@@ -155,6 +172,9 @@ export function AlbumDetailPage() {
       await createLink('album', albumId, {
         expiresAt: shareExpiryInput ? new Date(shareExpiryInput).toISOString() : undefined,
         password: sharePasswordInput || undefined,
+        permission: sharePermissionInput,
+        downloadPolicy: shareDownloadPolicyInput,
+        watermarkEnabled: shareWatermarkEnabled,
       });
       setSharePasswordInput('');
     } catch (error) {
@@ -241,6 +261,47 @@ export function AlbumDetailPage() {
             onChange={(e) => setSharePasswordInput(e.target.value)}
             placeholder="Leave blank for no password"
           />
+
+          <label className="settings-label" htmlFor="share-permission">
+            Permission
+          </label>
+          <select
+            id="share-permission"
+            className="settings-select"
+            value={sharePermissionInput}
+            onChange={(e) => setSharePermissionInput(e.target.value as SharePermission)}
+          >
+            <option value="view">View only</option>
+            <option value="download">Download allowed</option>
+            <option value="collaborate">Collaborate</option>
+          </select>
+
+          <label className="settings-label" htmlFor="share-download-policy">
+            Download policy
+          </label>
+          <select
+            id="share-download-policy"
+            className="settings-select"
+            value={shareDownloadPolicyInput}
+            disabled={sharePermissionInput !== 'download'}
+            onChange={(e) => setShareDownloadPolicyInput(e.target.value as ShareDownloadPolicy)}
+          >
+            <option value="none">No downloads</option>
+            <option value="derivative_only">Derivative only</option>
+            <option value="original_and_derivative">Original + derivative</option>
+          </select>
+
+          <label className="settings-label" htmlFor="share-watermark">
+            Watermark derivatives
+          </label>
+          <input
+            id="share-watermark"
+            type="checkbox"
+            checked={shareWatermarkEnabled}
+            disabled={sharePermissionInput !== 'download' || shareDownloadPolicyInput === 'none'}
+            onChange={(e) => setShareWatermarkEnabled(e.target.checked)}
+          />
+
           <button className="btn-primary" onClick={handleCreateShareLink}>
             Create share link
           </button>
@@ -264,6 +325,9 @@ export function AlbumDetailPage() {
                       ? ` • Expires ${new Date(link.policy.expiresAt).toLocaleString()}`
                       : ' • No expiry'}
                     {link.policy.passwordProtected ? ' • Password protected' : ''}
+                    {` • Permission: ${link.policy.permission}`}
+                    {` • Download: ${link.policy.downloadPolicy}`}
+                    {link.policy.watermarkEnabled ? ' • Watermark derivatives' : ''}
                   </div>
                 </div>
                 <button className="btn-ghost btn-sm" onClick={() => revokeLink(link.id)}>
