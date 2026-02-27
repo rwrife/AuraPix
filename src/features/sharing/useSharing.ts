@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ShareLink } from '../../domain/sharing/types';
+import type { ShareDownloadPolicy, ShareLink, SharePermission } from '../../domain/sharing/types';
 import { useServices } from '../../services/useServices';
 
 interface UseSharingState {
@@ -8,11 +8,19 @@ interface UseSharingState {
   error: string | null;
 }
 
+interface CreateShareLinkOptions {
+  expiresAt?: string;
+  password?: string;
+  permission?: SharePermission;
+  downloadPolicy?: ShareDownloadPolicy;
+  watermarkEnabled?: boolean;
+}
+
 interface UseSharingReturn extends UseSharingState {
   createLink(
     resourceType: ShareLink['resourceType'],
     resourceId: string,
-    options?: { expiresAt?: string; password?: string }
+    options?: CreateShareLinkOptions
   ): Promise<ShareLink>;
   revokeLink(linkId: string): Promise<void>;
 }
@@ -49,12 +57,21 @@ export function useSharing(resourceId: string): UseSharingReturn {
     async (
       resourceType: ShareLink['resourceType'],
       resId: string,
-      options?: { expiresAt?: string; password?: string }
+      options?: CreateShareLinkOptions
     ): Promise<ShareLink> => {
+      const permission = options?.permission ?? 'view';
+      const defaultDownloadPolicy =
+        permission === 'download' ? 'original_and_derivative' : 'none';
+
       const link = await sharing.createShareLink({
         resourceType,
         resourceId: resId,
-        policy: { permission: 'view', expiresAt: options?.expiresAt ?? null },
+        policy: {
+          permission,
+          expiresAt: options?.expiresAt ?? null,
+          downloadPolicy: options?.downloadPolicy ?? defaultDownloadPolicy,
+          watermarkEnabled: options?.watermarkEnabled ?? false,
+        },
         password: options?.password,
       });
       setLinks((prev) => [link, ...prev]);
