@@ -5,6 +5,7 @@ import { AlbumDetailPage } from './pages/AlbumDetailPage';
 import { AlbumsPage } from './pages/AlbumsPage';
 import { FolderDetailPage } from './pages/FolderDetailPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { TeamsPage } from './pages/TeamsPage';
 import { createLocalServices } from './services/createLocalServices';
 import { ServiceProvider } from './services/ServiceContext';
 import { HealthBanner } from './components/HealthBanner';
@@ -44,6 +45,7 @@ export default function App() {
               <Route path="/albums" element={<AlbumsPage />} />
               <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
               <Route path="/albums/folders/:folderId" element={<FolderDetailPage />} />
+              <Route path="/teams" element={<TeamsPage />} />
               {/* Catch-all: redirect unknown paths to library */}
               <Route path="*" element={<Navigate to="/library" replace />} />
             </Route>
