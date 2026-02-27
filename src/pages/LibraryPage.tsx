@@ -12,8 +12,12 @@ import { useAuth } from '../features/auth/useAuth';
 import { useAlbums } from '../features/albums/useAlbums';
 import { useLibrary } from '../features/library/useLibrary';
 import {
+  deleteQuickViewPreset,
   loadQuickViewPreferences,
+  loadSavedQuickViewPresets,
   saveQuickViewPreferences,
+  saveQuickViewPreset,
+  type LibrarySavedQuickViewPreset,
 } from '../features/library/quickViewPreferences';
 import { useUploadSessions } from '../features/uploads/useUploadSessions';
 import { useServices } from '../services/useServices';
@@ -41,6 +45,11 @@ export function LibraryPage() {
     initialQuickViewPreferences.activeTagFilter
   );
   const [gridMode, setGridMode] = useState<GridMode>(initialQuickViewPreferences.gridMode);
+  const [savedQuickViews, setSavedQuickViews] = useState<LibrarySavedQuickViewPreset[]>(() =>
+    loadSavedQuickViewPresets(libraryId)
+  );
+  const [selectedQuickViewId, setSelectedQuickViewId] = useState<string>('');
+  const [quickViewNameInput, setQuickViewNameInput] = useState<string>('');
   const metadataFilters = useMemo(
     () => ({
       metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined,
@@ -59,6 +68,12 @@ export function LibraryPage() {
       gridMode,
     });
   }, [libraryId, quickCollection, activeTagFilter, cameraMakeFilter, gridMode]);
+
+  useEffect(() => {
+    setSavedQuickViews(loadSavedQuickViewPresets(libraryId));
+    setSelectedQuickViewId('');
+    setQuickViewNameInput('');
+  }, [libraryId]);
 
   const {
     photos,
@@ -285,6 +300,39 @@ export function LibraryPage() {
     ];
   }, [selectedPhotoIds, photos, toggleFavorite, deletePhoto]);
 
+  function applySavedQuickView(presetId: string) {
+    setSelectedQuickViewId(presetId);
+    const preset = savedQuickViews.find((item) => item.id === presetId);
+    if (!preset) return;
+    setQuickCollection(preset.preferences.quickCollection);
+    setActiveTagFilter(preset.preferences.activeTagFilter);
+    setCameraMakeFilter(preset.preferences.cameraMakeFilter);
+    setGridMode(preset.preferences.gridMode);
+  }
+
+  function handleSaveQuickView() {
+    if (!quickViewNameInput.trim()) return;
+    const next = saveQuickViewPreset(libraryId, quickViewNameInput, {
+      quickCollection,
+      activeTagFilter,
+      cameraMakeFilter,
+      gridMode,
+    });
+    setSavedQuickViews(next);
+    const saved = next.find(
+      (preset) => preset.name.toLowerCase() === quickViewNameInput.trim().toLowerCase()
+    );
+    setSelectedQuickViewId(saved?.id ?? '');
+    setQuickViewNameInput('');
+  }
+
+  function handleDeleteSelectedQuickView() {
+    if (!selectedQuickViewId) return;
+    const next = deleteQuickViewPreset(libraryId, selectedQuickViewId);
+    setSavedQuickViews(next);
+    setSelectedQuickViewId('');
+  }
+
   return (
     <>
       <div className="page-titlebar">
@@ -325,6 +373,42 @@ export function LibraryPage() {
               onClick={() => setQuickCollection('recent')}
             >
               Recent
+            </button>
+            <select
+              className="btn-ghost btn-sm"
+              aria-label="Apply saved quick view"
+              value={selectedQuickViewId}
+              onChange={(e) => applySavedQuickView(e.target.value)}
+            >
+              <option value="">Saved views…</option>
+              {savedQuickViews.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="btn-ghost btn-sm"
+              aria-label="Name quick view"
+              placeholder="Save view as…"
+              value={quickViewNameInput}
+              onChange={(e) => setQuickViewNameInput(e.target.value)}
+            />
+            <button
+              className="btn-ghost btn-sm"
+              title="Save current quick view"
+              onClick={handleSaveQuickView}
+              disabled={!quickViewNameInput.trim()}
+            >
+              Save View
+            </button>
+            <button
+              className="btn-danger-ghost btn-sm"
+              title="Delete selected quick view"
+              onClick={handleDeleteSelectedQuickView}
+              disabled={!selectedQuickViewId}
+            >
+              Delete View
             </button>
             <select
               className="btn-ghost btn-sm"
