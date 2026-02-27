@@ -228,6 +228,18 @@ export function AlbumDetailPage() {
     }
   }
 
+  async function revokeExpiredLinks() {
+    if (expiredShareLinks.length === 0) return;
+
+    setShareError(null);
+    try {
+      await Promise.all(expiredShareLinks.map((link) => revokeLink(link.id)));
+      await refreshAccessEvents();
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to revoke expired links.');
+    }
+  }
+
   async function probeShareDownload(
     link: (typeof shareLinks)[number],
     assetKind: ResolveShareDownloadInput['assetKind']
@@ -263,6 +275,12 @@ export function AlbumDetailPage() {
     event.outcome.startsWith('granted')
   ).length;
   const deniedShareAccessCount = shareAccessEvents.length - grantedShareAccessCount;
+  const nowMs = Date.now();
+  const expiredShareLinks = shareLinks.filter((link) => {
+    if (!link.policy.expiresAt) return false;
+    return new Date(link.policy.expiresAt).getTime() <= nowMs;
+  });
+  const expiredShareLinkIds = new Set(expiredShareLinks.map((link) => link.id));
 
   if (albumsLoading) return <p className="state-message">Loading album…</p>;
 
@@ -386,6 +404,20 @@ export function AlbumDetailPage() {
 
         {shareError && <p className="error">{shareError}</p>}
 
+        {!shareLoading && shareLinks.length > 0 && (
+          <p className="album-date" style={{ marginTop: 8 }}>
+            {`Active links: ${shareLinks.length - expiredShareLinks.length} • Expired links: ${expiredShareLinks.length}`}
+            {expiredShareLinks.length > 0 && (
+              <>
+                {' '}
+                <button className="btn-ghost btn-sm" onClick={() => void revokeExpiredLinks()}>
+                  Revoke expired links
+                </button>
+              </>
+            )}
+          </p>
+        )}
+
         {shareLoading ? (
           <p className="state-message">Loading links…</p>
         ) : shareLinks.length === 0 ? (
@@ -397,7 +429,8 @@ export function AlbumDetailPage() {
                 <div>
                   <div className="album-name">Token: {link.token}</div>
                   <div className="album-date">
-                    Uses: {link.useCount}
+                    {`Status: ${expiredShareLinkIds.has(link.id) ? 'expired' : 'active'}`}
+                    {` • Uses: ${link.useCount}`}
                     {link.policy.expiresAt
                       ? ` • Expires ${new Date(link.policy.expiresAt).toLocaleString()}`
                       : ' • No expiry'}
