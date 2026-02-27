@@ -113,6 +113,7 @@ export function LibraryPage() {
     return () => clearInterval(interval);
   }, [isFilmstrip]);
 
+  // Handle upload modal trigger from URL query parameter
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('upload') !== '1') return;
@@ -122,12 +123,24 @@ export function LibraryPage() {
     const search = params.toString();
     navigate(
       {
-        pathname: '/library',
+        pathname: location.pathname, // Use current pathname instead of hardcoded '/library'
         search: search ? `?${search}` : '',
       },
       { replace: true }
     );
-  }, [location.search, navigate]);
+  }, [location.search, location.pathname, navigate]);
+
+  // Handle upload modal trigger from custom event (for embedded scenarios)
+  useEffect(() => {
+    function handleOpenUploadModal() {
+      setShowUploadModal(true);
+    }
+
+    window.addEventListener('huddlepix:open-upload-modal', handleOpenUploadModal);
+    return () => {
+      window.removeEventListener('huddlepix:open-upload-modal', handleOpenUploadModal);
+    };
+  }, []);
 
   async function handleUpload(
     files: File[],
