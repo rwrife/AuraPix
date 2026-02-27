@@ -32,7 +32,11 @@ export class FirebaseStorageAdapter implements StorageAdapter {
       const options: any = {
         metadata: {
           contentType: metadata?.contentType || 'application/octet-stream',
-          metadata: metadata?.customMetadata || {},
+          metadata: metadata?.customMetadata
+            ? Object.fromEntries(
+                Object.entries(metadata.customMetadata).map(([k, v]) => [k, String(v)])
+              )
+            : {},
         },
         resumable: false, // For small files
       };
@@ -144,7 +148,11 @@ export class FirebaseStorageAdapter implements StorageAdapter {
         contentType: metadata.contentType,
         size: parseInt(metadata.size as string, 10),
         lastModified: new Date(metadata.updated as string),
-        customMetadata: metadata.metadata || {},
+        customMetadata: metadata.metadata
+          ? Object.fromEntries(
+              Object.entries(metadata.metadata).map(([k, v]) => [k, String(v ?? '')])
+            )
+          : {},
       };
     } catch (error) {
       logger.error({ error, path }, 'Failed to get file metadata from Firebase Storage');

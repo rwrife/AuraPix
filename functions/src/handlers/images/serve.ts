@@ -21,12 +21,13 @@ export async function handleServeImage(
   const dataAdapter = req.app.locals.dataAdapter as DataAdapter;
   const imageCache = getImageCache();
 
-  const { libraryId, photoId } = req.params;
+  const libraryId = req.params.libraryId as string;
+  const photoId = req.params.photoId as string;
 
   // Validate query parameters
   const queryResult = ServeImageQuerySchema.safeParse(req.query);
   if (!queryResult.success) {
-    throw new AppError(400, 'Invalid query parameters');
+    throw new AppError(400, 'INVALID_QUERY', 'Invalid query parameters');
   }
 
   const { size, format } = queryResult.data;
@@ -38,11 +39,11 @@ export async function handleServeImage(
     // Fetch photo document
     const photo = await dataAdapter.fetchData<Photo>('photos', photoId);
     if (!photo) {
-      throw new AppError(404, 'Photo not found');
+      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found');
     }
 
     if (photo.libraryId !== libraryId) {
-      throw new AppError(404, 'Photo not found in this library');
+      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found in this library');
     }
 
     // Check if thumbnails are outdated
@@ -168,6 +169,7 @@ export async function handleServeImage(
     );
     throw new AppError(
       500,
+      'SERVE_FAILED',
       error instanceof Error ? error.message : 'Failed to serve image'
     );
   }

@@ -6,6 +6,7 @@ import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
 import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { logger } from '../../utils/logger.js';
+import { extractExifData } from '../../utils/exif.js';
 import {
   generatePhotoPaths,
   getFileExtension,
@@ -22,7 +23,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     // Accept images only
     if (!file.mimetype.startsWith('image/')) {
-      cb(new AppError(400, 'Only image files are allowed'));
+      cb(new AppError(400, 'INVALID_FILE_TYPE', 'Only image files are allowed'));
       return;
     }
     cb(null, true);
@@ -32,30 +33,43 @@ const upload = multer({
 export const uploadMiddleware = upload.single('file');
 
 /**
- * Extract metadata from image using Sharp
+ * Extract metadata from image using Sharp and complete EXIF data
  */
 async function extractMetadata(
   imageBuffer: Buffer
 ): Promise<PhotoMetadata & { extension: string }> {
   const image = sharp(imageBuffer);
   const metadata = await image.metadata();
-  const stats = await image.stats();
 
-  // Try to extract EXIF data
-  const exif = metadata.exif
-    ? await image.metadata().then((m) => m.exif)
-    : undefined;
+  // Extract comprehensive EXIF data using exifr
+  logger.info('Extracting EXIF data from image');
+  const exifData = await extractExifData(imageBuffer);
+
+  // Use EXIF data to populate metadata fields
+  // Prefer EXIF data over Sharp metadata when available
+  const takenAt = exifData?.takenAt;
+  const cameraMake = exifData?.cameraMake;
+  const cameraModel = exifData?.cameraModel;
+
+  // Extract GPS location from EXIF if available
+  const location =
+    exifData?.gps?.latitude && exifData?.gps?.longitude
+      ? {
+          lat: exifData.gps.latitude,
+          lng: exifData.gps.longitude,
+        }
+      : undefined;
 
   return {
     width: metadata.width || 0,
     height: metadata.height || 0,
     mimeType: `image/${metadata.format}`,
     sizeBytes: imageBuffer.length,
-    takenAt: exif?.DateTimeOriginal
-      ? new Date(exif.DateTimeOriginal).toISOString()
-      : undefined,
-    cameraMake: exif?.Make as string | undefined,
-    cameraModel: exif?.Model as string | undefined,
+    takenAt,
+    location,
+    cameraMake,
+    cameraModel,
+    exif: exifData || undefined, // Store complete EXIF data
     extension: metadata.format || 'jpg',
   };
 }
@@ -71,15 +85,15 @@ export async function handleUpload(
   const storageAdapter = req.app.locals.storageAdapter as StorageAdapter;
   const dataAdapter = req.app.locals.dataAdapter as DataAdapter;
 
-  const { libraryId } = req.params;
+  const libraryId = req.params.libraryId as string;
   const file = req.file;
 
   if (!file) {
-    throw new AppError(400, 'No file provided');
+    throw new AppError(400, 'NO_FILE', 'No file provided');
   }
 
   if (!libraryId) {
-    throw new AppError(400, 'Library ID is required');
+    throw new AppError(400, 'NO_LIBRARY_ID', 'Library ID is required');
   }
 
   // TODO: Verify user has access to this library
@@ -163,6 +177,7 @@ export async function handleUpload(
     logger.error({ err: error, libraryId }, 'Upload failed');
     throw new AppError(
       500,
+      'UPLOAD_FAILED',
       error instanceof Error ? error.message : 'Failed to upload photo'
     );
   }

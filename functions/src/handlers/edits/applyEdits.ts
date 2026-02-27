@@ -18,13 +18,14 @@ export async function handleApplyEdits(
   const dataAdapter = req.app.locals.dataAdapter as DataAdapter;
   const storageAdapter = req.app.locals.storageAdapter as StorageAdapter;
 
-  const { libraryId, photoId } = req.params;
+  const libraryId = req.params.libraryId as string;
+  const photoId = req.params.photoId as string;
   const userId = req.user?.uid || 'anonymous';
 
   // Validate request body
   const validation = ApplyEditsSchema.safeParse(req.body);
   if (!validation.success) {
-    throw new AppError(400, `Invalid request: ${validation.error.message}`);
+    throw new AppError(400, 'INVALID_REQUEST', `Invalid request: ${validation.error.message}`);
   }
 
   const { operations, description } = validation.data;
@@ -32,18 +33,18 @@ export async function handleApplyEdits(
   // Validate operations
   const opsValidation = validateOperations(operations);
   if (!opsValidation.valid) {
-    throw new AppError(400, `Invalid operations: ${opsValidation.errors.join(', ')}`);
+    throw new AppError(400, 'INVALID_OPERATIONS', `Invalid operations: ${opsValidation.errors.join(', ')}`);
   }
 
   try {
     // Fetch photo
     const photo = await dataAdapter.fetchData<Photo>('photos', photoId);
     if (!photo) {
-      throw new AppError(404, 'Photo not found');
+      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found');
     }
 
     if (photo.libraryId !== libraryId) {
-      throw new AppError(404, 'Photo not found in this library');
+      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found in this library');
     }
 
     // TODO: Check user has edit permission
@@ -117,6 +118,7 @@ export async function handleApplyEdits(
     logger.error({ err: error, photoId }, 'Failed to apply edits');
     throw new AppError(
       500,
+      'EDIT_FAILED',
       error instanceof Error ? error.message : 'Failed to apply edits'
     );
   }
@@ -133,27 +135,28 @@ export async function handleRevertVersion(
   const dataAdapter = req.app.locals.dataAdapter as DataAdapter;
   const storageAdapter = req.app.locals.storageAdapter as StorageAdapter;
 
-  const { libraryId, photoId } = req.params;
+  const libraryId = req.params.libraryId as string;
+  const photoId = req.params.photoId as string;
   const { targetVersion } = req.body;
 
   if (typeof targetVersion !== 'number' || targetVersion < 0) {
-    throw new AppError(400, 'Invalid target version');
+    throw new AppError(400, 'INVALID_VERSION', 'Invalid target version');
   }
 
   try {
     // Fetch photo
     const photo = await dataAdapter.fetchData<Photo>('photos', photoId);
     if (!photo) {
-      throw new AppError(404, 'Photo not found');
+      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found');
     }
 
     if (photo.libraryId !== libraryId) {
-      throw new AppError(404, 'Photo not found in this library');
+      throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found in this library');
     }
 
     // Validate target version exists
     if (targetVersion > photo.editHistory.length) {
-      throw new AppError(400, 'Target version does not exist');
+      throw new AppError(400, 'INVALID_VERSION', 'Target version does not exist');
     }
 
     // Version 0 is the original (no edits)
@@ -211,6 +214,7 @@ export async function handleRevertVersion(
     logger.error({ err: error, photoId }, 'Failed to revert version');
     throw new AppError(
       500,
+      'REVERT_FAILED',
       error instanceof Error ? error.message : 'Failed to revert version'
     );
   }

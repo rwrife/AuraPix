@@ -99,10 +99,10 @@ export function requireAuth(
   next: NextFunction
 ): void {
   if (!req.user) {
-    logger.warn('Unauthenticated request to protected endpoint', {
+    logger.warn({
       path: req.path,
       method: req.method,
-    });
+    }, 'Unauthenticated request to protected endpoint');
     res.status(401).json({ error: 'Authentication required' });
     return;
   }

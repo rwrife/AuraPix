@@ -2,6 +2,8 @@
  * Photo domain model with edit versioning
  */
 
+import type { ExifData } from '../utils/exif.js';
+
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'error';
 
 export interface PhotoMetadata {
@@ -13,6 +15,7 @@ export interface PhotoMetadata {
   location?: { lat: number; lng: number };
   cameraMake?: string;
   cameraModel?: string;
+  exif?: ExifData; // Complete EXIF data for information panel and search
 }
 
 export interface EditOperation {

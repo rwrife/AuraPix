@@ -33,7 +33,8 @@ router.post(
   '/generate-thumbnails/:libraryId/:photoId',
   async (req: Request, res: Response, next) => {
     try {
-      const { libraryId, photoId } = req.params;
+      const libraryId = req.params.libraryId as string;
+      const photoId = req.params.photoId as string;
       const storageAdapter = req.app.locals.storageAdapter as StorageAdapter;
       const dataAdapter = req.app.locals.dataAdapter as DataAdapter;
 
@@ -56,6 +57,7 @@ router.post(
       next(
         new AppError(
           500,
+          'THUMBNAIL_GENERATION_FAILED',
           error instanceof Error ? error.message : 'Thumbnail generation failed'
         )
       );
