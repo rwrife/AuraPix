@@ -297,6 +297,8 @@ export function AlbumsPage() {
   const { photos } = useLibrary(libraryId);
 
   const [albumName, setAlbumName] = useState('');
+  const [albumFolderId, setAlbumFolderId] = useState('');
+  const [albumFormError, setAlbumFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [showFolderForm, setShowFolderForm] = useState(false);
@@ -307,13 +309,19 @@ export function AlbumsPage() {
   async function handleCreateAlbum(e: React.FormEvent) {
     e.preventDefault();
     const trimmedName = albumName.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) {
+      setAlbumFormError('Album name is required.');
+      return;
+    }
 
+    setAlbumFormError(null);
     setCreating(true);
     setAlbumName('');
-    const created = await createAlbum(trimmedName);
+    const created = await createAlbum(trimmedName, albumFolderId || null);
     if (!created) {
       setAlbumName(trimmedName);
+    } else {
+      setAlbumFolderId('');
     }
     setCreating(false);
   }
@@ -395,13 +403,32 @@ export function AlbumsPage() {
             type="text"
             placeholder="New album name"
             value={albumName}
-            onChange={(e) => setAlbumName(e.target.value)}
+            onChange={(e) => {
+              setAlbumName(e.target.value);
+              if (albumFormError) setAlbumFormError(null);
+            }}
             disabled={creating}
           />
+          <select
+            value={albumFolderId}
+            onChange={(e) => setAlbumFolderId(e.target.value)}
+            disabled={creating}
+            aria-label="Album folder"
+            title="Place album in a folder"
+          >
+            <option value="">No folder</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
           <button type="submit" disabled={creating || !albumName.trim()}>
             {creating ? 'Creating…' : 'Create album'}
           </button>
         </form>
+
+        {albumFormError && <p className="error">{albumFormError}</p>}
 
         {error && <p className="error">{error}</p>}
 
