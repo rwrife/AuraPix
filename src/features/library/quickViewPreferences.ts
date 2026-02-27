@@ -1,6 +1,6 @@
 import type { GridMode } from '../../components/photoGalleryConfig';
 
-export type LibraryQuickCollectionSelection = 'all' | 'favorites' | 'untagged' | 'recent';
+export type LibraryQuickCollectionSelection = 'all' | 'favorites' | 'tagged' | 'untagged' | 'recent';
 
 export interface LibraryQuickViewPreferences {
   quickCollection: LibraryQuickCollectionSelection;
@@ -23,7 +23,13 @@ function toStorageKey(libraryId: string) {
 }
 
 function normalizeQuickCollection(value: unknown): LibraryQuickCollectionSelection {
-  if (value === 'all' || value === 'favorites' || value === 'untagged' || value === 'recent') {
+  if (
+    value === 'all' ||
+    value === 'favorites' ||
+    value === 'tagged' ||
+    value === 'untagged' ||
+    value === 'recent'
+  ) {
     return value;
   }
 

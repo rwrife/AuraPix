@@ -12,11 +12,21 @@ export const API_CONFIG = {
 /**
  * Get the full API URL for a given endpoint
  */
-export function getApiUrl(endpoint: string): string {
-  const base = API_CONFIG.baseUrl.replace(/\/$/, ''); // Remove trailing slash
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  return `${base}${path}`;
-}
+export const getApiUrl = (path: string): string => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${AURAPIX_API_BASE_URL}${normalizedPath}`;
+};
+
+// Export individual endpoint builders if needed
+export const buildImageUrl = (libraryId: string, photoId: string, params?: {
+  size?: 'small' | 'medium' | 'large' | 'original';
+  format?: 'webp' | 'jpeg';
+}): string => {
+  const url = new URL(`${AURAPIX_API_BASE_URL}/images/${libraryId}/${photoId}`);
+  if (params?.size) url.searchParams.set('size', params.size);
+  if (params?.format) url.searchParams.set('format', params.format);
+  return url.toString();
+};
 
 /**
  * Check if we're in development mode

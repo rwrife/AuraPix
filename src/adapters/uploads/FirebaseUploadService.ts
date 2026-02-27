@@ -20,11 +20,13 @@ export class FirebaseUploadService implements UploadSessionsService {
   // All methods throw "not implemented" for now
   // This allows the app to run while upload session features are developed
 
-  async createUploadSession(_input: CreateUploadSessionInput): Promise<UploadSession> {
+  async createUploadSession(input: CreateUploadSessionInput): Promise<UploadSession> {
+    void input;
     throw new Error('Upload sessions not yet implemented. Use LibraryService.addPhoto() for direct uploads.');
   }
 
-  async finalizeUpload(_input: FinalizeUploadInput): Promise<FinalizeUploadResult> {
+  async finalizeUpload(input: FinalizeUploadInput): Promise<FinalizeUploadResult> {
+    void input;
     throw new Error('Upload sessions not yet implemented. Use LibraryService.addPhoto() for direct uploads.');
   }
 
