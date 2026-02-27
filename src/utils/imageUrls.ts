@@ -1,5 +1,8 @@
 /**
  * Image URL utilities for building API-based image URLs
+ * 
+ * Note: Authentication is handled by the Service Worker (image-auth-sw.js)
+ * which intercepts requests and adds the auth token automatically.
  */
 
 import { getApiUrl } from '../config/api';
@@ -9,6 +12,7 @@ export type ImageFormat = 'webp' | 'jpeg';
 
 /**
  * Build an image URL for the backend API
+ * The Service Worker will automatically add authentication token to requests
  */
 export function buildImageUrl(
   libraryId: string,
@@ -20,6 +24,7 @@ export function buildImageUrl(
     size,
     format,
   });
+  
   return getApiUrl(`/images/${libraryId}/${photoId}?${params.toString()}`);
 }
 

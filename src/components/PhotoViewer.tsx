@@ -9,10 +9,6 @@ function isLegacyPhoto(photo: Photo): boolean {
   return photo.storagePath?.startsWith('data:') || photo.storagePath?.startsWith('blob:');
 }
 
-function isFirebaseStorageUrl(photo: Photo): boolean {
-  return photo.storagePath?.startsWith('https://firebasestorage.googleapis.com') || false;
-}
-
 interface PhotoViewerProps {
   photos: Photo[];
   initialIndex: number;
@@ -153,7 +149,7 @@ export function PhotoViewer({
           <div className="photo-viewer-image-wrap">
             <img
               key={current.id}
-              src={isFirebaseStorageUrl(current) || isLegacyPhoto(current) ? current.storagePath : getOriginalUrl(current.libraryId, current.id)}
+              src={isLegacyPhoto(current) ? current.storagePath : getOriginalUrl(current.libraryId, current.id)}
               alt={current.originalName}
               className="photo-viewer-image"
             />
@@ -179,7 +175,7 @@ export function PhotoViewer({
               title={photo.originalName}
             >
               <img
-                src={isFirebaseStorageUrl(photo) || isLegacyPhoto(photo) ? (photo.thumbnailPath ?? photo.storagePath) : getLargeThumbnailUrl(photo.libraryId, photo.id)}
+                src={isLegacyPhoto(photo) ? (photo.thumbnailPath ?? photo.storagePath) : getLargeThumbnailUrl(photo.libraryId, photo.id)}
                 alt={photo.originalName}
                 loading="lazy"
               />
