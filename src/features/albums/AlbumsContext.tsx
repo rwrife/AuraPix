@@ -18,6 +18,13 @@ export interface AlbumsState {
 
 const AlbumsContext = createContext<AlbumsState | null>(null);
 
+let optimisticAlbumCounter = 0;
+
+function nextOptimisticAlbumId() {
+  optimisticAlbumCounter += 1;
+  return `optimistic-album-${optimisticAlbumCounter}`;
+}
+
 export function AlbumsProvider({ children }: { children: ReactNode }) {
   const { albums: albumsService } = useServices();
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -28,20 +35,15 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    console.log('[AlbumsContext] Starting to load albums and folders...');
     Promise.all([albumsService.listAlbums(), albumsService.listFolders()])
       .then(([a, f]) => {
-        console.log('[AlbumsContext] Successfully loaded:', { albums: a.length, folders: f.length });
-        console.log('[AlbumsContext] Albums:', a);
-        console.log('[AlbumsContext] Folders:', f);
         if (!cancelled) {
           setAlbums(a);
           setFolders(f);
           setLoading(false);
         }
       })
-      .catch((err) => {
-        console.error('[AlbumsContext] Error loading albums:', err);
+      .catch(() => {
         if (!cancelled) {
           setError('Unable to load albums.');
           setLoading(false);
@@ -55,11 +57,24 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
   const createAlbum = useCallback(
     async (name: string, folderId?: string | null): Promise<Album | null> => {
       setError(null);
+
+      const optimisticAlbum: Album = {
+        id: nextOptimisticAlbumId(),
+        name,
+        folderId: folderId ?? null,
+        createdAt: new Date().toISOString(),
+      };
+
+      setAlbums((prev) => [optimisticAlbum, ...prev]);
+
       try {
         const created = await albumsService.createAlbum({ name, folderId });
-        setAlbums((prev) => [created, ...prev]);
+        setAlbums((prev) =>
+          prev.map((album) => (album.id === optimisticAlbum.id ? created : album))
+        );
         return created;
       } catch (err) {
+        setAlbums((prev) => prev.filter((album) => album.id !== optimisticAlbum.id));
         setError(err instanceof Error ? err.message : 'Unable to create album.');
         return null;
       }
