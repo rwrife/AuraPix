@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ShareDownloadPolicy, ShareLink, SharePermission } from '../../domain/sharing/types';
+import type {
+  ShareAccessEvent,
+  ShareDownloadPolicy,
+  ShareLink,
+  SharePermission,
+} from '../../domain/sharing/types';
 import { useServices } from '../../services/useServices';
 
 interface UseSharingState {
   links: ShareLink[];
+  accessEvents: ShareAccessEvent[];
   loading: boolean;
+  loadingAccessEvents: boolean;
   error: string | null;
+  accessEventsError: string | null;
 }
 
 interface CreateShareLinkOptions {
@@ -23,13 +31,17 @@ interface UseSharingReturn extends UseSharingState {
     options?: CreateShareLinkOptions
   ): Promise<ShareLink>;
   revokeLink(linkId: string): Promise<void>;
+  refreshAccessEvents(): Promise<void>;
 }
 
 export function useSharing(resourceId: string): UseSharingReturn {
   const { sharing } = useServices();
   const [links, setLinks] = useState<ShareLink[]>([]);
+  const [accessEvents, setAccessEvents] = useState<ShareAccessEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingAccessEvents, setLoadingAccessEvents] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessEventsError, setAccessEventsError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +64,23 @@ export function useSharing(resourceId: string): UseSharingReturn {
       cancelled = true;
     };
   }, [sharing, resourceId]);
+
+  const refreshAccessEvents = useCallback(async () => {
+    setLoadingAccessEvents(true);
+    setAccessEventsError(null);
+    try {
+      const events = await sharing.listAccessEvents(resourceId);
+      setAccessEvents(events);
+    } catch (err: unknown) {
+      setAccessEventsError(err instanceof Error ? err.message : 'Failed to load share access events.');
+    } finally {
+      setLoadingAccessEvents(false);
+    }
+  }, [sharing, resourceId]);
+
+  useEffect(() => {
+    void refreshAccessEvents();
+  }, [refreshAccessEvents]);
 
   const createLink = useCallback(
     async (
@@ -88,5 +117,15 @@ export function useSharing(resourceId: string): UseSharingReturn {
     [sharing]
   );
 
-  return { links, loading, error, createLink, revokeLink };
+  return {
+    links,
+    accessEvents,
+    loading,
+    loadingAccessEvents,
+    error,
+    accessEventsError,
+    createLink,
+    revokeLink,
+    refreshAccessEvents,
+  };
 }
