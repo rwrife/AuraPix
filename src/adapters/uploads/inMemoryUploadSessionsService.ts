@@ -12,12 +12,39 @@ interface StoredFinalizeResult {
   result: FinalizeUploadResult;
 }
 
+interface UploadSessionRateLimitConfig {
+  enabled: boolean;
+  maxRequests: number;
+  windowMs: number;
+}
+
+interface InMemoryUploadSessionsServiceOptions {
+  now?: () => number;
+  rateLimit?: Partial<UploadSessionRateLimitConfig>;
+}
+
+const DEFAULT_RATE_LIMIT: UploadSessionRateLimitConfig = {
+  enabled: false,
+  maxRequests: 5,
+  windowMs: 60 * 1000,
+};
+
 function slugifyFileName(fileName: string): string {
   return fileName
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+export class UploadSessionRateLimitError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super(`Too many upload session requests. Retry after ${retryAfterSeconds} seconds.`);
+    this.name = 'UploadSessionRateLimitError';
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
 }
 
 export function buildCanonicalObjectKey({
@@ -47,12 +74,25 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
   private readonly finalizeByIdempotency = new Map<string, StoredFinalizeResult>();
   private readonly metadata = new Map<string, UploadMetadata>();
   private readonly jobs = new Map<string, DerivativeJobEnvelope>();
+  private readonly now: () => number;
+  private readonly rateLimit: UploadSessionRateLimitConfig;
+  private readonly rateLimitBuckets = new Map<string, number[]>();
+
+  constructor(options: InMemoryUploadSessionsServiceOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.rateLimit = {
+      ...DEFAULT_RATE_LIMIT,
+      ...options.rateLimit,
+    };
+  }
 
   async createUploadSession(input: CreateUploadSessionInput): Promise<UploadSession> {
     const fileName = input.fileName.trim();
     if (!fileName) {
       throw new Error('File name is required.');
     }
+
+    this.enforceUploadSessionRateLimit();
 
     const sessionId = `uplsess_${crypto.randomUUID()}`;
     const idempotencyKey = `upk_${crypto.randomUUID()}`;
@@ -63,7 +103,7 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
       idempotencyKey,
       objectKey,
       uploadUrl: `https://uploads.local/${sessionId}`,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      expiresAt: new Date(this.now() + 15 * 60 * 1000).toISOString(),
     };
 
     this.sessions.set(sessionId, session);
@@ -118,7 +158,7 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
       metadataUploadId: uploadId,
       objectKey: session.objectKey,
       status: 'queued',
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(this.now()).toISOString(),
     };
 
     this.metadata.set(uploadId, metadata);
@@ -168,5 +208,27 @@ export class InMemoryUploadSessionsService implements UploadSessionsService {
     }
 
     return completedJob;
+  }
+
+  private enforceUploadSessionRateLimit(): void {
+    if (!this.rateLimit.enabled) {
+      return;
+    }
+
+    const now = this.now();
+    const bucketKey = 'createUploadSession';
+    const existing = this.rateLimitBuckets.get(bucketKey) ?? [];
+    const cutoff = now - this.rateLimit.windowMs;
+    const activeRequests = existing.filter((value) => value > cutoff);
+
+    if (activeRequests.length >= this.rateLimit.maxRequests) {
+      const oldestActive = activeRequests[0];
+      const retryAfterMs = oldestActive + this.rateLimit.windowMs - now;
+      const retryAfterSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+      throw new UploadSessionRateLimitError(retryAfterSeconds);
+    }
+
+    activeRequests.push(now);
+    this.rateLimitBuckets.set(bucketKey, activeRequests);
   }
 }
