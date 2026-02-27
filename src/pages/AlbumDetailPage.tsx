@@ -378,8 +378,7 @@ export function AlbumDetailPage() {
                     <div>
                       <div className="album-name">{event.outcome}</div>
                       <div className="album-date">
-                        {new Date(event.createdAt).toLocaleString()}
-                        {event.metadata?.reason ? ` • ${event.metadata.reason}` : ''}
+                        {new Date(event.occurredAt).toLocaleString()}
                       </div>
                     </div>
                   </li>
