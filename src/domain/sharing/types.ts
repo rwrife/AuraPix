@@ -59,10 +59,15 @@ export type ShareAccessOutcome =
   | 'denied_invalid_password'
   | 'denied_download_disallowed';
 
+export type ShareAccessAttempt = 'link_resolve' | 'download_original' | 'download_derivative';
+
 export interface ShareAccessEvent {
   id: string;
   linkId: string | null;
   token: string;
+  resourceType: ShareLink['resourceType'] | null;
+  resourceId: string | null;
+  attempt: ShareAccessAttempt;
   outcome: ShareAccessOutcome;
   occurredAt: string;
 }

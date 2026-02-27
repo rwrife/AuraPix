@@ -26,6 +26,9 @@ describe('InMemorySharingService', () => {
       'denied_invalid_password',
       'denied_invalid_password',
     ]);
+    expect(events.every((event) => event.attempt === 'link_resolve')).toBe(true);
+    expect(events.every((event) => event.resourceType === 'album')).toBe(true);
+    expect(events.every((event) => event.resourceId === 'album-1')).toBe(true);
   });
 
   it('blocks max-use links after quota and records denial', async () => {
@@ -90,6 +93,11 @@ describe('InMemorySharingService', () => {
       'denied_download_disallowed',
       'granted_download',
       'denied_download_disallowed',
+    ]);
+    expect(events.map((event) => event.attempt)).toEqual([
+      'download_derivative',
+      'download_derivative',
+      'download_original',
     ]);
   });
 });
