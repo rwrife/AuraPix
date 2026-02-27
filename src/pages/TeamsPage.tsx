@@ -4,7 +4,7 @@ import { useTeams, type TeamRole } from '../features/teams/useTeams';
 const ROLE_OPTIONS: TeamRole[] = ['owner', 'admin', 'editor', 'contributor', 'viewer'];
 
 export function TeamsPage() {
-  const { workspace, roleCounts, updateRole, inviteMember } = useTeams();
+  const { workspace, roleCounts, lastRoleChangeError, updateRole, inviteMember } = useTeams();
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<TeamRole>('viewer');
@@ -39,6 +39,8 @@ export function TeamsPage() {
           </div>
         ))}
       </div>
+
+      {lastRoleChangeError ? <p className="teams-inline-error">{lastRoleChangeError}</p> : null}
 
       <div className="teams-panel">
         <h2>Members</h2>
