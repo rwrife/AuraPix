@@ -8,6 +8,13 @@ import type { Session, SignInInput, SignUpInput, User } from '../../domain/auth/
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'aurapix:local:session';
+const MAX_FAILED_SIGN_IN_ATTEMPTS = 5;
+const SIGN_IN_LOCKOUT_WINDOW_MS = 10 * 60 * 1000;
+
+interface SignInAttemptState {
+  failedAttempts: number;
+  lockoutUntilMs: number | null;
+}
 
 const LOCAL_USER: User = {
   id: 'local-user-1',
@@ -32,6 +39,21 @@ export class InMemoryAuthService implements AuthService {
   ]);
 
   private session: Session | null = null;
+  private signInAttempts = new Map<string, SignInAttemptState>();
+
+  private getAttemptState(email: string, nowMs: number): SignInAttemptState {
+    const attempt = this.signInAttempts.get(email);
+    if (!attempt) {
+      return { failedAttempts: 0, lockoutUntilMs: null };
+    }
+
+    if (attempt.lockoutUntilMs && nowMs >= attempt.lockoutUntilMs) {
+      this.signInAttempts.delete(email);
+      return { failedAttempts: 0, lockoutUntilMs: null };
+    }
+
+    return attempt;
+  }
 
   constructor() {
     // Restore session from localStorage on construction
@@ -50,10 +72,29 @@ export class InMemoryAuthService implements AuthService {
   }
 
   async signIn(input: SignInInput): Promise<Session> {
+    const nowMs = Date.now();
+    const attemptState = this.getAttemptState(input.email, nowMs);
+
+    if (attemptState.lockoutUntilMs && nowMs < attemptState.lockoutUntilMs) {
+      const secondsRemaining = Math.ceil((attemptState.lockoutUntilMs - nowMs) / 1000);
+      throw new Error(`Too many failed sign-in attempts. Try again in ${secondsRemaining}s.`);
+    }
+
     const entry = this.users.get(input.email);
     if (!entry || entry.password !== input.password) {
+      const nextFailedAttempts = attemptState.failedAttempts + 1;
+      const lockedOut = nextFailedAttempts >= MAX_FAILED_SIGN_IN_ATTEMPTS;
+      this.signInAttempts.set(input.email, {
+        failedAttempts: lockedOut ? 0 : nextFailedAttempts,
+        lockoutUntilMs: lockedOut ? nowMs + SIGN_IN_LOCKOUT_WINDOW_MS : null,
+      });
+      if (lockedOut) {
+        throw new Error('Too many failed sign-in attempts. Try again later.');
+      }
       throw new Error('Invalid email or password.');
     }
+
+    this.signInAttempts.delete(input.email);
     this.session = makeSession(entry.user);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.session));
     return this.session;
