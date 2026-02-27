@@ -29,6 +29,11 @@ export interface DerivativeJobEnvelope {
 
 export interface CreateUploadSessionInput {
   fileName: string;
+  /**
+   * Optional client request identifier for retry-safe session creation.
+   * Reusing the same value with the same file name returns the original session.
+   */
+  clientRequestId?: string;
 }
 
 export interface FinalizeUploadInput {

@@ -17,6 +17,40 @@ describe('InMemoryUploadSessionsService', () => {
     expect(isValidCanonicalObjectKey('bad/key')).toBe(false);
   });
 
+  it('replays upload session creation for duplicate client request ids', async () => {
+    const service = new InMemoryUploadSessionsService();
+
+    const first = await service.createUploadSession({
+      fileName: 'Beach.png',
+      clientRequestId: 'req-123',
+    });
+
+    const second = await service.createUploadSession({
+      fileName: 'Beach.png',
+      clientRequestId: 'req-123',
+    });
+
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(second.idempotencyKey).toBe(first.idempotencyKey);
+    expect(second.objectKey).toBe(first.objectKey);
+  });
+
+  it('rejects duplicate client request ids for different file names', async () => {
+    const service = new InMemoryUploadSessionsService();
+
+    await service.createUploadSession({
+      fileName: 'Beach.png',
+      clientRequestId: 'req-123',
+    });
+
+    await expect(
+      service.createUploadSession({
+        fileName: 'Mountains.png',
+        clientRequestId: 'req-123',
+      }),
+    ).rejects.toThrow('Client request id already used for a different file name.');
+  });
+
   it('finalize upload is idempotent per idempotency key', async () => {
     const service = new InMemoryUploadSessionsService();
     const session = await service.createUploadSession({ fileName: 'Beach.png' });
