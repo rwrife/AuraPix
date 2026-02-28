@@ -58,7 +58,7 @@ export async function generateSignedImageUrl(
   return url.toString();
 }
 
-
+/**
  * Convert base64 string to ArrayBuffer
  */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
