@@ -24,6 +24,12 @@ export async function generateThumbnailsForPhoto(
       throw new Error(`Photo ${photoId} not found`);
     }
 
+    // Check if storagePaths structure exists (needed for thumbnail generation)
+    if (!photo.storagePaths) {
+      logger.warn(logContext, 'Photo uses old storagePath format, cannot generate thumbnails');
+      return;
+    }
+
     // Check if already processing (idempotency)
     if (
       photo.status === 'ready' &&

@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger.js';
 import { AppError } from './errorHandler.js';
@@ -13,7 +13,8 @@ export function initializeFirebaseAuth(): void {
 
   try {
     // Initialize with default credentials (uses GOOGLE_APPLICATION_CREDENTIALS env var)
-    if (!admin.apps.length) {
+    // Check if admin.apps exists and has length, or if no apps are initialized
+    if (!admin.apps || admin.apps.length === 0) {
       admin.initializeApp();
     }
     firebaseInitialized = true;

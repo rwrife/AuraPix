@@ -17,13 +17,13 @@ export type ImageFormat = 'webp' | 'jpeg';
  * Build a signed image URL for the backend API
  * Requires a valid signing key from ImageAuthProvider
  */
-export function buildImageUrl(
+export async function buildImageUrl(
   libraryId: string,
   photoId: string,
   signingKey: ClientSigningKey,
   size: ThumbnailSize = 'medium',
   format: ImageFormat = 'webp'
-): string {
+): Promise<string> {
   return generateSignedImageUrl(
     {
       libraryId,
@@ -38,47 +38,47 @@ export function buildImageUrl(
 /**
  * Get thumbnail URL for grid display (medium by default)
  */
-export function getThumbnailUrl(
+export async function getThumbnailUrl(
   libraryId: string,
   photoId: string,
   signingKey: ClientSigningKey,
   format: ImageFormat = 'webp'
-): string {
+): Promise<string> {
   return buildImageUrl(libraryId, photoId, signingKey, 'medium', format);
 }
 
 /**
  * Get small blur placeholder URL
  */
-export function getBlurPlaceholderUrl(
+export async function getBlurPlaceholderUrl(
   libraryId: string,
   photoId: string,
   signingKey: ClientSigningKey,
   format: ImageFormat = 'jpeg'
-): string {
+): Promise<string> {
   return buildImageUrl(libraryId, photoId, signingKey, 'small', format);
 }
 
 /**
  * Get full-size original URL
  */
-export function getOriginalUrl(
+export async function getOriginalUrl(
   libraryId: string,
   photoId: string,
   signingKey: ClientSigningKey,
   format: ImageFormat = 'jpeg'
-): string {
+): Promise<string> {
   return buildImageUrl(libraryId, photoId, signingKey, 'original', format);
 }
 
 /**
  * Get large thumbnail URL for filmstrip
  */
-export function getLargeThumbnailUrl(
+export async function getLargeThumbnailUrl(
   libraryId: string,
   photoId: string,
   signingKey: ClientSigningKey,
   format: ImageFormat = 'webp'
-): string {
+): Promise<string> {
   return buildImageUrl(libraryId, photoId, signingKey, 'large', format);
 }

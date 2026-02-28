@@ -1,4 +1,4 @@
-import { signData } from '../../utils/crypto.js';
+import { signData, deriveKey, verifySignature } from '../../utils/crypto.js';
 import type { ImageSignature } from '../../models/ImageAuth.js';
 import { logger } from '../../utils/logger.js';
 
@@ -75,15 +75,27 @@ export class SignatureValidator {
 
   /**
    * Validate HMAC signature against query parameters
+   * 
+   * Validates that the HMAC was generated using the user-level signing key
+   * derived from the master secret and user identifier. This is single-level
+   * validation with no photo-specific key derivation.
+   * 
    * @param signature - Parsed signature data
-   * @param queryParams - All query parameters from request
-   * @returns True if signature is valid
+   * @param queryParams - All query parameters from request  
+   * @returns True if HMAC is valid
    */
   validateSignature(
     signature: ImageSignature,
     queryParams: Record<string, any>
   ): boolean {
     try {
+      // Extract the HMAC from query params
+      const providedHmac = queryParams.hmac;
+      if (!providedHmac || typeof providedHmac !== 'string') {
+        logger.debug('Missing or invalid HMAC in query parameters');
+        return false;
+      }
+
       // Reconstruct the canonical string that was signed
       const canonical = this.buildCanonicalString(
         signature.libraryId,
@@ -93,28 +105,30 @@ export class SignatureValidator {
         signature.expiresAt
       );
 
-      // Get the signing key (derived from userId or shareToken)
-      const signingKey = this.deriveSigningKey(
-        signature.userId || signature.shareToken || ''
-      );
+      // Derive the user-level signing key using the SAME method as SigningKeyService
+      // deriveKey uses hex-decoded master secret, matching key generation
+      const userIdentifier = signature.userId || signature.shareToken || 'anonymous';
+      const userSigningKey = deriveKey(this.masterSecret, userIdentifier);
 
-      // Extract the HMAC from query params
-      const providedHmac = queryParams.hmac;
-      if (!providedHmac) {
-        logger.debug('Missing HMAC in query parameters');
-        return false;
-      }
-
-      // Compute expected HMAC
-      const expectedHmac = signData(signingKey, canonical);
-
-      // Compare using timing-safe comparison (done in signData verification)
-      const isValid = expectedHmac === providedHmac;
+      // Verify HMAC using timing-safe comparison
+      const isValid = verifySignature(userSigningKey, canonical, providedHmac);
 
       if (!isValid) {
-        logger.debug(
-          { provided: providedHmac.substring(0, 16), expected: expectedHmac.substring(0, 16) },
+        logger.warn(
+          { 
+            provided: providedHmac.substring(0, 16), 
+            canonical: canonical.substring(0, 40),
+            userIdentifier: userIdentifier.substring(0, 16) + '...'
+          },
           'HMAC mismatch'
+        );
+      } else {
+        logger.debug(
+          {
+            libraryId: signature.libraryId,
+            photoId: signature.photoId,
+          },
+          'Signature validated successfully'
         );
       }
 
@@ -138,14 +152,5 @@ export class SignatureValidator {
     expiresAt: number
   ): string {
     return `${libraryId}:${photoId}:${size}:${format}:${expiresAt}`;
-  }
-
-  /**
-   * Derive signing key from user ID or share token
-   * @param seed - User ID or share token
-   * @returns Derived signing key
-   */
-  private deriveSigningKey(seed: string): string {
-    return signData(this.masterSecret, `signing-key:${seed}`);
   }
 }

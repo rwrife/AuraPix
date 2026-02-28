@@ -7,6 +7,17 @@ import { ServeImageQuerySchema } from '../../utils/validation.js';
 import { applyEdits } from '../../services/edits/EditProcessor.js';
 
 /**
+ * Normalize a storage path by removing gs://bucket-name/ prefix if present
+ * @param path - Storage path (may include gs:// prefix)
+ * @returns Path without gs:// prefix
+ */
+function normalizeStoragePath(path: string): string {
+  // Remove gs://bucket-name/ prefix if present
+  const gsPrefix = /^gs:\/\/[^/]+\//;
+  return path.replace(gsPrefix, '');
+}
+
+/**
  * Serve an image with caching
  * GET /images/:libraryId/:photoId?size=medium&format=webp
  */
@@ -63,14 +74,34 @@ export async function handleServeImage(
     }
 
     // Determine storage path
+    // Handle both old format (single storagePath string) and new format (storagePaths object)
     let storagePath: string;
-    if (size === 'original') {
-      storagePath = photo.storagePaths.original;
+    let servingOriginalForThumbnail = false;
+    
+    if (photo.storagePath && typeof photo.storagePath === 'string') {
+      // Old format: single storagePath string pointing to original
+      // Thumbnails don't exist yet, so serve original for all sizes
+      storagePath = normalizeStoragePath(photo.storagePath);
+      if (size !== 'original') {
+        servingOriginalForThumbnail = true;
+        logger.info({ 
+          photoId, 
+          requestedSize: size, 
+          requestedFormat: format 
+        }, 'Thumbnails not available, serving original image instead');
+      }
+    } else if (photo.storagePaths && typeof photo.storagePaths === 'object') {
+      // New format: storagePaths object with original and derivatives
+      if (size === 'original') {
+        storagePath = normalizeStoragePath(photo.storagePaths.original);
+      } else {
+        // Get derivative path
+        const derivativeKey =
+          `${size}_${format}` as keyof typeof photo.storagePaths.derivatives;
+        storagePath = normalizeStoragePath(photo.storagePaths.derivatives[derivativeKey]);
+      }
     } else {
-      // Get derivative path
-      const derivativeKey =
-        `${size}_${format}` as keyof typeof photo.storagePaths.derivatives;
-      storagePath = photo.storagePaths.derivatives[derivativeKey];
+      throw new AppError(500, 'INVALID_PHOTO', 'Photo document has invalid storage path structure');
     }
 
     // Try cache first (for derivatives only)

@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import { authConfig } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { initializeFirebaseAuth } from './firebaseAuth.js';

@@ -54,9 +54,42 @@ export function PhotoViewer({
   const [brightness, setBrightness] = useState(0);
   const [contrast, setContrast] = useState(0);
   const [saturation, setSaturation] = useState(0);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string>('');
+  const [filmstripUrls, setFilmstripUrls] = useState<Map<string, string>>(new Map());
   const filmstripRef = useRef<HTMLDivElement>(null);
   const { signingKey } = useImageAuth();
   const current = photos[currentIndex];
+
+  // Generate URL for current main image
+  useEffect(() => {
+    if (!current) return;
+    
+    if (isLegacyPhoto(current)) {
+      setCurrentImageUrl(current.storagePath ?? '');
+    } else if (signingKey) {
+      getOriginalUrl(current.libraryId, current.id, signingKey).then(setCurrentImageUrl);
+    }
+  }, [current, signingKey]);
+
+  // Generate URLs for filmstrip thumbnails
+  useEffect(() => {
+    if (!signingKey) return;
+    
+    const urlMap = new Map<string, string>();
+    
+    Promise.all(
+      photos.map(async (photo) => {
+        if (isLegacyPhoto(photo)) {
+          urlMap.set(photo.id, photo.thumbnailPath ?? photo.storagePath ?? '');
+        } else {
+          const url = await getLargeThumbnailUrl(photo.libraryId, photo.id, signingKey);
+          urlMap.set(photo.id, url);
+        }
+      })
+    ).then(() => {
+      setFilmstripUrls(urlMap);
+    });
+  }, [photos, signingKey]);
 
   // Expose viewer state to parent via ref
   useEffect(() => {
@@ -151,7 +184,7 @@ export function PhotoViewer({
           <div className="photo-viewer-image-wrap">
             <img
               key={current.id}
-              src={isLegacyPhoto(current) ? current.storagePath : (signingKey ? getOriginalUrl(current.libraryId, current.id, signingKey) : '')}
+              src={currentImageUrl}
               alt={current.originalName}
               className="photo-viewer-image"
             />
@@ -177,7 +210,7 @@ export function PhotoViewer({
               title={photo.originalName}
             >
               <img
-                src={isLegacyPhoto(photo) ? (photo.thumbnailPath ?? photo.storagePath) : (signingKey ? getLargeThumbnailUrl(photo.libraryId, photo.id, signingKey) : '')}
+                src={filmstripUrls.get(photo.id) || ''}
                 alt={photo.originalName}
                 loading="lazy"
               />

@@ -41,7 +41,7 @@ export function createSignedUrlMiddleware(dataAdapter: DataAdapter) {
         throw new AppError(401, 'INVALID_SIGNATURE', 'Image signature is malformed or expired');
       }
 
-      // Verify HMAC signature matches query parameters
+      // Validate HMAC signature
       const isValid = signatureValidator.validateSignature(signature, req.query);
       if (!isValid) {
         throw new AppError(401, 'INVALID_SIGNATURE', 'Image signature verification failed');
@@ -59,6 +59,7 @@ export function createSignedUrlMiddleware(dataAdapter: DataAdapter) {
 
       // Fetch photo document from database
       const photo = await dataAdapter.getPhoto(signature.libraryId, signature.photoId);
+      
       if (!photo) {
         throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found');
       }

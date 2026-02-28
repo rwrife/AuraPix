@@ -162,22 +162,90 @@ export class FirestoreDataAdapter implements DataAdapter {
 
   async getPhoto(libraryId: string, photoId: string): Promise<any | null> {
     try {
-      const photoRef = this.firestore
+      logger.info({ 
+        libraryId, 
+        photoId,
+        nestedPath: `libraries/${libraryId}/photos/${photoId}`,
+        flatPath: `photos/${photoId}`
+      }, 'Attempting to fetch photo from Firestore');
+      
+      // Try nested path first: libraries/{libraryId}/photos/{photoId}
+      const nestedPhotoRef = this.firestore
         .collection('libraries')
         .doc(libraryId)
         .collection('photos')
         .doc(photoId);
       
-      const doc = await photoRef.get();
+      const nestedDoc = await nestedPhotoRef.get();
       
-      if (!doc.exists) {
-        logger.debug({ libraryId, photoId }, 'Photo not found in Firestore');
-        return null;
+      if (nestedDoc.exists) {
+        const data = nestedDoc.data();
+        logger.info({ 
+          libraryId, 
+          photoId,
+          foundIn: 'nested',
+          hasStoragePath: !!data?.storagePath,
+          hasStoragePaths: !!data?.storagePaths,
+          storagePath: data?.storagePath
+        }, 'Photo found in nested collection');
+        return data;
       }
-
-      const data = doc.data();
-      logger.debug({ libraryId, photoId }, 'Photo fetched from Firestore');
-      return data;
+      
+      // Try flat path: photos/{photoId}
+      const flatPhotoRef = this.firestore
+        .collection('photos')
+        .doc(photoId);
+      
+      const flatDoc = await flatPhotoRef.get();
+      
+      if (flatDoc.exists) {
+        const data = flatDoc.data();
+        logger.info({ 
+          libraryId, 
+          photoId,
+          foundIn: 'flat',
+          hasStoragePath: !!data?.storagePath,
+          hasStoragePaths: !!data?.storagePaths,
+          storagePath: data?.storagePath
+        }, 'Photo found in flat collection');
+        return data;
+      }
+      
+      // Not found in either location - debug both
+      logger.warn({ 
+        libraryId, 
+        requestedPhotoId: photoId
+      }, 'Photo not found in either nested or flat collection, checking what exists...');
+      
+      // List photos in nested collection
+      const nestedPhotosSnapshot = await this.firestore
+        .collection('libraries')
+        .doc(libraryId)
+        .collection('photos')
+        .limit(5)
+        .get();
+      
+      const nestedPhotoIds = nestedPhotosSnapshot.docs.map(d => d.id);
+      
+      // List photos in flat collection with this libraryId
+      const flatPhotosSnapshot = await this.firestore
+        .collection('photos')
+        .where('libraryId', '==', libraryId)
+        .limit(5)
+        .get();
+      
+      const flatPhotoIds = flatPhotosSnapshot.docs.map(d => d.id);
+      
+      logger.warn({ 
+        libraryId, 
+        requestedPhotoId: photoId,
+        nestedPhotoIds,
+        nestedCount: nestedPhotoIds.length,
+        flatPhotoIds,
+        flatCount: flatPhotoIds.length
+      }, 'Photo not found - available photos in both collections');
+      
+      return null;
     } catch (error) {
       logger.error({ error, libraryId, photoId }, 'Failed to fetch photo from Firestore');
       throw new AppError(

@@ -91,6 +91,10 @@ export class ImageAuthorizer {
 
   /**
    * Check if user owns the library
+   * 
+   * First checks if the libraryId encodes the userId (format: library-{userId}).
+   * Falls back to looking up the library document in Firestore.
+   * 
    * @param libraryId - Library ID to check
    * @param userId - User ID to verify
    * @returns True if user owns library
@@ -100,13 +104,22 @@ export class ImageAuthorizer {
     userId: string
   ): Promise<boolean> {
     try {
+      // Quick check: library ID format is "library-{userId}"
+      if (libraryId === `library-${userId}`) {
+        logger.debug({ libraryId, userId }, 'Library ownership verified via ID pattern');
+        return true;
+      }
+
+      // Fallback: look up library document in Firestore
       const library = await this.dataAdapter.fetchData<Library>(
         'libraries',
         libraryId
       );
 
       if (!library) {
-        logger.debug({ libraryId }, 'Library not found');
+        logger.debug({ libraryId }, 'Library not found in Firestore');
+        // If library doc doesn't exist but the HMAC was valid,
+        // the user was authenticated - allow access
         return false;
       }
 

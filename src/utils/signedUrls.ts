@@ -8,10 +8,10 @@ import { API_CONFIG } from '../config/api.js';
  * @param signingKey - Client signing key from backend
  * @returns Fully signed URL ready to use in <img> tags
  */
-export function generateSignedImageUrl(
+export async function generateSignedImageUrl(
   params: SignedUrlParams,
   signingKey: ClientSigningKey
-): string {
+): Promise<string> {
   const {
     libraryId,
     photoId,
@@ -40,8 +40,9 @@ export function generateSignedImageUrl(
   // Create canonical string for signing (must match backend format)
   const canonicalString = `${libraryId}:${photoId}:${size}:${format}:${expiresAt}`;
 
-  // Generate HMAC signature using Web Crypto API
-  const signature = generateHmacSignature(signingKey.key, canonicalString);
+  // Generate HMAC signature directly using the user-level signing key from backend
+  // No photo-specific key derivation - keep it simple
+  const hmacSignature = await generateHmacSignatureAsync(signingKey.key, canonicalString);
 
   // Encode signature payload as base64url
   const encodedSignature = base64UrlEncode(JSON.stringify(signaturePayload));
@@ -51,26 +52,9 @@ export function generateSignedImageUrl(
   url.searchParams.set('size', size);
   url.searchParams.set('format', format);
   url.searchParams.set('sig', encodedSignature);
+  url.searchParams.set('hmac', hmacSignature);
 
   return url.toString();
-}
-
-/**
- * Generate HMAC-SHA256 signature synchronously using subtle crypto
- * Note: This is a synchronous wrapper around the async Web Crypto API
- * 
- * @param key - Base64-encoded HMAC key
- * @param data - Data to sign
- * @returns Base64-encoded signature
- */
-function generateHmacSignature(key: string, data: string): string {
-  // Decode base64 key
-  const keyBuffer = base64ToArrayBuffer(key);
-  
-  // For now, we'll use a simpler approach that doesn't require async
-  // In production, consider using a sync HMAC library or pre-computing signatures
-  // This is a placeholder - we'll actually compute this async in the manager
-  return 'placeholder-will-be-computed-by-manager';
 }
 
 /**

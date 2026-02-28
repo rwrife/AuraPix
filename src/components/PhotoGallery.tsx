@@ -28,11 +28,31 @@ interface LazyImageProps {
 function LazyImage({ photo, className, alt }: LazyImageProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [blurUrl, setBlurUrl] = useState<string>('');
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
   const imgRef = useRef<HTMLImageElement>(null);
   const { signingKey } = useImageAuth();
 
   // Check if this is a legacy in-memory photo (data URLs or blob URLs)
   const isLegacyPhoto = photo.storagePath?.startsWith('data:') || photo.storagePath?.startsWith('blob:');
+
+  // Generate signed URLs when signing key is available
+  useEffect(() => {
+    if (isLegacyPhoto) {
+      // Use legacy URLs directly for in-memory photos
+      setBlurUrl(photo.thumbnailPath ?? photo.storagePath ?? '');
+      setThumbnailUrl(photo.thumbnailPath ?? photo.storagePath ?? '');
+    } else if (signingKey) {
+      // Generate signed URLs for API photos
+      Promise.all([
+        getBlurPlaceholderUrl(photo.libraryId, photo.id, signingKey),
+        getThumbnailUrl(photo.libraryId, photo.id, signingKey),
+      ]).then(([blur, thumb]) => {
+        setBlurUrl(blur);
+        setThumbnailUrl(thumb);
+      });
+    }
+  }, [photo.id, photo.libraryId, photo.storagePath, photo.thumbnailPath, signingKey, isLegacyPhoto]);
 
   useEffect(() => {
     const img = imgRef.current;
@@ -59,14 +79,6 @@ function LazyImage({ photo, className, alt }: LazyImageProps) {
     };
   }, []);
 
-  // Use legacy URLs directly for in-memory photos, otherwise use API endpoints with signing key
-  const blurUrl = isLegacyPhoto
-    ? (photo.thumbnailPath ?? photo.storagePath)
-    : (signingKey ? getBlurPlaceholderUrl(photo.libraryId, photo.id, signingKey) : '');
-  const thumbnailUrl = isLegacyPhoto
-    ? (photo.thumbnailPath ?? photo.storagePath)
-    : (signingKey ? getThumbnailUrl(photo.libraryId, photo.id, signingKey) : '');
-
   return (
     <>
       {/* Blur placeholder - always loads immediately */}
@@ -82,7 +94,7 @@ function LazyImage({ photo, className, alt }: LazyImageProps) {
         }}
       />
       {/* Full resolution thumbnail - loads when visible */}
-      {isVisible && (
+      {isVisible && thumbnailUrl && (
         <img
           src={thumbnailUrl}
           alt={alt}

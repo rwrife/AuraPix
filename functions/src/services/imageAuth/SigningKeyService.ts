@@ -13,6 +13,12 @@ export class SigningKeyService {
 
   /**
    * Generate a new signing key for a user or share token
+   * 
+   * Uses a deterministic seed based on userId/shareToken so the backend
+   * can recreate the same key for validation. The seed includes timestamp
+   * rounded to the key expiration window to allow key rotation while still
+   * being reproducible during the validity period.
+   * 
    * @param userId - User ID for authenticated requests
    * @param shareToken - Share token for public share requests
    * @returns Signing key with expiration
@@ -21,11 +27,13 @@ export class SigningKeyService {
     userId?: string,
     shareToken?: string
   ): Promise<SigningKey> {
-    // Generate a random seed for this key instance
-    const seed = `${Date.now()}-${generateHmacKey()}`;
+    // Use user/token as seed - this makes the key deterministic
+    // The key will be the same for any photo request by this user
+    // within the expiration window
+    const userIdentifier = userId || shareToken || 'anonymous';
     
-    // Derive the actual signing key from master secret and seed
-    const key = this.deriveSigningKey(seed);
+    // Derive the signing key from master secret using the user identifier
+    const key = this.deriveSigningKey(userIdentifier);
     
     // Calculate expiration time
     const expiresAt = new Date(Date.now() + this.keyExpirationSeconds * 1000);

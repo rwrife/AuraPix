@@ -24,6 +24,12 @@ export async function regenerateThumbnailsWithEdits(
       throw new Error(`Photo ${photoId} not found`);
     }
 
+    // Check if storagePaths structure exists (needed for thumbnail generation)
+    if (!photo.storagePaths) {
+      logger.warn(logContext, 'Photo uses old storagePath format, cannot regenerate thumbnails');
+      return;
+    }
+
     // Load original image
     logger.info({ ...logContext, path: photo.storagePaths.original }, 'Loading original');
     const originalBuffer = await storageAdapter.readFile(

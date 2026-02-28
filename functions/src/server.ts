@@ -6,6 +6,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
+import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
+import { FirestoreDataAdapter } from './adapters/data/FirestoreDataAdapter.js';
 
 const app = express();
 
@@ -31,17 +33,35 @@ app.use((req, res, next) => {
 });
 
 // Initialize adapters based on configuration
-const storageAdapter = new LocalDiskStorage(storageConfig.local.storagePath);
-const dataAdapter = new LocalJsonData(storageConfig.local.databasePath);
+let storageAdapter;
+let dataAdapter;
+
+if (storageConfig.mode === 'firebase') {
+  // Firebase mode
+  logger.info({ 
+    mode: 'firebase',
+    bucket: storageConfig.firebase.storageBucket,
+    projectId: storageConfig.firebase.projectId
+  }, 'Initializing Firebase adapters');
+  
+  if (!storageConfig.firebase.storageBucket) {
+    throw new Error('FIREBASE_STORAGE_BUCKET environment variable is required in Firebase mode');
+  }
+  
+  storageAdapter = new FirebaseStorageAdapter(storageConfig.firebase.storageBucket);
+  dataAdapter = new FirestoreDataAdapter();
+} else {
+  // Local mode
+  logger.info('Initializing local adapters');
+  storageAdapter = new LocalDiskStorage(storageConfig.local.storagePath);
+  dataAdapter = new LocalJsonData(storageConfig.local.databasePath);
+}
 
 // Make adapters available to routes
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
 
-// Authentication middleware (applied to most routes)
-app.use(authMiddleware);
-
-// Health check
+// Health check (no auth required)
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -52,14 +72,19 @@ app.get('/health', (req, res) => {
 });
 
 // Import routes
-import imagesRouter from './routes/images.js';
+import { createImageRoutes } from './routes/images.js';
 import internalRouter from './routes/internal.js';
 import editsRouter from './routes/edits.js';
+import signingRouter from './routes/signing.js';
 
 // Mount routes
-app.use('/images', imagesRouter);
-app.use('/internal', internalRouter);
-app.use('/edits', editsRouter);
+// Images route handles its own auth (signed URLs for GET, Bearer for POST)
+app.use('/images', createImageRoutes(dataAdapter));
+
+// These routes require authentication
+app.use('/internal', authMiddleware, internalRouter);
+app.use('/edits', authMiddleware, editsRouter);
+app.use('/api/signing', authMiddleware, signingRouter);
 
 // Error handlers (must be last)
 app.use(notFoundHandler);

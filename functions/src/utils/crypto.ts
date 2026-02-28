@@ -52,10 +52,13 @@ export function verifySignature(key: string, data: string, signature: string): b
 /**
  * Derive a signing key from a seed and master secret
  * Used to generate deterministic keys without storing them
- * @param masterSecret - Master secret for key derivation
+ * @param masterSecret - Master secret for key derivation (hex-encoded)
  * @param seed - Seed value (e.g., userId or shareToken)
  * @returns Base64-encoded derived key
  */
 export function deriveKey(masterSecret: string, seed: string): string {
-  return signData(masterSecret, seed);
+  // Master secret is hex-encoded (64 chars), convert to buffer for HMAC
+  const hmac = createHmac('sha256', Buffer.from(masterSecret, 'hex'));
+  hmac.update(seed);
+  return hmac.digest('base64');
 }

@@ -49,7 +49,9 @@ export interface Photo {
   libraryId: string;
   albumIds: string[];
   originalName: string;
-  storagePaths: StoragePaths;
+  // Support both old format (single string) and new format (object with derivatives)
+  storagePath?: string; // Old format: single path to original (used when no thumbnails exist)
+  storagePaths?: StoragePaths; // New format: paths object with original and derivatives
   metadata: PhotoMetadata;
   status: PhotoStatus;
   currentEditVersion: number;
