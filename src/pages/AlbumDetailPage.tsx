@@ -210,6 +210,27 @@ export function AlbumDetailPage() {
     }
   }
 
+  async function toggleSharePermission(link: (typeof shareLinks)[number]) {
+    const nextPermission: SharePermission =
+      link.policy.permission === 'download' ? 'view' : 'download';
+
+    setShareError(null);
+    try {
+      await updateLinkPolicy(link.id, {
+        permission: nextPermission,
+        downloadPolicy:
+          nextPermission === 'download'
+            ? link.policy.downloadPolicy === 'none'
+              ? 'original_and_derivative'
+              : link.policy.downloadPolicy
+            : 'none',
+        watermarkEnabled: nextPermission === 'download' ? link.policy.watermarkEnabled : false,
+      });
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Failed to update share permission.');
+    }
+  }
+
   async function handleCreateShareLink() {
     if (!albumId) return;
     setShareError(null);
@@ -442,6 +463,13 @@ export function AlbumDetailPage() {
                   <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
                       className="btn-ghost btn-sm"
+                      onClick={() => void toggleSharePermission(link)}
+                    >
+                      {link.policy.permission === 'download' ? 'Set view-only' : 'Allow downloads'}
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm"
+                      disabled={link.policy.permission !== 'download'}
                       onClick={() => void cycleShareDownloadPolicy(link)}
                     >
                       Cycle download policy

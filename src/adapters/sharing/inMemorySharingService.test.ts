@@ -103,25 +103,44 @@ describe('InMemorySharingService', () => {
 });
 
 
-  it('updates share link download policy with safe defaults', async () => {
-    const service = new InMemorySharingService();
+it('updates share link download policy with safe defaults', async () => {
+  const service = new InMemorySharingService();
 
-    const link = await service.createShareLink({
-      resourceType: 'album',
-      resourceId: 'album-2',
-      policy: { permission: 'download', downloadPolicy: 'derivative_only', watermarkEnabled: true },
-    });
-
-    const disabledDownloads = await service.updateShareLinkPolicy({
-      linkId: link.id,
-      policy: { downloadPolicy: 'none' },
-    });
-    expect(disabledDownloads.policy.downloadPolicy).toBe('none');
-    expect(disabledDownloads.policy.watermarkEnabled).toBe(false);
-
-    const restored = await service.updateShareLinkPolicy({
-      linkId: link.id,
-      policy: { permission: 'download' },
-    });
-    expect(restored.policy.downloadPolicy).toBe('original_and_derivative');
+  const link = await service.createShareLink({
+    resourceType: 'album',
+    resourceId: 'album-2',
+    policy: { permission: 'download', downloadPolicy: 'derivative_only', watermarkEnabled: true },
   });
+
+  const disabledDownloads = await service.updateShareLinkPolicy({
+    linkId: link.id,
+    policy: { downloadPolicy: 'none' },
+  });
+  expect(disabledDownloads.policy.downloadPolicy).toBe('none');
+  expect(disabledDownloads.policy.watermarkEnabled).toBe(false);
+
+  const restored = await service.updateShareLinkPolicy({
+    linkId: link.id,
+    policy: { permission: 'download' },
+  });
+  expect(restored.policy.downloadPolicy).toBe('original_and_derivative');
+});
+
+it('forces view-only links to disable downloads', async () => {
+  const service = new InMemorySharingService();
+
+  const link = await service.createShareLink({
+    resourceType: 'album',
+    resourceId: 'album-3',
+    policy: { permission: 'download', downloadPolicy: 'original_and_derivative', watermarkEnabled: true },
+  });
+
+  const viewOnly = await service.updateShareLinkPolicy({
+    linkId: link.id,
+    policy: { permission: 'view' },
+  });
+
+  expect(viewOnly.policy.permission).toBe('view');
+  expect(viewOnly.policy.downloadPolicy).toBe('none');
+  expect(viewOnly.policy.watermarkEnabled).toBe(false);
+});

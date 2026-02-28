@@ -6,7 +6,6 @@
  * and validated server-side with short expiration times.
  */
 
-import { getApiUrl } from '../config/api';
 import { generateSignedImageUrl } from './signedUrls';
 import type { ClientSigningKey } from '../domain/imageAuth/types';
 

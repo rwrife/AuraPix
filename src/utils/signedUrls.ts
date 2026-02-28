@@ -44,6 +44,7 @@ export async function generateSignedImageUrl(
   // No photo-specific key derivation - keep it simple
   const hmacSignature = await generateHmacSignatureAsync(signingKey.key, canonicalString);
 
+
   // Encode signature payload as base64url
   const encodedSignature = base64UrlEncode(JSON.stringify(signaturePayload));
 
@@ -58,6 +59,24 @@ export async function generateSignedImageUrl(
 }
 
 /**
+<<<<<<< HEAD
+=======
+ * Generate HMAC-SHA256 signature synchronously using subtle crypto
+ * Note: This is a synchronous wrapper around the async Web Crypto API
+ * 
+ * @param key - Base64-encoded HMAC key
+ * @param data - Data to sign
+ * @returns Base64-encoded signature
+ */
+function generateHmacSignature(): string {
+  // For now, we'll use a simpler approach that doesn't require async
+  // In production, consider using a sync HMAC library or pre-computing signatures
+  // This is a placeholder - we'll actually compute this async in the manager
+  return 'placeholder-will-be-computed-by-manager';
+}
+
+/**
+>>>>>>> 7094d6052050d59396f3e4cebfb587811a43dd33
  * Convert base64 string to ArrayBuffer
  */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {

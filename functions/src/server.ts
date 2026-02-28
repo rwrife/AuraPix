@@ -4,6 +4,7 @@ import { serverConfig, storageConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
+import { apiVersionMiddleware } from './middleware/apiVersion.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
@@ -22,7 +23,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Idempotency-Key, X-API-Version'
+  );
   
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -61,7 +65,7 @@ if (storageConfig.mode === 'firebase') {
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
 
-// Health check (no auth required)
+// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
