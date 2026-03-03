@@ -10,6 +10,7 @@ interface UseAuthState {
 
 interface UseAuthReturn extends UseAuthState {
   signIn(email: string, password: string): Promise<void>;
+  signInWithOAuth(provider: 'google' | 'github'): Promise<void>;
   signUp(email: string, password: string, displayName?: string): Promise<void>;
   signOut(): Promise<void>;
 }
@@ -49,6 +50,23 @@ export function useAuth(): UseAuthReturn {
     [auth]
   );
 
+  const signInWithOAuth = useCallback(
+    async (provider: 'google' | 'github') => {
+      setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        const session = await auth.signInWithOAuth({ provider });
+        setState({ user: session.user, loading: false, error: null });
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: err instanceof Error ? err.message : 'OAuth sign-in failed.',
+        }));
+      }
+    },
+    [auth]
+  );
+
   const signUp = useCallback(
     async (email: string, password: string, displayName?: string) => {
       setState((s) => ({ ...s, loading: true, error: null }));
@@ -80,5 +98,5 @@ export function useAuth(): UseAuthReturn {
     }
   }, [auth]);
 
-  return { ...state, signIn, signUp, signOut };
+  return { ...state, signIn, signInWithOAuth, signUp, signOut };
 }
