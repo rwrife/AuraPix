@@ -24,6 +24,7 @@ export function TeamsPage() {
     lastRoleChangeError,
     lastInviteError,
     updateRole,
+    removeMember,
     inviteMember,
     acceptInvitation,
     declineInvitation,
@@ -110,19 +111,24 @@ export function TeamsPage() {
                     ))}
                   </div>
                 </div>
-                <label className="teams-role-select-wrap">
-                  <span className="sr-only">Role for {member.name}</span>
-                  <select
-                    value={member.role}
-                    onChange={(e) => updateRole(member.id, e.target.value as TeamRole)}
-                  >
-                    {ROLE_OPTIONS.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="teams-invite-actions">
+                  <label className="teams-role-select-wrap">
+                    <span className="sr-only">Role for {member.name}</span>
+                    <select
+                      value={member.role}
+                      onChange={(e) => updateRole(member.id, e.target.value as TeamRole)}
+                    >
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className="btn-secondary" onClick={() => removeMember(member.id)}>
+                    Remove
+                  </button>
+                </div>
               </li>
             );
           })}
