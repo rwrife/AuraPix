@@ -166,7 +166,8 @@ export function LibraryPage() {
   ) {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      await createAndFinalizeSession(file.name, file.size);
+      const uploadRequestId = `${file.name}-${file.size}-${file.lastModified}-${i}`;
+      await createAndFinalizeSession(file.name, file.size, uploadRequestId);
 
       const photo = await addPhoto(file);
       if (albumId) await assignToAlbum(photo.id, albumId, photo);

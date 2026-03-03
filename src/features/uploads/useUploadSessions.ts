@@ -13,9 +13,9 @@ interface UseUploadSessionsResult {
   loading: boolean;
   error: string | null;
   replayedFinalize: boolean;
-  createSession(fileName: string): Promise<void>;
+  createSession(fileName: string, clientRequestId?: string): Promise<void>;
   finalizeSession(fileName: string, byteSize: number): Promise<void>;
-  createAndFinalizeSession(fileName: string, byteSize: number): Promise<void>;
+  createAndFinalizeSession(fileName: string, byteSize: number, clientRequestId?: string): Promise<void>;
   processNextDerivativeJob(): Promise<void>;
 }
 
@@ -28,12 +28,12 @@ export function useUploadSessions(uploadService: UploadSessionsService): UseUplo
   const [replayedFinalize, setReplayedFinalize] = useState(false);
 
   const createSession = useCallback(
-    async (fileName: string) => {
+    async (fileName: string, clientRequestId?: string) => {
       setLoading(true);
       setError(null);
       setReplayedFinalize(false);
       try {
-        const session = await uploadService.createUploadSession({ fileName });
+        const session = await uploadService.createUploadSession({ fileName, clientRequestId });
         setPendingSession(session);
       } catch (err) {
         if (err instanceof Error) {
@@ -84,13 +84,13 @@ export function useUploadSessions(uploadService: UploadSessionsService): UseUplo
   );
 
   const createAndFinalizeSession = useCallback(
-    async (fileName: string, byteSize: number) => {
+    async (fileName: string, byteSize: number, clientRequestId?: string) => {
       setLoading(true);
       setError(null);
       setReplayedFinalize(false);
 
       try {
-        const session = await uploadService.createUploadSession({ fileName });
+        const session = await uploadService.createUploadSession({ fileName, clientRequestId });
         setPendingSession(session);
 
         const result = await uploadService.finalizeUpload({
