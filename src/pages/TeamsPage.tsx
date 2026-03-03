@@ -1,7 +1,14 @@
 import { useState } from 'react';
+import { roleCapabilitySummary, type TeamAction } from '../features/teams/permissions';
 import { useTeams, type TeamRole } from '../features/teams/useTeams';
 
 const ROLE_OPTIONS: TeamRole[] = ['owner', 'admin', 'editor', 'contributor', 'viewer'];
+const ACTION_LABELS: Record<TeamAction, string> = {
+  upload: 'Upload',
+  edit: 'Edit',
+  share: 'Share',
+  delete: 'Delete',
+};
 
 function formatExpiration(iso: string): string {
   const date = new Date(iso);
@@ -87,27 +94,38 @@ export function TeamsPage() {
       <div className="teams-panel">
         <h2>Members</h2>
         <ul className="teams-member-list">
-          {workspace.members.map((member) => (
-            <li key={member.id} className="teams-member-row">
-              <div className="teams-member-meta">
-                <div className="teams-member-name">{member.name}</div>
-                <div className="teams-member-email">{member.email}</div>
-              </div>
-              <label className="teams-role-select-wrap">
-                <span className="sr-only">Role for {member.name}</span>
-                <select
-                  value={member.role}
-                  onChange={(e) => updateRole(member.id, e.target.value as TeamRole)}
-                >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </li>
-          ))}
+          {workspace.members.map((member) => {
+            const capabilities = roleCapabilitySummary(member.role);
+
+            return (
+              <li key={member.id} className="teams-member-row">
+                <div className="teams-member-meta">
+                  <div className="teams-member-name">{member.name}</div>
+                  <div className="teams-member-email">{member.email}</div>
+                  <div className="teams-member-email">
+                    {(['upload', 'edit', 'share', 'delete'] as TeamAction[]).map((action) => (
+                      <span key={action}>
+                        {ACTION_LABELS[action]} {capabilities[action] ? '✓' : '—'}{' '}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <label className="teams-role-select-wrap">
+                  <span className="sr-only">Role for {member.name}</span>
+                  <select
+                    value={member.role}
+                    onChange={(e) => updateRole(member.id, e.target.value as TeamRole)}
+                  >
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
