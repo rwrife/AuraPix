@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { canTransitionRole } from './roleSafeguards';
+import { canRemoveMember, canTransitionRole } from './roleSafeguards';
 
 export type TeamRole = 'owner' | 'admin' | 'editor' | 'contributor' | 'viewer';
 export type TeamInvitationStatus = 'pending' | 'accepted' | 'declined' | 'expired';
@@ -139,6 +139,28 @@ export function useTeams() {
       return {
         ...prev,
         members: prev.members.map((member) => (member.id === memberId ? { ...member, role } : member)),
+      };
+    });
+
+    if (updated) {
+      setLastRoleChangeError(null);
+    }
+  }, []);
+
+  const removeMember = useCallback((memberId: string) => {
+    let updated = false;
+
+    setWorkspace((prev) => {
+      const removal = canRemoveMember(prev, memberId);
+      if (!removal.ok) {
+        setLastRoleChangeError(removal.reason ?? 'Member removal blocked by workspace policy.');
+        return prev;
+      }
+
+      updated = true;
+      return {
+        ...prev,
+        members: prev.members.filter((member) => member.id !== memberId),
       };
     });
 
@@ -298,6 +320,7 @@ export function useTeams() {
     lastRoleChangeError,
     lastInviteError,
     updateRole,
+    removeMember,
     inviteMember,
     acceptInvitation,
     declineInvitation,
