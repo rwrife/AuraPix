@@ -26,6 +26,7 @@ import type {
   AddPhotoInput,
   BulkAddToAlbumInput,
   BulkAddToAlbumResult,
+  LibraryUsageSummary,
   ListPhotosInput,
   ListPhotosResult,
   Photo,
@@ -104,6 +105,21 @@ export class FirebaseLibraryService implements LibraryService {
     });
 
     return { photos, nextPageToken };
+  }
+
+  async getUsage(libraryId: string): Promise<LibraryUsageSummary> {
+    const photosRef = collection(this.db, COLLECTIONS.PHOTOS);
+    const snapshot = await getDocs(query(photosRef, where('libraryId', '==', libraryId)));
+    const photos = snapshot.docs.map((docSnap) => this.mapDocToPhoto(docSnap));
+
+    return {
+      libraryId,
+      totalPhotos: photos.length,
+      readyPhotos: photos.filter((photo) => photo.status === 'ready').length,
+      favoritePhotos: photos.filter((photo) => photo.isFavorite).length,
+      taggedPhotos: photos.filter((photo) => photo.tags.length > 0).length,
+      totalBytes: photos.reduce((total, photo) => total + (photo.metadata?.sizeBytes ?? 0), 0),
+    };
   }
 
   async getPhoto(photoId: string): Promise<Photo | null> {

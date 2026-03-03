@@ -230,6 +230,35 @@ describe('InMemoryLibraryService', () => {
     ).rejects.toThrow('Storage quota exceeded');
   });
 
+  it('reports usage summary for telemetry foundations', async () => {
+    const svc = new InMemoryLibraryService();
+    const favorite = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'favorite.jpg',
+      dataUrl: 'data:image/jpeg;base64,favorite',
+      metadata: { sizeBytes: 1200 },
+    });
+    const tagged = await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'tagged.jpg',
+      dataUrl: 'data:image/jpeg;base64,tagged',
+      metadata: { sizeBytes: 800 },
+    });
+
+    await svc.updatePhoto(favorite.id, { isFavorite: true });
+    await svc.updatePhoto(tagged.id, { tags: ['trip'] });
+
+    const usage = await svc.getUsage(LIBRARY_ID);
+    expect(usage).toMatchObject({
+      libraryId: LIBRARY_ID,
+      totalPhotos: 2,
+      readyPhotos: 2,
+      favoritePhotos: 1,
+      taggedPhotos: 1,
+      totalBytes: 2000,
+    });
+  });
+
   it('deletes a photo', async () => {
     const svc = new InMemoryLibraryService();
     const photo = await svc.addPhoto({
