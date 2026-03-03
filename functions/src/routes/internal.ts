@@ -5,6 +5,7 @@ import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import { generateThumbnailsForPhoto } from '../handlers/thumbnails/generate.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
+import { buildStorageUsageReport } from '../handlers/storage/usageReport.js';
 
 const router = Router();
 
@@ -23,6 +24,29 @@ router.get('/health', (_req: Request, res: Response) => {
     service: 'aurapix-backend',
     version: '1.0.0',
   });
+});
+
+/**
+ * Report library storage usage totals and photo-level breakdown
+ * GET /internal/storage-usage/:libraryId
+ */
+router.get('/storage-usage/:libraryId', async (req: Request, res: Response, next) => {
+  try {
+    const libraryId = req.params.libraryId as string;
+    const storageAdapter = req.app.locals.storageAdapter as StorageAdapter;
+
+    const report = await buildStorageUsageReport(storageAdapter, libraryId);
+    res.json(report);
+  } catch (error) {
+    logger.error({ err: error }, 'Storage usage report failed');
+    next(
+      new AppError(
+        500,
+        'STORAGE_USAGE_REPORT_FAILED',
+        error instanceof Error ? error.message : 'Storage usage report failed'
+      )
+    );
+  }
 });
 
 /**

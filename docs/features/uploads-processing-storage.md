@@ -35,3 +35,12 @@ Create a reliable upload and processing pipeline for originals and derivatives.
 - Retry/idempotency strategy
 - Storage usage counters and reconciliation jobs
 - Soft delete/trash retention and hard delete policies
+
+## Newly shipped increment (Issue #16 sub-slice)
+- Added internal storage usage reporting endpoint:
+  - `GET /internal/storage-usage/:libraryId`
+- Report includes:
+  - original vs derivative file counts and byte totals
+  - combined totals
+  - per-photo storage breakdown, sorted by highest usage
+- This is a safe, read-only primitive that can back cron-based cleanup/optimization in follow-up increments.
