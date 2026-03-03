@@ -6,6 +6,24 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { logger } from '../../utils/logger.js';
 import { ApplyEditsSchema } from '../../utils/validation.js';
 import { validateOperations } from '../../services/edits/EditProcessor.js';
+import {
+  EDIT_PLUGIN_MANIFEST,
+  EDIT_RECIPE_VERSION,
+} from '../../services/edits/pluginRegistry.js';
+
+/**
+ * List edit plugins and recipe contract version
+ * GET /edits/plugins
+ */
+export async function handleListPlugins(
+  _req: Request,
+  res: Response
+): Promise<void> {
+  res.json({
+    recipeVersion: EDIT_RECIPE_VERSION,
+    plugins: EDIT_PLUGIN_MANIFEST,
+  });
+}
 
 /**
  * Apply edits to a photo
@@ -28,7 +46,15 @@ export async function handleApplyEdits(
     throw new AppError(400, 'INVALID_REQUEST', `Invalid request: ${validation.error.message}`);
   }
 
-  const { operations, description } = validation.data;
+  const { recipeVersion, operations, description } = validation.data;
+
+  if (recipeVersion !== EDIT_RECIPE_VERSION) {
+    throw new AppError(
+      400,
+      'UNSUPPORTED_RECIPE_VERSION',
+      `Unsupported recipe version ${recipeVersion}. Supported version: ${EDIT_RECIPE_VERSION}`
+    );
+  }
 
   // Validate operations
   const opsValidation = validateOperations(operations);
@@ -52,6 +78,7 @@ export async function handleApplyEdits(
     // Create new edit version
     const newVersion: EditVersion = {
       version: photo.currentEditVersion + 1,
+      recipeVersion,
       createdAt: new Date().toISOString(),
       createdBy: userId,
       operations,
@@ -86,6 +113,7 @@ export async function handleApplyEdits(
       message: 'Edits applied, thumbnails are being regenerated',
       edit: {
         version: newVersion.version,
+        recipeVersion: newVersion.recipeVersion,
         operations: newVersion.operations,
         description: newVersion.description,
         createdAt: newVersion.createdAt,

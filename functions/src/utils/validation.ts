@@ -26,6 +26,7 @@ export const GenerateThumbnailsSchema = z.object({
 });
 
 export const ApplyEditsSchema = z.object({
+  recipeVersion: z.number().int().min(1).default(1),
   operations: z.array(
     z.object({
       type: z.enum(['crop', 'rotate', 'adjust', 'filter']),

@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import type { EditOperation } from '../../models/Photo.js';
 import { logger } from '../../utils/logger.js';
+import { isPluginEnabled } from './pluginRegistry.js';
 
 /**
  * Apply a sequence of edit operations to an image buffer
@@ -189,8 +190,8 @@ export function validateOperations(operations: EditOperation[]): {
   const errors: string[] = [];
 
   for (const op of operations) {
-    if (!op.type || !['crop', 'rotate', 'adjust', 'filter'].includes(op.type)) {
-      errors.push(`Invalid operation type: ${op.type}`);
+    if (!op.type || !isPluginEnabled(op.type)) {
+      errors.push(`Invalid or disabled operation type: ${op.type}`);
     }
 
     if (typeof op.order !== 'number' || op.order < 0) {

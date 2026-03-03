@@ -26,6 +26,7 @@ export interface EditOperation {
 
 export interface EditVersion {
   version: number;
+  recipeVersion: number;
   createdAt: string;
   createdBy: string;
   operations: EditOperation[];
