@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { canTransitionRole } from './roleSafeguards';
 
 export type TeamRole = 'owner' | 'admin' | 'editor' | 'contributor' | 'viewer';
 
@@ -58,6 +59,7 @@ function readStoredWorkspace(): TeamWorkspace {
 
 export function useTeams() {
   const [workspace, setWorkspace] = useState<TeamWorkspace>(() => readStoredWorkspace());
+  const [lastRoleChangeError, setLastRoleChangeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -65,10 +67,25 @@ export function useTeams() {
   }, [workspace]);
 
   const updateRole = useCallback((memberId: string, role: TeamRole) => {
-    setWorkspace((prev) => ({
-      ...prev,
-      members: prev.members.map((member) => (member.id === memberId ? { ...member, role } : member)),
-    }));
+    let updated = false;
+
+    setWorkspace((prev) => {
+      const transition = canTransitionRole(prev, memberId, role);
+      if (!transition.ok) {
+        setLastRoleChangeError(transition.reason ?? 'Role change blocked by workspace policy.');
+        return prev;
+      }
+
+      updated = true;
+      return {
+        ...prev,
+        members: prev.members.map((member) => (member.id === memberId ? { ...member, role } : member)),
+      };
+    });
+
+    if (updated) {
+      setLastRoleChangeError(null);
+    }
   }, []);
 
   const inviteMember = useCallback((name: string, email: string, role: TeamRole) => {
@@ -85,6 +102,7 @@ export function useTeams() {
         },
       ],
     }));
+    setLastRoleChangeError(null);
   }, []);
 
   const roleCounts = useMemo(() => {
@@ -106,6 +124,7 @@ export function useTeams() {
   return {
     workspace,
     roleCounts,
+    lastRoleChangeError,
     updateRole,
     inviteMember,
   };
