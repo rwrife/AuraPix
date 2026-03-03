@@ -15,6 +15,7 @@ export function TeamsPage() {
     roleCounts,
     pendingInvitations,
     lastRoleChangeError,
+    lastInviteError,
     updateRole,
     inviteMember,
     acceptInvitation,
@@ -112,6 +113,7 @@ export function TeamsPage() {
 
       <form className="teams-panel teams-invite-form" onSubmit={handleInviteSubmit}>
         <h2>Invite member</h2>
+        {lastInviteError ? <p className="teams-inline-error">{lastInviteError}</p> : null}
         <div className="teams-invite-grid">
           <input
             type="text"
