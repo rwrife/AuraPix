@@ -111,6 +111,7 @@ function readStoredWorkspace(): TeamWorkspace {
 export function useTeams() {
   const [workspace, setWorkspace] = useState<TeamWorkspace>(() => readStoredWorkspace());
   const [lastRoleChangeError, setLastRoleChangeError] = useState<string | null>(null);
+  const [lastInviteError, setLastInviteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -149,26 +150,68 @@ export function useTeams() {
   const inviteMember = useCallback((name: string, email: string, role: TeamRole) => {
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
+    const normalizedEmail = email.trim().toLowerCase();
 
-    setWorkspace((prev) => ({
-      ...prev,
-      invitations: [
-        {
-          id: `invite-${nowMs}`,
-          name,
-          email,
-          role,
-          status: 'pending',
-          invitedAt: nowIso,
-          expiresAt: new Date(nowMs + INVITE_TTL_MS).toISOString(),
-        },
-        ...prev.invitations,
-      ],
-    }));
+    let blockedByDuplicateMember = false;
+
+    setWorkspace((prev) => {
+      const memberExists = prev.members.some((member) => member.email.trim().toLowerCase() === normalizedEmail);
+      if (memberExists) {
+        blockedByDuplicateMember = true;
+        return prev;
+      }
+
+      const existingPendingInvite = prev.invitations.find(
+        (invitation) => invitation.status === 'pending' && invitation.email.trim().toLowerCase() === normalizedEmail
+      );
+
+      if (existingPendingInvite) {
+        return {
+          ...prev,
+          invitations: [
+            {
+              ...existingPendingInvite,
+              name,
+              email: normalizedEmail,
+              role,
+              invitedAt: nowIso,
+              expiresAt: new Date(nowMs + INVITE_TTL_MS).toISOString(),
+              status: 'pending',
+              decidedAt: undefined,
+            },
+            ...prev.invitations.filter((invitation) => invitation.id !== existingPendingInvite.id),
+          ],
+        };
+      }
+
+      return {
+        ...prev,
+        invitations: [
+          {
+            id: `invite-${nowMs}`,
+            name,
+            email: normalizedEmail,
+            role,
+            status: 'pending',
+            invitedAt: nowIso,
+            expiresAt: new Date(nowMs + INVITE_TTL_MS).toISOString(),
+          },
+          ...prev.invitations,
+        ],
+      };
+    });
+
+    if (blockedByDuplicateMember) {
+      setLastInviteError('Member is already in this workspace.');
+      return;
+    }
+
+    setLastInviteError(null);
     setLastRoleChangeError(null);
   }, []);
 
   const acceptInvitation = useCallback((invitationId: string) => {
+    setLastInviteError(null);
     setWorkspace((prev) => {
       const nowMs = Date.now();
       const nowIso = new Date(nowMs).toISOString();
@@ -213,6 +256,7 @@ export function useTeams() {
   }, []);
 
   const declineInvitation = useCallback((invitationId: string) => {
+    setLastInviteError(null);
     setWorkspace((prev) => {
       const nowIso = new Date().toISOString();
       return {
@@ -252,6 +296,7 @@ export function useTeams() {
     roleCounts,
     pendingInvitations,
     lastRoleChangeError,
+    lastInviteError,
     updateRole,
     inviteMember,
     acceptInvitation,
