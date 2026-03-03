@@ -14,6 +14,7 @@ export interface AlbumsState {
   renameFolder(folderId: string, name: string): Promise<void>;
   deleteFolder(folderId: string): Promise<void>;
   moveAlbum(albumId: string, folderId: string | null): Promise<void>;
+  reload(): Promise<void>;
 }
 
 const AlbumsContext = createContext<AlbumsState | null>(null);
@@ -32,27 +33,23 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
     setLoading(true);
-    Promise.all([albumsService.listAlbums(), albumsService.listFolders()])
-      .then(([a, f]) => {
-        if (!cancelled) {
-          setAlbums(a);
-          setFolders(f);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError('Unable to load albums.');
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+    setError(null);
+    try {
+      const [a, f] = await Promise.all([albumsService.listAlbums(), albumsService.listFolders()]);
+      setAlbums(a);
+      setFolders(f);
+    } catch {
+      setError('Unable to load albums.');
+    } finally {
+      setLoading(false);
+    }
   }, [albumsService]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const createAlbum = useCallback(
     async (name: string, folderId?: string | null): Promise<Album | null> => {
@@ -181,6 +178,7 @@ export function AlbumsProvider({ children }: { children: ReactNode }) {
         renameFolder,
         deleteFolder,
         moveAlbum,
+        reload: load,
       }}
     >
       {children}

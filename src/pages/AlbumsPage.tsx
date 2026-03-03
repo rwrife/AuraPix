@@ -293,6 +293,7 @@ export function AlbumsPage() {
     createFolder,
     deleteFolder,
     moveAlbum,
+    reload,
   } = useAlbums();
   const { photos } = useLibrary(libraryId);
 
@@ -432,7 +433,14 @@ export function AlbumsPage() {
 
         {albumFormError && <p className="error">{albumFormError}</p>}
 
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <div className="error" role="alert">
+            <span>{error}</span>{' '}
+            <button type="button" className="btn-ghost btn-sm" onClick={() => void reload()}>
+              Retry
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <p className="state-message">Loading albums…</p>
