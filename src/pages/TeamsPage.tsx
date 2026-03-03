@@ -3,8 +3,23 @@ import { useTeams, type TeamRole } from '../features/teams/useTeams';
 
 const ROLE_OPTIONS: TeamRole[] = ['owner', 'admin', 'editor', 'contributor', 'viewer'];
 
+function formatExpiration(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Expires soon';
+  return `Expires ${date.toLocaleDateString()}`;
+}
+
 export function TeamsPage() {
-  const { workspace, roleCounts, lastRoleChangeError, updateRole, inviteMember } = useTeams();
+  const {
+    workspace,
+    roleCounts,
+    pendingInvitations,
+    lastRoleChangeError,
+    updateRole,
+    inviteMember,
+    acceptInvitation,
+    declineInvitation,
+  } = useTeams();
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<TeamRole>('viewer');
@@ -42,6 +57,32 @@ export function TeamsPage() {
 
       {lastRoleChangeError ? <p className="teams-inline-error">{lastRoleChangeError}</p> : null}
 
+      {pendingInvitations.length > 0 ? (
+        <div className="teams-panel">
+          <h2>Pending invitations ({pendingInvitations.length})</h2>
+          <ul className="teams-member-list">
+            {pendingInvitations.map((invitation) => (
+              <li key={invitation.id} className="teams-member-row">
+                <div className="teams-member-meta">
+                  <div className="teams-member-name">{invitation.name}</div>
+                  <div className="teams-member-email">
+                    {invitation.email} · {invitation.role} · {formatExpiration(invitation.expiresAt)}
+                  </div>
+                </div>
+                <div className="teams-invite-actions">
+                  <button type="button" className="btn-secondary" onClick={() => declineInvitation(invitation.id)}>
+                    Decline
+                  </button>
+                  <button type="button" className="btn-primary" onClick={() => acceptInvitation(invitation.id)}>
+                    Accept
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="teams-panel">
         <h2>Members</h2>
         <ul className="teams-member-list">
@@ -49,10 +90,7 @@ export function TeamsPage() {
             <li key={member.id} className="teams-member-row">
               <div className="teams-member-meta">
                 <div className="teams-member-name">{member.name}</div>
-                <div className="teams-member-email">
-                  {member.email}
-                  {member.invited ? ' · invited' : ''}
-                </div>
+                <div className="teams-member-email">{member.email}</div>
               </div>
               <label className="teams-role-select-wrap">
                 <span className="sr-only">Role for {member.name}</span>
