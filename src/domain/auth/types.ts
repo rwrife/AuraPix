@@ -22,3 +22,9 @@ export interface SignUpInput {
   password: string;
   displayName?: string;
 }
+
+export type OAuthProvider = 'google' | 'github';
+
+export interface OAuthSignInInput {
+  provider: OAuthProvider;
+}

@@ -92,6 +92,22 @@ describe('InMemoryAuthService', () => {
     expect(session.user.displayName).toBe('New User');
   });
 
+  it('supports provider-agnostic OAuth demo sign-in in local mode', async () => {
+    const svc = new InMemoryAuthService();
+    const session = await svc.signInWithOAuth({ provider: 'google' });
+
+    expect(session.user.email).toBe('google.demo@aurapix.local');
+    expect(session.user.displayName).toBe('Google Demo');
+  });
+
+  it('reuses the same OAuth demo profile on repeated sign-ins', async () => {
+    const svc = new InMemoryAuthService();
+    const first = await svc.signInWithOAuth({ provider: 'github' });
+    const second = await svc.signInWithOAuth({ provider: 'github' });
+
+    expect(second.user.id).toBe(first.user.id);
+  });
+
   it('rejects duplicate email on signUp', async () => {
     const svc = new InMemoryAuthService();
     await svc.signUp({ email: 'dup@example.com', password: 'abc' });

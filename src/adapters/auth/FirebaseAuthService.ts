@@ -1,6 +1,9 @@
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GithubAuthProvider,
+  GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updateProfile,
@@ -8,7 +11,7 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth';
 import type { AuthService } from '../../domain/auth/contract';
-import type { Session, SignInInput, SignUpInput, User } from '../../domain/auth/types';
+import type { OAuthSignInInput, Session, SignInInput, SignUpInput, User } from '../../domain/auth/types';
 
 /**
  * Firebase implementation of AuthService.
@@ -40,6 +43,19 @@ export class FirebaseAuthService implements AuthService {
       input.email,
       input.password
     );
+
+    const user = this.mapFirebaseUserToUser(credential.user);
+    const session = await this.createSession(credential.user);
+
+    this.currentUser = user;
+    this.currentSession = session;
+
+    return session;
+  }
+
+  async signInWithOAuth(input: OAuthSignInInput): Promise<Session> {
+    const provider = this.createOAuthProvider(input.provider);
+    const credential = await signInWithPopup(this.auth, provider);
 
     const user = this.mapFirebaseUserToUser(credential.user);
     const session = await this.createSession(credential.user);
@@ -114,6 +130,21 @@ export class FirebaseAuthService implements AuthService {
         }
       });
     });
+  }
+
+  /**
+   * Create OAuth provider adapter without leaking Firebase provider details
+   * beyond this boundary.
+   */
+  private createOAuthProvider(provider: OAuthSignInInput['provider']) {
+    switch (provider) {
+      case 'google':
+        return new GoogleAuthProvider();
+      case 'github':
+        return new GithubAuthProvider();
+      default:
+        throw new Error(`Unsupported OAuth provider: ${provider}`);
+    }
   }
 
   /**

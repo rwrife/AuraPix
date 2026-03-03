@@ -323,6 +323,12 @@ body {
   border-radius: 6px;
 }
 
+.user-menu-local-auth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 /* ── App body (sidebar + main) ─────────────────────────────────────────── */
 .app-body {
   display: flex;

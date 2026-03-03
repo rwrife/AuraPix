@@ -1,5 +1,5 @@
 import type { AuthService } from '../../domain/auth/contract';
-import type { Session, SignInInput, SignUpInput, User } from '../../domain/auth/types';
+import type { OAuthSignInInput, Session, SignInInput, SignUpInput, User } from '../../domain/auth/types';
 
 // ---------------------------------------------------------------------------
 // Single-user in-memory auth service.
@@ -96,6 +96,31 @@ export class InMemoryAuthService implements AuthService {
 
     this.signInAttempts.delete(input.email);
     this.session = makeSession(entry.user);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.session));
+    return this.session;
+  }
+
+  async signInWithOAuth(input: OAuthSignInInput): Promise<Session> {
+    const normalizedProvider = input.provider.toLowerCase();
+    const oauthEmail = `${normalizedProvider}.demo@aurapix.local`;
+    const existing = this.users.get(oauthEmail);
+
+    if (existing) {
+      this.session = makeSession(existing.user);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.session));
+      return this.session;
+    }
+
+    const user: User = {
+      id: `local-${normalizedProvider}-user`,
+      email: oauthEmail,
+      displayName: `${normalizedProvider[0].toUpperCase()}${normalizedProvider.slice(1)} Demo`,
+      photoUrl: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.users.set(oauthEmail, { user, password: '' });
+    this.session = makeSession(user);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.session));
     return this.session;
   }

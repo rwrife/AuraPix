@@ -63,7 +63,7 @@ function SearchIcon() {
 
 // ── Inner shell (needs AlbumsProvider above it) ──────────────────────────
 function LayoutShell() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, signInWithOAuth } = useAuth();
   const { albums, folders } = useAlbums();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -235,9 +235,16 @@ function LayoutShell() {
                     </button>
                   )}
                   {isLocalMode && (
-                    <div className="user-menu-note">
-                      Authentication is not available in local mode. When deployed with Firebase,
-                      user sign-in and sign-out will be enabled here.
+                    <div className="user-menu-local-auth-actions">
+                      <div className="user-menu-note">
+                        Local mode supports demo OAuth identities for testing auth-aware UI.
+                      </div>
+                      <button className="user-menu-item" onClick={() => signInWithOAuth('google')}>
+                        Continue as Google Demo User
+                      </button>
+                      <button className="user-menu-item" onClick={() => signInWithOAuth('github')}>
+                        Continue as GitHub Demo User
+                      </button>
                     </div>
                   )}
                 </div>
