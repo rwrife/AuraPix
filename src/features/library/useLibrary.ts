@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type {
   BulkAddToAlbumResult,
   LibraryQuickCollection,
+  LibrarySort,
   MetadataFilterInput,
   Photo,
 } from '../../domain/library/types';
@@ -43,6 +44,7 @@ export function useLibrary(
     favoritesOnly?: boolean;
     collection?: LibraryQuickCollection;
     tags?: string[];
+    sort?: LibrarySort;
   }
 ): UseLibraryReturn {
   const { library } = useServices();
@@ -66,6 +68,7 @@ export function useLibrary(
         favoritesOnly: filters?.favoritesOnly,
         collection: filters?.collection,
         tags: filters?.tags,
+        sort: filters?.sort,
         pageSize: 24,
       })
       .then(({ photos: p, nextPageToken: token }) => {
@@ -93,6 +96,7 @@ export function useLibrary(
     filters?.favoritesOnly,
     filters?.collection,
     filters?.tags,
+    filters?.sort,
   ]);
 
   const addPhoto = useCallback(
@@ -196,6 +200,7 @@ export function useLibrary(
         favoritesOnly: filters?.favoritesOnly,
         collection: filters?.collection,
         tags: filters?.tags,
+        sort: filters?.sort,
         pageSize: 24,
         pageToken: nextPageToken,
       });
@@ -215,6 +220,7 @@ export function useLibrary(
     filters?.favoritesOnly,
     filters?.collection,
     filters?.tags,
+    filters?.sort,
   ]);
 
   return {

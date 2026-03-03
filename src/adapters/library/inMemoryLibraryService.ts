@@ -7,6 +7,7 @@ import type {
   ListPhotosInput,
   ListPhotosResult,
   LibraryQuickCollection,
+  LibrarySort,
   Photo,
   UpdatePhotoInput,
 } from '../../domain/library/types';
@@ -65,6 +66,24 @@ function applyCollectionFilter(photos: Photo[], collection?: LibraryQuickCollect
     const createdAt = Date.parse(photo.createdAt);
     return !Number.isNaN(createdAt) && createdAt >= thirtyDaysAgo;
   });
+}
+
+function sortPhotos(photos: Photo[], sort: LibrarySort = 'created_desc'): Photo[] {
+  const sorted = [...photos];
+
+  if (sort === 'created_asc') {
+    return sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  if (sort === 'name_asc') {
+    return sorted.sort((a, b) => a.originalName.localeCompare(b.originalName));
+  }
+
+  if (sort === 'name_desc') {
+    return sorted.sort((a, b) => b.originalName.localeCompare(a.originalName));
+  }
+
+  return sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export class InMemoryLibraryService implements LibraryService {
@@ -131,8 +150,7 @@ export class InMemoryLibraryService implements LibraryService {
       }
     }
 
-    // Sort newest-first
-    results = results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    results = sortPhotos(results, input.sort);
 
     const pageSize = input.pageSize ?? results.length;
     const startIndex = input.pageToken
