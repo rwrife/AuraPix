@@ -10,6 +10,7 @@ function createWorkspace(): TeamWorkspace {
       { id: 'u1', name: 'Owner', email: 'owner@test.dev', role: 'owner', invited: false },
       { id: 'u2', name: 'Editor', email: 'editor@test.dev', role: 'editor', invited: false },
     ],
+    invitations: [],
   };
 }
 
