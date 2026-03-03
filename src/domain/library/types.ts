@@ -58,6 +58,15 @@ export interface ListPhotosResult {
   nextPageToken: string | null;
 }
 
+export interface LibraryUsageSummary {
+  libraryId: string;
+  totalPhotos: number;
+  readyPhotos: number;
+  favoritePhotos: number;
+  taggedPhotos: number;
+  totalBytes: number;
+}
+
 export interface AddPhotoInput {
   libraryId: string;
   originalName: string;

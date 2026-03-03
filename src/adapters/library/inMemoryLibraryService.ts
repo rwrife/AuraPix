@@ -3,6 +3,7 @@ import type {
   AddPhotoInput,
   BulkAddToAlbumInput,
   BulkAddToAlbumResult,
+  LibraryUsageSummary,
   ListPhotosInput,
   ListPhotosResult,
   LibraryQuickCollection,
@@ -148,6 +149,19 @@ export class InMemoryLibraryService implements LibraryService {
       startIndex + pageSize < results.length ? results[startIndex + pageSize].id : null;
 
     return { photos: page, nextPageToken };
+  }
+
+  async getUsage(libraryId: string): Promise<LibraryUsageSummary> {
+    const libraryPhotos = this.photos.filter((photo) => photo.libraryId === libraryId);
+
+    return {
+      libraryId,
+      totalPhotos: libraryPhotos.length,
+      readyPhotos: libraryPhotos.filter((photo) => photo.status === 'ready').length,
+      favoritePhotos: libraryPhotos.filter((photo) => photo.isFavorite).length,
+      taggedPhotos: libraryPhotos.filter((photo) => photo.tags.length > 0).length,
+      totalBytes: libraryPhotos.reduce((total, photo) => total + (photo.metadata?.sizeBytes ?? 0), 0),
+    };
   }
 
   async getPhoto(photoId: string): Promise<Photo | null> {

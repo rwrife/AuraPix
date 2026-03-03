@@ -21,6 +21,7 @@ import {
 } from '../features/library/quickViewPreferences';
 import { useUploadSessions } from '../features/uploads/useUploadSessions';
 import { useServices } from '../services/useServices';
+import type { LibraryUsageSummary } from '../domain/library/types';
 
 function toLibraryId(userId: string) {
   return `library-${userId}`;
@@ -90,7 +91,7 @@ export function LibraryPage() {
     deletePhoto,
   } = useLibrary(libraryId, metadataFilters);
   const { albums } = useAlbums();
-  const { uploads: uploadSessionsService } = useServices();
+  const { library: libraryService, uploads: uploadSessionsService } = useServices();
   const {
     pendingSession,
     metadata: uploadedMetadata,
@@ -106,6 +107,7 @@ export function LibraryPage() {
   const [bulkAlbumId, setBulkAlbumId] = useState<string>('');
   const [bulkTagInput, setBulkTagInput] = useState<string>('');
   const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
+  const [usageSummary, setUsageSummary] = useState<LibraryUsageSummary | null>(null);
   const viewerStateRef = useRef<ViewerState | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
 
@@ -245,6 +247,34 @@ export function LibraryPage() {
   const queuedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'queued').length;
   const completedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'completed').length;
 
+  useEffect(() => {
+    let cancelled = false;
+    libraryService
+      .getUsage(libraryId)
+      .then((summary) => {
+        if (!cancelled) {
+          setUsageSummary(summary);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUsageSummary(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryService, libraryId, photos.length]);
+
+  const formattedUsageBytes = useMemo(() => {
+    if (!usageSummary) return '';
+    if (usageSummary.totalBytes < 1024 * 1024) {
+      return `${Math.max(1, Math.round(usageSummary.totalBytes / 1024))} KB`;
+    }
+    return `${(usageSummary.totalBytes / (1024 * 1024)).toFixed(1)} MB`;
+  }, [usageSummary]);
+
   // Gallery toolbar configuration
   const galleryToolbarButtons = useMemo<ToolbarButton[]>(() => {
     return [
@@ -337,6 +367,12 @@ export function LibraryPage() {
     <>
       <div className="page-titlebar">
         <h1 className="page-title">Library</h1>
+        {usageSummary && !isFilmstrip && (
+          <p className="state-message" role="status" aria-live="polite">
+            Usage: {usageSummary.totalPhotos} photo(s) · {formattedUsageBytes} ·{' '}
+            {usageSummary.favoritePhotos} favorites · {usageSummary.taggedPhotos} tagged
+          </p>
+        )}
         {!isFilmstrip && photos.length > 0 && (
           <div className="titlebar-controls">
             <button
