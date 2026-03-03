@@ -150,6 +150,30 @@ describe('InMemoryLibraryService', () => {
     expect(favorites.photos.map((photo) => photo.id)).toEqual([untaggedFavorite.id]);
   });
 
+  it('supports explicit sort conventions', async () => {
+    const svc = new InMemoryLibraryService();
+
+    await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'bravo.jpg',
+      dataUrl: 'data:image/jpeg;base64,b',
+    });
+    await svc.addPhoto({
+      libraryId: LIBRARY_ID,
+      originalName: 'alpha.jpg',
+      dataUrl: 'data:image/jpeg;base64,a',
+    });
+
+    const byNameAsc = await svc.listPhotos({ libraryId: LIBRARY_ID, sort: 'name_asc' });
+    expect(byNameAsc.photos.map((photo) => photo.originalName)).toEqual(['alpha.jpg', 'bravo.jpg']);
+
+    const byNameDesc = await svc.listPhotos({ libraryId: LIBRARY_ID, sort: 'name_desc' });
+    expect(byNameDesc.photos.map((photo) => photo.originalName)).toEqual(['bravo.jpg', 'alpha.jpg']);
+
+    const byCreatedAsc = await svc.listPhotos({ libraryId: LIBRARY_ID, sort: 'created_asc' });
+    expect(byCreatedAsc.photos).toHaveLength(2);
+  });
+
   it('paginates results using nextPageToken', async () => {
     const svc = new InMemoryLibraryService();
 

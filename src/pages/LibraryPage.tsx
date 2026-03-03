@@ -21,7 +21,7 @@ import {
 } from '../features/library/quickViewPreferences';
 import { useUploadSessions } from '../features/uploads/useUploadSessions';
 import { useServices } from '../services/useServices';
-import type { LibraryUsageSummary } from '../domain/library/types';
+import type { LibrarySort, LibraryUsageSummary } from '../domain/library/types';
 
 function toLibraryId(userId: string) {
   return `library-${userId}`;
@@ -45,6 +45,7 @@ export function LibraryPage() {
   const [activeTagFilter, setActiveTagFilter] = useState<string>(
     initialQuickViewPreferences.activeTagFilter
   );
+  const [sortOrder, setSortOrder] = useState<LibrarySort>('created_desc');
   const [gridMode, setGridMode] = useState<GridMode>(initialQuickViewPreferences.gridMode);
   const [savedQuickViews, setSavedQuickViews] = useState<LibrarySavedQuickViewPreset[]>(() =>
     loadSavedQuickViewPresets(libraryId)
@@ -57,8 +58,9 @@ export function LibraryPage() {
       favoritesOnly: quickCollection === 'favorites',
       collection: quickCollection === 'all' ? undefined : quickCollection,
       tags: activeTagFilter ? [activeTagFilter] : undefined,
+      sort: sortOrder,
     }),
-    [cameraMakeFilter, quickCollection, activeTagFilter]
+    [cameraMakeFilter, quickCollection, activeTagFilter, sortOrder]
   );
 
   useEffect(() => {
@@ -484,6 +486,17 @@ export function LibraryPage() {
                   </option>
                 )
               )}
+            </select>
+            <select
+              className="btn-ghost btn-sm"
+              aria-label="Sort photos"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as LibrarySort)}
+            >
+              <option value="created_desc">Newest first</option>
+              <option value="created_asc">Oldest first</option>
+              <option value="name_asc">Name A–Z</option>
+              <option value="name_desc">Name Z–A</option>
             </select>
             <button
               className="btn-ghost btn-sm"

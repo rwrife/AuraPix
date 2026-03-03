@@ -29,6 +29,7 @@ import type {
   LibraryUsageSummary,
   ListPhotosInput,
   ListPhotosResult,
+  LibrarySort,
   Photo,
   UpdatePhotoInput,
 } from '../../domain/library/types';
@@ -55,11 +56,27 @@ export class FirebaseLibraryService implements LibraryService {
     this.authorizer = authorizer;
   }
 
+  private toCreatedAtDirection(sort?: LibrarySort): 'asc' | 'desc' {
+    return sort === 'created_asc' ? 'asc' : 'desc';
+  }
+
+  private applyClientSort(photos: Photo[], sort?: LibrarySort): Photo[] {
+    if (sort === 'name_asc') {
+      return [...photos].sort((a, b) => a.originalName.localeCompare(b.originalName));
+    }
+
+    if (sort === 'name_desc') {
+      return [...photos].sort((a, b) => b.originalName.localeCompare(a.originalName));
+    }
+
+    return photos;
+  }
+
   async listPhotos(input: ListPhotosInput): Promise<ListPhotosResult> {
     const photosRef = collection(this.db, COLLECTIONS.PHOTOS);
     const constraints: QueryConstraint[] = [
       where('libraryId', '==', input.libraryId),
-      orderBy('createdAt', 'desc'),
+      orderBy('createdAt', this.toCreatedAtDirection(input.sort)),
     ];
 
     // Filter by album
@@ -104,7 +121,7 @@ export class FirebaseLibraryService implements LibraryService {
       }
     });
 
-    return { photos, nextPageToken };
+    return { photos: this.applyClientSort(photos, input.sort), nextPageToken };
   }
 
   async getUsage(libraryId: string): Promise<LibraryUsageSummary> {

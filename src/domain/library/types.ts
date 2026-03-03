@@ -36,6 +36,8 @@ export interface MetadataFilterInput {
 
 export type LibraryQuickCollection = 'favorites' | 'tagged' | 'untagged' | 'recent';
 
+export type LibrarySort = 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc';
+
 export interface ListPhotosInput {
   libraryId: string;
   albumId?: string;
@@ -49,6 +51,10 @@ export interface ListPhotosInput {
   collection?: LibraryQuickCollection;
   tags?: string[];
   metadata?: MetadataFilterInput;
+  /**
+   * Stable sort conventions for API/UI parity. Defaults to `created_desc`.
+   */
+  sort?: LibrarySort;
   pageSize?: number;
   pageToken?: string;
 }
