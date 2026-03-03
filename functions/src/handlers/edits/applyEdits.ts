@@ -10,6 +10,14 @@ import {
   EDIT_PLUGIN_MANIFEST,
   EDIT_RECIPE_VERSION,
 } from '../../services/edits/pluginRegistry.js';
+import {
+  createApplyEditsFingerprint,
+  createRevertFingerprint,
+  editFingerprintMatches,
+  getEditIdempotencyRecord,
+  getNormalizedIdempotencyKey,
+  storeEditIdempotencyRecord,
+} from './editIdempotency.js';
 
 /**
  * List edit plugins and recipe contract version
@@ -40,6 +48,17 @@ export async function handleApplyEdits(
   const photoId = req.params.photoId as string;
   const userId = req.user?.uid || 'anonymous';
 
+  let idempotencyKey: string | null;
+  try {
+    idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
+  } catch (error) {
+    throw new AppError(
+      400,
+      'INVALID_IDEMPOTENCY_KEY',
+      error instanceof Error ? error.message : 'Invalid idempotency key'
+    );
+  }
+
   // Validate request body
   const validation = ApplyEditsSchema.safeParse(req.body);
   if (!validation.success) {
@@ -60,6 +79,41 @@ export async function handleApplyEdits(
   const opsValidation = validateOperations(operations);
   if (!opsValidation.valid) {
     throw new AppError(400, 'INVALID_OPERATIONS', `Invalid operations: ${opsValidation.errors.join(', ')}`);
+  }
+
+  const requestFingerprint = createApplyEditsFingerprint({
+    recipeVersion,
+    operations,
+    description,
+  });
+
+  if (idempotencyKey) {
+    const existingRecord = await getEditIdempotencyRecord(
+      dataAdapter,
+      userId,
+      libraryId,
+      photoId,
+      idempotencyKey
+    );
+
+    if (existingRecord) {
+      if (!editFingerprintMatches(existingRecord.request, requestFingerprint)) {
+        throw new AppError(
+          409,
+          'IDEMPOTENCY_KEY_REUSE_MISMATCH',
+          'Idempotency key was already used with a different edit request payload'
+        );
+      }
+
+      res.status(200).json({
+        ...(existingRecord.responseBody as Record<string, unknown>),
+        idempotency: {
+          key: idempotencyKey,
+          replayed: true,
+        },
+      });
+      return;
+    }
   }
 
   try {
@@ -105,8 +159,7 @@ export async function handleApplyEdits(
       'Edits applied successfully'
     );
 
-    // Return response
-    res.status(202).json({
+    const responseBody = {
       photoId,
       version: newVersion.version,
       status: 'processing',
@@ -118,6 +171,31 @@ export async function handleApplyEdits(
         description: newVersion.description,
         createdAt: newVersion.createdAt,
       },
+    };
+
+    if (idempotencyKey) {
+      await storeEditIdempotencyRecord(dataAdapter, {
+        key: idempotencyKey,
+        userId,
+        libraryId,
+        photoId,
+        request: requestFingerprint,
+        responseBody,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Return response
+    res.status(202).json({
+      ...responseBody,
+      ...(idempotencyKey
+        ? {
+            idempotency: {
+              key: idempotencyKey,
+              replayed: false,
+            },
+          }
+        : {}),
     });
 
     // Trigger thumbnail regeneration in background
@@ -165,10 +243,53 @@ export async function handleRevertVersion(
 
   const libraryId = req.params.libraryId as string;
   const photoId = req.params.photoId as string;
+  const userId = req.user?.uid || 'anonymous';
   const { targetVersion } = req.body;
 
   if (typeof targetVersion !== 'number' || targetVersion < 0) {
     throw new AppError(400, 'INVALID_VERSION', 'Invalid target version');
+  }
+
+  let idempotencyKey: string | null;
+  try {
+    idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
+  } catch (error) {
+    throw new AppError(
+      400,
+      'INVALID_IDEMPOTENCY_KEY',
+      error instanceof Error ? error.message : 'Invalid idempotency key'
+    );
+  }
+
+  const requestFingerprint = createRevertFingerprint(targetVersion);
+
+  if (idempotencyKey) {
+    const existingRecord = await getEditIdempotencyRecord(
+      dataAdapter,
+      userId,
+      libraryId,
+      photoId,
+      idempotencyKey
+    );
+
+    if (existingRecord) {
+      if (!editFingerprintMatches(existingRecord.request, requestFingerprint)) {
+        throw new AppError(
+          409,
+          'IDEMPOTENCY_KEY_REUSE_MISMATCH',
+          'Idempotency key was already used with a different revert request payload'
+        );
+      }
+
+      res.status(200).json({
+        ...(existingRecord.responseBody as Record<string, unknown>),
+        idempotency: {
+          key: idempotencyKey,
+          replayed: true,
+        },
+      });
+      return;
+    }
   }
 
   try {
@@ -189,10 +310,34 @@ export async function handleRevertVersion(
 
     // Version 0 is the original (no edits)
     if (targetVersion === photo.currentEditVersion) {
-      res.json({
+      const responseBody = {
         message: 'Already at target version',
         photoId,
         version: targetVersion,
+      };
+
+      if (idempotencyKey) {
+        await storeEditIdempotencyRecord(dataAdapter, {
+          key: idempotencyKey,
+          userId,
+          libraryId,
+          photoId,
+          request: requestFingerprint,
+          responseBody,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      res.json({
+        ...responseBody,
+        ...(idempotencyKey
+          ? {
+              idempotency: {
+                key: idempotencyKey,
+                replayed: false,
+              },
+            }
+          : {}),
       });
       return;
     }
@@ -209,11 +354,35 @@ export async function handleRevertVersion(
       'Reverted to previous version'
     );
 
-    res.status(202).json({
+    const responseBody = {
       photoId,
       version: targetVersion,
       status: 'processing',
       message: 'Reverted to version, thumbnails are being regenerated',
+    };
+
+    if (idempotencyKey) {
+      await storeEditIdempotencyRecord(dataAdapter, {
+        key: idempotencyKey,
+        userId,
+        libraryId,
+        photoId,
+        request: requestFingerprint,
+        responseBody,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    res.status(202).json({
+      ...responseBody,
+      ...(idempotencyKey
+        ? {
+            idempotency: {
+              key: idempotencyKey,
+              replayed: false,
+            },
+          }
+        : {}),
     });
 
     // Trigger thumbnail regeneration
