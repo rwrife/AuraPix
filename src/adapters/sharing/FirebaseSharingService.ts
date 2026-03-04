@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { nanoid } from 'nanoid';
 import type { SharingService } from '../../domain/sharing/contract';
+import { hashPassword, isVersionedPasswordHash, verifyPassword } from './passwordHash';
 import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
@@ -59,8 +60,7 @@ export class FirebaseSharingService implements SharingService {
       ...shareLink,
     };
     if (input.password) {
-      // In production, hash the password before storing
-      docData.passwordHash = input.password; // TODO: Use bcrypt or similar
+      docData.passwordHash = await hashPassword(input.password);
     }
 
     const docRef = await addDoc(collection(this.db, 'shareLinks'), docData);
@@ -168,9 +168,16 @@ export class FirebaseSharingService implements SharingService {
         return null;
       }
 
-      // Verify password (in production, compare hashes)
       const linkData = linkDoc.data() as { passwordHash?: string };
-      if (linkData.passwordHash !== input.password) {
+      const storedPassword = linkData.passwordHash;
+      const isValidPassword =
+        typeof storedPassword === 'string'
+          ? isVersionedPasswordHash(storedPassword)
+            ? await verifyPassword(input.password, storedPassword)
+            : storedPassword === input.password // Backward compatibility for existing plaintext records
+          : false;
+
+      if (!isValidPassword) {
         await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', 'link_resolve', link);
         return null;
       }
