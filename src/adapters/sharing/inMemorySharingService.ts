@@ -1,4 +1,5 @@
 import type { SharingService } from '../../domain/sharing/contract';
+import { hashPassword, verifyPassword } from './passwordHash';
 import type {
   CreateShareLinkInput,
   ResolveShareDownloadInput,
@@ -47,7 +48,8 @@ export class InMemorySharingService implements SharingService {
     };
 
     if (input.password) {
-      this.linkPasswords.set(link.id, input.password);
+      const passwordHash = await hashPassword(input.password);
+      this.linkPasswords.set(link.id, passwordHash);
     }
 
     this.links = [link, ...this.links];
@@ -100,7 +102,7 @@ export class InMemorySharingService implements SharingService {
   }
 
   async resolveShareLink(input: ResolveShareLinkInput): Promise<ShareLink | null> {
-    const link = this.validateAccess(input, 'link_resolve');
+    const link = await this.validateAccess(input, 'link_resolve');
     if (!link) {
       return null;
     }
@@ -112,7 +114,7 @@ export class InMemorySharingService implements SharingService {
     input: ResolveShareDownloadInput
   ): Promise<ShareDownloadResolution | null> {
     const attempt = input.assetKind === 'original' ? 'download_original' : 'download_derivative';
-    const link = this.validateAccess(input, attempt);
+    const link = await this.validateAccess(input, attempt);
     if (!link) {
       return null;
     }
@@ -146,7 +148,10 @@ export class InMemorySharingService implements SharingService {
     };
   }
 
-  private validateAccess(input: ResolveShareLinkInput, attempt: ShareAccessEvent['attempt']): ShareLink | null {
+  private async validateAccess(
+    input: ResolveShareLinkInput,
+    attempt: ShareAccessEvent['attempt']
+  ): Promise<ShareLink | null> {
     const link = this.links.find((l) => l.token === input.token);
     if (!link) {
       this.recordEvent({ token: input.token, attempt, link: null, outcome: 'denied_not_found' });
@@ -170,7 +175,8 @@ export class InMemorySharingService implements SharingService {
 
     if (link.policy.passwordProtected) {
       const expected = this.linkPasswords.get(link.id);
-      if (!expected || input.password !== expected) {
+      const matches = input.password && expected ? await verifyPassword(input.password, expected) : false;
+      if (!matches) {
         this.recordEvent({
           token: input.token,
           attempt,
