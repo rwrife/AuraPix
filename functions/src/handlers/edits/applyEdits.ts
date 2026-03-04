@@ -19,6 +19,41 @@ import {
   storeEditIdempotencyRecord,
 } from './editIdempotency.js';
 
+function parseExpectedCurrentVersion(headerValue: string | undefined): number | null {
+  if (!headerValue) return null;
+
+  const parsed = Number.parseInt(headerValue, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new AppError(
+      400,
+      'INVALID_IF_MATCH_EDIT_VERSION',
+      'If-Match-Edit-Version must be a non-negative integer'
+    );
+  }
+
+  return parsed;
+}
+
+function assertEditVersionMatch(
+  expectedCurrentVersion: number | null,
+  actualCurrentVersion: number
+): void {
+  if (expectedCurrentVersion === null) return;
+
+  if (expectedCurrentVersion !== actualCurrentVersion) {
+    throw new AppError(
+      409,
+      'EDIT_VERSION_CONFLICT',
+      `Edit version conflict: expected current version ${expectedCurrentVersion}, actual version ${actualCurrentVersion}`,
+      {
+        expectedCurrentVersion,
+        actualCurrentVersion,
+      }
+    );
+  }
+}
+
+
 /**
  * List edit plugins and recipe contract version
  * GET /edits/plugins
@@ -47,6 +82,9 @@ export async function handleApplyEdits(
   const libraryId = req.params.libraryId as string;
   const photoId = req.params.photoId as string;
   const userId = req.user?.uid || 'anonymous';
+  const expectedCurrentVersion = parseExpectedCurrentVersion(
+    req.header('If-Match-Edit-Version') ?? undefined
+  );
 
   let idempotencyKey: string | null;
   try {
@@ -128,6 +166,8 @@ export async function handleApplyEdits(
     }
 
     // TODO: Check user has edit permission
+
+    assertEditVersionMatch(expectedCurrentVersion, photo.currentEditVersion);
 
     // Create new edit version
     const newVersion: EditVersion = {
@@ -244,6 +284,9 @@ export async function handleRevertVersion(
   const libraryId = req.params.libraryId as string;
   const photoId = req.params.photoId as string;
   const userId = req.user?.uid || 'anonymous';
+  const expectedCurrentVersion = parseExpectedCurrentVersion(
+    req.header('If-Match-Edit-Version') ?? undefined
+  );
   const { targetVersion } = req.body;
 
   if (typeof targetVersion !== 'number' || targetVersion < 0) {
@@ -302,6 +345,8 @@ export async function handleRevertVersion(
     if (photo.libraryId !== libraryId) {
       throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found in this library');
     }
+
+    assertEditVersionMatch(expectedCurrentVersion, photo.currentEditVersion);
 
     // Validate target version exists
     if (targetVersion > photo.editHistory.length) {
