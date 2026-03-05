@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEnabledPluginIdsForTest } from './pluginRegistry.js';
+import { resolveAdjustCapabilitiesForTest, resolveEnabledPluginIdsForTest } from './pluginRegistry.js';
 
 describe('pluginRegistry env controls', () => {
   it('uses defaults when no env overrides are set', () => {
@@ -31,5 +31,29 @@ describe('pluginRegistry env controls', () => {
     });
 
     expect(enabled).toEqual(new Set(['crop', 'adjust']));
+  });
+});
+
+describe('adjust capability env controls', () => {
+  it('enables all adjust params by default', () => {
+    const enabled = resolveAdjustCapabilitiesForTest({});
+
+    expect(enabled).toEqual(new Set(['brightness', 'contrast', 'saturation', 'exposure']));
+  });
+
+  it('supports allow-list mode via AURAPIX_EDIT_ADJUST_CAPABILITIES', () => {
+    const enabled = resolveAdjustCapabilitiesForTest({
+      AURAPIX_EDIT_ADJUST_CAPABILITIES: 'brightness,exposure',
+    });
+
+    expect(enabled).toEqual(new Set(['brightness', 'exposure']));
+  });
+
+  it('falls back to safe defaults when env value is invalid', () => {
+    const enabled = resolveAdjustCapabilitiesForTest({
+      AURAPIX_EDIT_ADJUST_CAPABILITIES: 'not-a-real-capability',
+    });
+
+    expect(enabled).toEqual(new Set(['brightness', 'contrast', 'saturation', 'exposure']));
   });
 });

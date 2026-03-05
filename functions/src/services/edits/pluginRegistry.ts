@@ -1,4 +1,5 @@
 export type EditOperationType = 'crop' | 'rotate' | 'adjust' | 'filter';
+export type AdjustCapability = 'brightness' | 'contrast' | 'saturation' | 'exposure';
 
 export interface EditPluginManifest {
   id: EditOperationType;
@@ -35,7 +36,7 @@ export const EDIT_PLUGIN_MANIFEST: EditPluginManifest[] = [
   {
     id: 'adjust',
     displayName: 'Adjust',
-    version: '1.1.0',
+    version: '1.2.0',
     enabledByDefault: true,
     nonDestructive: true,
     params: ['brightness', 'contrast', 'saturation', 'exposure'],
@@ -51,6 +52,13 @@ export const EDIT_PLUGIN_MANIFEST: EditPluginManifest[] = [
 ];
 
 const ALL_PLUGIN_IDS = new Set(EDIT_PLUGIN_MANIFEST.map((plugin) => plugin.id));
+const ALL_ADJUST_CAPABILITIES: AdjustCapability[] = [
+  'brightness',
+  'contrast',
+  'saturation',
+  'exposure',
+];
+const ALL_ADJUST_CAPABILITY_SET = new Set(ALL_ADJUST_CAPABILITIES);
 
 function parsePluginList(value: string | undefined): Set<EditOperationType> {
   if (!value) return new Set();
@@ -61,6 +69,23 @@ function parsePluginList(value: string | undefined): Set<EditOperationType> {
       .map((token) => token.trim().toLowerCase())
       .filter((token): token is EditOperationType => ALL_PLUGIN_IDS.has(token as EditOperationType))
   );
+}
+
+function parseAdjustCapabilityList(value: string | undefined): Set<AdjustCapability> {
+  if (!value) return new Set(ALL_ADJUST_CAPABILITIES);
+
+  const parsed = value
+    .split(',')
+    .map((token) => token.trim().toLowerCase())
+    .filter((token): token is AdjustCapability =>
+      ALL_ADJUST_CAPABILITY_SET.has(token as AdjustCapability)
+    );
+
+  if (parsed.length === 0) {
+    return new Set(ALL_ADJUST_CAPABILITIES);
+  }
+
+  return new Set(parsed);
 }
 
 function buildEnabledPluginIds(env: NodeJS.ProcessEnv = process.env): Set<EditOperationType> {
@@ -82,10 +107,17 @@ function buildEnabledPluginIds(env: NodeJS.ProcessEnv = process.env): Set<EditOp
 }
 
 const ENABLED_PLUGIN_IDS = buildEnabledPluginIds();
+const ENABLED_ADJUST_CAPABILITIES = parseAdjustCapabilityList(
+  process.env.AURAPIX_EDIT_ADJUST_CAPABILITIES
+);
 
 export function listPlugins(): RuntimeEditPluginManifest[] {
   return EDIT_PLUGIN_MANIFEST.map((plugin) => ({
     ...plugin,
+    params:
+      plugin.id === 'adjust'
+        ? ALL_ADJUST_CAPABILITIES.filter((capability) => ENABLED_ADJUST_CAPABILITIES.has(capability))
+        : plugin.params,
     enabled: ENABLED_PLUGIN_IDS.has(plugin.id),
   }));
 }
@@ -94,8 +126,18 @@ export function isPluginEnabled(type: string): type is EditOperationType {
   return ENABLED_PLUGIN_IDS.has(type as EditOperationType);
 }
 
+export function isAdjustCapabilityEnabled(capability: AdjustCapability): boolean {
+  return ENABLED_ADJUST_CAPABILITIES.has(capability);
+}
+
 export function resolveEnabledPluginIdsForTest(
   env: NodeJS.ProcessEnv = process.env
 ): Set<EditOperationType> {
   return buildEnabledPluginIds(env);
+}
+
+export function resolveAdjustCapabilitiesForTest(
+  env: NodeJS.ProcessEnv = process.env
+): Set<AdjustCapability> {
+  return parseAdjustCapabilityList(env.AURAPIX_EDIT_ADJUST_CAPABILITIES);
 }
