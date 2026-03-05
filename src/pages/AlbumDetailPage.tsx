@@ -67,6 +67,10 @@ export function AlbumDetailPage() {
     {}
   );
   const [shareDownloadProbeBusy, setShareDownloadProbeBusy] = useState<Record<string, boolean>>({});
+  const [shareAccessOutcomeFilter, setShareAccessOutcomeFilter] = useState<'all' | 'granted' | 'denied'>(
+    'all'
+  );
+  const [shareAccessVisibleCount, setShareAccessVisibleCount] = useState(5);
 
   const {
     links: shareLinks,
@@ -102,6 +106,10 @@ export function AlbumDetailPage() {
     setNameInput(album.name);
     setFolderInput(album.folderId ?? '');
   }, [album]);
+
+  useEffect(() => {
+    setShareAccessVisibleCount(5);
+  }, [shareAccessOutcomeFilter, shareAccessEvents.length]);
 
   // Sync viewer state for rendering
   useEffect(() => {
@@ -296,6 +304,14 @@ export function AlbumDetailPage() {
     event.outcome.startsWith('granted')
   ).length;
   const deniedShareAccessCount = shareAccessEvents.length - grantedShareAccessCount;
+  const filteredShareAccessEvents = shareAccessEvents.filter((event) => {
+    if (shareAccessOutcomeFilter === 'all') return true;
+    return shareAccessOutcomeFilter === 'granted'
+      ? event.outcome.startsWith('granted')
+      : !event.outcome.startsWith('granted');
+  });
+  const visibleShareAccessEvents = filteredShareAccessEvents.slice(0, shareAccessVisibleCount);
+  const hasMoreShareAccessEvents = filteredShareAccessEvents.length > visibleShareAccessEvents.length;
   const nowMs = Date.now();
   const expiredShareLinks = shareLinks.filter((link) => {
     if (!link.policy.expiresAt) return false;
@@ -525,9 +541,23 @@ export function AlbumDetailPage() {
             <h3 className="settings-heading" style={{ margin: 0 }}>
               Share access activity
             </h3>
-            <button className="btn-ghost btn-sm" onClick={() => void refreshAccessEvents()}>
-              Refresh
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                className="settings-select"
+                aria-label="Filter share access outcomes"
+                value={shareAccessOutcomeFilter}
+                onChange={(e) =>
+                  setShareAccessOutcomeFilter(e.target.value as 'all' | 'granted' | 'denied')
+                }
+              >
+                <option value="all">All outcomes</option>
+                <option value="granted">Granted only</option>
+                <option value="denied">Denied only</option>
+              </select>
+              <button className="btn-ghost btn-sm" onClick={() => void refreshAccessEvents()}>
+                Refresh
+              </button>
+            </div>
           </div>
           {loadingAccessEvents ? (
             <p className="state-message">Loading access activity…</p>
@@ -535,13 +565,15 @@ export function AlbumDetailPage() {
             <p className="error">{accessEventsError}</p>
           ) : shareAccessEvents.length === 0 ? (
             <p className="state-message">No share access attempts yet.</p>
+          ) : filteredShareAccessEvents.length === 0 ? (
+            <p className="state-message">No events for this filter yet.</p>
           ) : (
             <>
               <p className="album-date" style={{ marginTop: 8 }}>
-                {`Granted: ${grantedShareAccessCount} • Denied: ${deniedShareAccessCount}`}
+                {`Granted: ${grantedShareAccessCount} • Denied: ${deniedShareAccessCount} • Showing ${visibleShareAccessEvents.length} of ${filteredShareAccessEvents.length}`}
               </p>
               <ul className="album-list">
-                {shareAccessEvents.slice(0, 5).map((event) => (
+                {visibleShareAccessEvents.map((event) => (
                   <li key={event.id} className="album-item">
                     <div>
                       <div className="album-name">{event.outcome}</div>
@@ -555,6 +587,14 @@ export function AlbumDetailPage() {
                   </li>
                 ))}
               </ul>
+              {hasMoreShareAccessEvents && (
+                <button
+                  className="btn-ghost btn-sm"
+                  onClick={() => setShareAccessVisibleCount((count) => count + 10)}
+                >
+                  Show more
+                </button>
+              )}
             </>
           )}
         </div>
