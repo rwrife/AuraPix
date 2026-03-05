@@ -63,6 +63,7 @@ interface AlbumGridCardProps {
   album: Album;
   albumPhotos: Photo[];
   folders: AlbumFolder[];
+  onRename(albumId: string, currentName: string): void;
   onDelete(albumId: string, albumName: string): void;
   onMove(albumId: string, folderId: string | null): void;
   deleting: boolean;
@@ -72,6 +73,7 @@ function AlbumGridCard({
   album,
   albumPhotos,
   folders,
+  onRename,
   onDelete,
   onMove,
   deleting,
@@ -91,6 +93,13 @@ function AlbumGridCard({
           </span>
         </div>
         <div className="album-card-actions">
+          <button
+            className="btn-ghost btn-sm"
+            onClick={() => onRename(album.id, album.name)}
+            title="Rename album"
+          >
+            Rename
+          </button>
           <select
             className="folder-select"
             value={album.folderId ?? ''}
@@ -123,6 +132,7 @@ interface AlbumListRowProps {
   album: Album;
   albumPhotos: Photo[];
   folders: AlbumFolder[];
+  onRename(albumId: string, currentName: string): void;
   onDelete(albumId: string, albumName: string): void;
   onMove(albumId: string, folderId: string | null): void;
   deleting: boolean;
@@ -132,6 +142,7 @@ function AlbumListRow({
   album,
   albumPhotos,
   folders,
+  onRename,
   onDelete,
   onMove,
   deleting,
@@ -146,6 +157,9 @@ function AlbumListRow({
         </span>
       </Link>
       <div className="album-item-actions">
+        <button className="btn-ghost btn-sm" onClick={() => onRename(album.id, album.name)}>
+          Rename
+        </button>
         <select
           className="folder-select"
           value={album.folderId ?? ''}
@@ -180,6 +194,7 @@ interface FolderSectionProps {
   allFolders: AlbumFolder[];
   viewMode: 'grid' | 'list';
   deletingId: string | null;
+  onRename(albumId: string, currentName: string): void;
   onDelete(albumId: string, albumName: string): void;
   onMove(albumId: string, folderId: string | null): void;
   onDeleteFolder?(folderId: string, folderName: string): void;
@@ -192,6 +207,7 @@ function FolderSection({
   allFolders,
   viewMode,
   deletingId,
+  onRename,
   onDelete,
   onMove,
   onDeleteFolder,
@@ -254,6 +270,7 @@ function FolderSection({
                 album={album}
                 albumPhotos={photosForAlbum(album.id)}
                 folders={allFolders}
+                onRename={onRename}
                 onDelete={onDelete}
                 onMove={onMove}
                 deleting={deletingId === album.id}
@@ -268,6 +285,7 @@ function FolderSection({
                 album={album}
                 albumPhotos={photosForAlbum(album.id)}
                 folders={allFolders}
+                onRename={onRename}
                 onDelete={onDelete}
                 onMove={onMove}
                 deleting={deletingId === album.id}
@@ -289,6 +307,7 @@ export function AlbumsPage() {
     loading,
     error,
     createAlbum,
+    renameAlbum,
     deleteAlbum,
     createFolder,
     deleteFolder,
@@ -346,6 +365,12 @@ export function AlbumsPage() {
     setDeletingId(albumId);
     await deleteAlbum(albumId);
     setDeletingId(null);
+  }
+
+  async function handleRenameAlbum(albumId: string, currentName: string) {
+    const nextName = prompt('Rename album', currentName)?.trim();
+    if (!nextName || nextName === currentName) return;
+    await renameAlbum(albumId, nextName);
   }
 
   async function handleDeleteFolder(folderId: string, name: string) {
@@ -458,6 +483,7 @@ export function AlbumsPage() {
                 allFolders={folders}
                 viewMode={viewMode}
                 deletingId={deletingId}
+                onRename={handleRenameAlbum}
                 onDelete={handleDeleteAlbum}
                 onMove={moveAlbum}
                 onDeleteFolder={handleDeleteFolder}
@@ -473,6 +499,7 @@ export function AlbumsPage() {
                 allFolders={folders}
                 viewMode={viewMode}
                 deletingId={deletingId}
+                onRename={handleRenameAlbum}
                 onDelete={handleDeleteAlbum}
                 onMove={moveAlbum}
               />
