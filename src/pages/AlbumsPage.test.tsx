@@ -56,4 +56,21 @@ describe('AlbumsPage', () => {
     expect(tripsSection).toBeInTheDocument();
     expect((await screen.findAllByRole('link', { name: 'Weekend Getaway' })).length).toBeGreaterThan(0);
   });
+
+  it('renames an album from the list actions', async () => {
+    window.history.pushState({}, '', '/albums');
+    const user = userEvent.setup();
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Renamed Highlights');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Albums' })).toBeInTheDocument();
+
+    const renameButtons = await screen.findAllByRole('button', { name: 'Rename' });
+    await user.click(renameButtons[0]);
+
+    expect((await screen.findAllByRole('link', { name: 'Renamed Highlights' })).length).toBeGreaterThan(0);
+
+    promptSpy.mockRestore();
+  });
 });
