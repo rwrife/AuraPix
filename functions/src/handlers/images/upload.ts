@@ -102,7 +102,18 @@ export async function handleUpload(
 
   // TODO: Verify user has access to this library
   const userId = req.user?.uid || 'anonymous';
-  const idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
+
+  let idempotencyKey: string | null;
+  try {
+    idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
+  } catch (error) {
+    throw new AppError(
+      400,
+      'INVALID_IDEMPOTENCY_KEY',
+      error instanceof Error ? error.message : 'Invalid idempotency key'
+    );
+  }
+
   const uploadFingerprint = createUploadFingerprint(file);
 
   if (idempotencyKey) {
