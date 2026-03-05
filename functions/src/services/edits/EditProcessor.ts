@@ -108,23 +108,38 @@ function applyRotate(
 
 /**
  * Adjust operation
- * Params: { brightness?: number, contrast?: number, saturation?: number }
- * Values are multipliers: 1.0 = no change, <1.0 = decrease, >1.0 = increase
+ * Params: { brightness?: number, contrast?: number, saturation?: number, exposure?: number }
+ * brightness/saturation are multipliers: 1.0 = no change, <1.0 = decrease, >1.0 = increase
+ * exposure is in stops (EV): +1 doubles light, -1 halves light
  */
 function applyAdjust(
   pipeline: sharp.Sharp,
   params: Record<string, any>
 ): sharp.Sharp {
-  const { brightness, contrast, saturation } = params;
+  const { brightness, contrast, saturation, exposure } = params;
 
-  logger.debug({ brightness, contrast, saturation }, 'Applying adjustments');
+  logger.debug({ brightness, contrast, saturation, exposure }, 'Applying adjustments');
+
+  const resolvedBrightness =
+    typeof brightness === 'number'
+      ? brightness * (typeof exposure === 'number' ? Math.pow(2, exposure) : 1)
+      : typeof exposure === 'number'
+        ? Math.pow(2, exposure)
+        : undefined;
 
   // Apply modulate for brightness and saturation
-  if (brightness !== undefined || saturation !== undefined) {
-    pipeline = pipeline.modulate({
-      brightness: typeof brightness === 'number' ? brightness : undefined,
-      saturation: typeof saturation === 'number' ? saturation : undefined,
-    });
+  if (resolvedBrightness !== undefined || saturation !== undefined) {
+    const modulateParams: { brightness?: number; saturation?: number } = {};
+
+    if (resolvedBrightness !== undefined) {
+      modulateParams.brightness = resolvedBrightness;
+    }
+
+    if (typeof saturation === 'number') {
+      modulateParams.saturation = saturation;
+    }
+
+    pipeline = pipeline.modulate(modulateParams);
   }
 
   // Apply linear for contrast
@@ -226,13 +241,14 @@ export function validateOperations(operations: EditOperation[]): {
         break;
 
       case 'adjust':
-        const { brightness, contrast, saturation } = op.params;
+        const { brightness, contrast, saturation, exposure } = op.params;
         if (
           brightness !== undefined && typeof brightness !== 'number' ||
           contrast !== undefined && typeof contrast !== 'number' ||
-          saturation !== undefined && typeof saturation !== 'number'
+          saturation !== undefined && typeof saturation !== 'number' ||
+          exposure !== undefined && typeof exposure !== 'number'
         ) {
-          errors.push('Adjust requires numeric brightness, contrast, or saturation');
+          errors.push('Adjust requires numeric brightness, contrast, saturation, or exposure');
         }
         break;
 
