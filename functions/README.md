@@ -112,6 +112,9 @@ firebase deploy --only functions
 - `STORAGE_MODE`: Storage backend ('local' or 'firebase')
 - `SIGNING_KEY_EXPIRATION`: Key lifetime in seconds (default: 3600 = 1 hour)
 - `SIGNED_URL_EXPIRATION`: URL lifetime in seconds (default: 600 = 10 minutes)
+- `AURAPIX_EDIT_ENABLED_PLUGINS`: Optional comma-separated allow-list of edit plugins (`crop,rotate,adjust,filter`)
+- `AURAPIX_EDIT_DISABLED_PLUGINS`: Optional comma-separated deny-list of edit plugins (applied after allow-list)
+- `AURAPIX_EDIT_ADJUST_CAPABILITIES`: Optional comma-separated allow-list for adjust params (`brightness,contrast,saturation,exposure`)
 
 See `.env.example` for complete list.
 

@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import type { EditOperation } from '../../models/Photo.js';
 import { logger } from '../../utils/logger.js';
-import { isPluginEnabled } from './pluginRegistry.js';
+import { isAdjustCapabilityEnabled, isPluginEnabled } from './pluginRegistry.js';
 
 /**
  * Apply a sequence of edit operations to an image buffer
@@ -240,7 +240,7 @@ export function validateOperations(operations: EditOperation[]): {
         }
         break;
 
-      case 'adjust':
+      case 'adjust': {
         const { brightness, contrast, saturation, exposure } = op.params;
         if (
           brightness !== undefined && typeof brightness !== 'number' ||
@@ -250,7 +250,21 @@ export function validateOperations(operations: EditOperation[]): {
         ) {
           errors.push('Adjust requires numeric brightness, contrast, saturation, or exposure');
         }
+
+        if (brightness !== undefined && !isAdjustCapabilityEnabled('brightness')) {
+          errors.push('Adjust brightness is currently disabled by configuration');
+        }
+        if (contrast !== undefined && !isAdjustCapabilityEnabled('contrast')) {
+          errors.push('Adjust contrast is currently disabled by configuration');
+        }
+        if (saturation !== undefined && !isAdjustCapabilityEnabled('saturation')) {
+          errors.push('Adjust saturation is currently disabled by configuration');
+        }
+        if (exposure !== undefined && !isAdjustCapabilityEnabled('exposure')) {
+          errors.push('Adjust exposure is currently disabled by configuration');
+        }
         break;
+      }
 
       case 'filter':
         if (!op.params.filterName || typeof op.params.filterName !== 'string') {
