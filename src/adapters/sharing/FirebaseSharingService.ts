@@ -8,6 +8,8 @@ import {
   updateDoc,
   serverTimestamp,
   type Firestore,
+  type QueryDocumentSnapshot,
+  type DocumentData,
 } from 'firebase/firestore';
 import { nanoid } from 'nanoid';
 import type { SharingService } from '../../domain/sharing/contract';
@@ -126,115 +128,49 @@ export class FirebaseSharingService implements SharingService {
   async resolveShareLink(
     input: ResolveShareLinkInput
   ): Promise<ShareLink | null> {
-    const q = query(
-      collection(this.db, 'shareLinks'),
-      where('token', '==', input.token)
-    );
-
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      await this.logAccessEvent(input.token, null, 'denied_not_found', 'link_resolve', null);
+    const validated = await this.validateAccess(input, 'link_resolve');
+    if (!validated) {
       return null;
     }
 
-    const linkDoc = snapshot.docs[0];
-    const link = { id: linkDoc.id, ...linkDoc.data() } as ShareLink;
-
-    // Check if revoked
-    if (link.revoked) {
-      await this.logAccessEvent(input.token, link.id, 'denied_revoked', 'link_resolve', link);
-      return null;
-    }
-
-    // Check if expired
-    if (link.policy.expiresAt) {
-      const expiresAt = new Date(link.policy.expiresAt);
-      if (expiresAt <= new Date()) {
-        await this.logAccessEvent(input.token, link.id, 'denied_expired', 'link_resolve', link);
-        return null;
-      }
-    }
-
-    // Check max uses
-    if (link.policy.maxUses && link.useCount >= link.policy.maxUses) {
-      await this.logAccessEvent(input.token, link.id, 'denied_max_uses', 'link_resolve', link);
-      return null;
-    }
-
-    // Check password if required
-    if (link.policy.passwordProtected) {
-      if (!input.password) {
-        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', 'link_resolve', link);
-        return null;
-      }
-
-      const linkData = linkDoc.data() as { passwordHash?: string };
-      const storedPassword = linkData.passwordHash;
-      const isValidPassword =
-        typeof storedPassword === 'string'
-          ? isVersionedPasswordHash(storedPassword)
-            ? await verifyPassword(input.password, storedPassword)
-            : storedPassword === input.password // Backward compatibility for existing plaintext records
-          : false;
-
-      if (!isValidPassword) {
-        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', 'link_resolve', link);
-        return null;
-      }
-    }
-
-    // Increment use count
-    await updateDoc(linkDoc.ref, {
-      useCount: link.useCount + 1,
-      lastAccessedAt: serverTimestamp(),
-    });
-
-    await this.logAccessEvent(input.token, link.id, 'granted', 'link_resolve', link);
-
-    return link;
+    const resolved = await this.incrementUseCount(validated);
+    await this.logAccessEvent(input.token, resolved.id, 'granted', 'link_resolve', resolved);
+    return resolved;
   }
 
   async resolveShareDownload(
     input: ResolveShareDownloadInput
   ): Promise<ShareDownloadResolution | null> {
-    const link = await this.resolveShareLink(input);
-    if (!link) {
+    const attempt: ShareAccessAttempt =
+      input.assetKind === 'original' ? 'download_original' : 'download_derivative';
+
+    const validated = await this.validateAccess(input, attempt);
+    if (!validated) {
       return null;
     }
+
+    const { link } = validated;
 
     // Check download policy
     const { downloadPolicy } = link.policy;
     if (downloadPolicy === 'none') {
-      await this.logAccessEvent(
-        input.token,
-        link.id,
-        'denied_download_disallowed',
-        input.assetKind === 'original' ? 'download_original' : 'download_derivative',
-        link
-      );
+      await this.logAccessEvent(input.token, link.id, 'denied_download_disallowed', attempt, link);
       return null;
     }
 
-    if (
-      downloadPolicy === 'derivative_only' &&
-      input.assetKind === 'original'
-    ) {
-      await this.logAccessEvent(
-        input.token,
-        link.id,
-        'denied_download_disallowed',
-        input.assetKind === 'original' ? 'download_original' : 'download_derivative',
-        link
-      );
+    if (downloadPolicy === 'derivative_only' && input.assetKind === 'original') {
+      await this.logAccessEvent(input.token, link.id, 'denied_download_disallowed', attempt, link);
       return null;
     }
 
-    await this.logAccessEvent(input.token, link.id, 'granted_download', input.assetKind === 'original' ? 'download_original' : 'download_derivative', link);
+    const resolved = await this.incrementUseCount(validated);
+    await this.logAccessEvent(input.token, resolved.id, 'granted_download', attempt, resolved);
 
     return {
-      link,
+      link: resolved,
       assetKind: input.assetKind,
-      watermarkApplied: link.policy.watermarkEnabled,
+      watermarkApplied:
+        input.assetKind === 'derivative' && resolved.policy.watermarkEnabled,
     };
   }
 
@@ -264,6 +200,85 @@ export class FirebaseSharingService implements SharingService {
       id: doc.id,
       ...doc.data(),
     })) as ShareAccessEvent[];
+  }
+
+  private async findLinkByToken(
+    token: string
+  ): Promise<{ linkDoc: QueryDocumentSnapshot<DocumentData>; link: ShareLink } | null> {
+    const q = query(collection(this.db, 'shareLinks'), where('token', '==', token));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return null;
+    }
+
+    const linkDoc = snapshot.docs[0];
+    const link = { id: linkDoc.id, ...linkDoc.data() } as ShareLink;
+    return { linkDoc, link };
+  }
+
+  private async validateAccess(
+    input: ResolveShareLinkInput,
+    attempt: ShareAccessAttempt
+  ): Promise<{ linkDoc: QueryDocumentSnapshot<DocumentData>; link: ShareLink } | null> {
+    const found = await this.findLinkByToken(input.token);
+    if (!found) {
+      await this.logAccessEvent(input.token, null, 'denied_not_found', attempt, null);
+      return null;
+    }
+
+    const { linkDoc, link } = found;
+
+    if (link.revoked) {
+      await this.logAccessEvent(input.token, link.id, 'denied_revoked', attempt, link);
+      return null;
+    }
+
+    if (link.policy.expiresAt && new Date(link.policy.expiresAt) <= new Date()) {
+      await this.logAccessEvent(input.token, link.id, 'denied_expired', attempt, link);
+      return null;
+    }
+
+    if (link.policy.maxUses !== null && link.useCount >= link.policy.maxUses) {
+      await this.logAccessEvent(input.token, link.id, 'denied_max_uses', attempt, link);
+      return null;
+    }
+
+    if (link.policy.passwordProtected) {
+      if (!input.password) {
+        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', attempt, link);
+        return null;
+      }
+
+      const linkData = linkDoc.data() as { passwordHash?: string };
+      const storedPassword = linkData.passwordHash;
+      const isValidPassword =
+        typeof storedPassword === 'string'
+          ? isVersionedPasswordHash(storedPassword)
+            ? await verifyPassword(input.password, storedPassword)
+            : storedPassword === input.password
+          : false;
+
+      if (!isValidPassword) {
+        await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', attempt, link);
+        return null;
+      }
+    }
+
+    return { linkDoc, link };
+  }
+
+  private async incrementUseCount(input: {
+    linkDoc: QueryDocumentSnapshot<DocumentData>;
+    link: ShareLink;
+  }): Promise<ShareLink> {
+    const resolved = { ...input.link, useCount: input.link.useCount + 1 };
+
+    await updateDoc(input.linkDoc.ref, {
+      useCount: resolved.useCount,
+      lastAccessedAt: serverTimestamp(),
+    });
+
+    return resolved;
   }
 
   private normalizePolicy(input: {
