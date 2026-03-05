@@ -6,10 +6,7 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { logger } from '../../utils/logger.js';
 import { ApplyEditsSchema } from '../../utils/validation.js';
 import { validateOperations } from '../../services/edits/EditProcessor.js';
-import {
-  EDIT_PLUGIN_MANIFEST,
-  EDIT_RECIPE_VERSION,
-} from '../../services/edits/pluginRegistry.js';
+import { EDIT_RECIPE_VERSION, listPlugins } from '../../services/edits/pluginRegistry.js';
 import {
   createApplyEditsFingerprint,
   createRevertFingerprint,
@@ -44,11 +41,7 @@ function assertEditVersionMatch(
     throw new AppError(
       409,
       'EDIT_VERSION_CONFLICT',
-      `Edit version conflict: expected current version ${expectedCurrentVersion}, actual version ${actualCurrentVersion}`,
-      {
-        expectedCurrentVersion,
-        actualCurrentVersion,
-      }
+      `Edit version conflict: expected current version ${expectedCurrentVersion}, actual version ${actualCurrentVersion}`
     );
   }
 }
@@ -64,7 +57,7 @@ export async function handleListPlugins(
 ): Promise<void> {
   res.json({
     recipeVersion: EDIT_RECIPE_VERSION,
-    plugins: EDIT_PLUGIN_MANIFEST,
+    plugins: listPlugins(),
   });
 }
 
