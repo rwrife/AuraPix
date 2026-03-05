@@ -35,10 +35,10 @@ export const EDIT_PLUGIN_MANIFEST: EditPluginManifest[] = [
   {
     id: 'adjust',
     displayName: 'Adjust',
-    version: '1.0.0',
+    version: '1.1.0',
     enabledByDefault: true,
     nonDestructive: true,
-    params: ['brightness', 'contrast', 'saturation'],
+    params: ['brightness', 'contrast', 'saturation', 'exposure'],
   },
   {
     id: 'filter',
