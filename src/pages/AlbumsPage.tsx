@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Album, AlbumFolder } from '../domain/albums/types';
 import type { Photo } from '../domain/library/types';
@@ -325,6 +325,22 @@ export function AlbumsPage() {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'name-asc' | 'name-desc'>('newest');
+
+  const visibleAlbums = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? albums.filter((album) => album.name.toLowerCase().includes(query))
+      : albums;
+
+    return [...filtered].sort((a, b) => {
+      if (sortMode === 'name-asc') return a.name.localeCompare(b.name);
+      if (sortMode === 'name-desc') return b.name.localeCompare(a.name);
+      if (sortMode === 'oldest') return a.createdAt.localeCompare(b.createdAt);
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [albums, searchQuery, sortMode]);
 
   async function handleCreateAlbum(e: React.FormEvent) {
     e.preventDefault();
@@ -458,6 +474,28 @@ export function AlbumsPage() {
 
         {albumFormError && <p className="error">{albumFormError}</p>}
 
+        <div className="album-form" role="group" aria-label="Album list controls">
+          <input
+            type="search"
+            placeholder="Search albums"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search albums"
+          />
+          <select
+            value={sortMode}
+            onChange={(e) =>
+              setSortMode(e.target.value as 'newest' | 'oldest' | 'name-asc' | 'name-desc')
+            }
+            aria-label="Sort albums"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name-asc">Name (A-Z)</option>
+            <option value="name-desc">Name (Z-A)</option>
+          </select>
+        </div>
+
         {error && (
           <div className="error" role="alert">
             <span>{error}</span>{' '}
@@ -469,7 +507,7 @@ export function AlbumsPage() {
 
         {loading ? (
           <p className="state-message">Loading albums…</p>
-        ) : albums.length === 0 ? (
+        ) : visibleAlbums.length === 0 ? (
           <p className="state-message">No albums yet. Create one above.</p>
         ) : (
           <div className="folders-container">
@@ -478,7 +516,7 @@ export function AlbumsPage() {
               <FolderSection
                 key={folder.id}
                 folder={folder}
-                folderAlbums={albums.filter((a) => a.folderId === folder.id)}
+                folderAlbums={visibleAlbums.filter((a) => a.folderId === folder.id)}
                 allPhotos={photos}
                 allFolders={folders}
                 viewMode={viewMode}
@@ -491,10 +529,10 @@ export function AlbumsPage() {
             ))}
 
             {/* Ungrouped albums */}
-            {albums.filter((a) => !a.folderId).length > 0 && (
+            {visibleAlbums.filter((a) => !a.folderId).length > 0 && (
               <FolderSection
                 folder={null}
-                folderAlbums={albums.filter((a) => !a.folderId)}
+                folderAlbums={visibleAlbums.filter((a) => !a.folderId)}
                 allPhotos={photos}
                 allFolders={folders}
                 viewMode={viewMode}

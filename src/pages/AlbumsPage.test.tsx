@@ -57,6 +57,42 @@ describe('AlbumsPage', () => {
     expect((await screen.findAllByRole('link', { name: 'Weekend Getaway' })).length).toBeGreaterThan(0);
   });
 
+
+
+  it('filters and sorts albums from the list controls', async () => {
+    window.history.pushState({}, '', '/albums');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Albums' })).toBeInTheDocument();
+
+    const albumInput = screen.getByPlaceholderText('New album name');
+
+    await user.type(albumInput, 'Zoo Trip');
+    await user.click(screen.getByRole('button', { name: 'Create album' }));
+
+    await user.type(albumInput, 'Alpha Trip');
+    await user.click(screen.getByRole('button', { name: 'Create album' }));
+
+    await user.selectOptions(screen.getByLabelText('Sort albums'), 'name-asc');
+
+    const albumLinkNames = Array.from(document.querySelectorAll('a.album-link')).map((el) =>
+      el.textContent?.trim()
+    );
+    expect(albumLinkNames.indexOf('Alpha Trip')).toBeGreaterThanOrEqual(0);
+    expect(albumLinkNames.indexOf('Zoo Trip')).toBeGreaterThanOrEqual(0);
+    expect(albumLinkNames.indexOf('Alpha Trip')).toBeLessThan(albumLinkNames.indexOf('Zoo Trip'));
+
+    await user.type(screen.getByLabelText('Search albums'), 'zoo');
+
+    const filteredAlbumLinks = Array.from(document.querySelectorAll('a.album-link')).map((el) =>
+      el.textContent?.trim()
+    );
+    expect(filteredAlbumLinks).toContain('Zoo Trip');
+    expect(filteredAlbumLinks).not.toContain('Alpha Trip');
+  });
+
   it('renames an album from the list actions', async () => {
     window.history.pushState({}, '', '/albums');
     const user = userEvent.setup();
