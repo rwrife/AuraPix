@@ -84,6 +84,7 @@ import internalRouter from './routes/internal.js';
 import editsRouter from './routes/edits.js';
 import signingRouter from './routes/signing.js';
 import { createAlbumsRouter } from './routes/albums.js';
+import { createAlbumsV1Router } from './routes/albumsV1.js';
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
@@ -96,6 +97,7 @@ app.use('/edits', authMiddleware, editsRouter);
 // Versioned API surface (desktop/web clients)
 app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
+app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/signing', authMiddleware, signingRouter);
 
 // Error handlers (must be last)
