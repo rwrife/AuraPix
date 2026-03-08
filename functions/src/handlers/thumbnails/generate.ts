@@ -1,7 +1,14 @@
 import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
 import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import type { Photo } from '../../models/Photo.js';
-import { generateAllThumbnails } from '../../services/image/processor.js';
+import {
+  generateAllThumbnails,
+  generateHighQualityJpeg,
+} from '../../services/image/processor.js';
+import {
+  extractRawPreviewBuffer,
+  isRawUpload,
+} from '../../services/image/rawSupport.js';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -51,9 +58,28 @@ export async function generateThumbnailsForPhoto(
       photo.storagePaths.original
     );
 
+    const uploadLooksRaw = isRawUpload(photo.originalName, photo.metadata.mimeType);
+
     // Generate all thumbnail variants
     logger.info(logContext, 'Generating thumbnail variants');
-    const thumbnails = await generateAllThumbnails(originalBuffer);
+    let sourceForDerivatives = originalBuffer;
+    try {
+      await generateHighQualityJpeg(originalBuffer, 32);
+    } catch (error) {
+      if (!uploadLooksRaw) throw error;
+
+      logger.warn({ ...logContext, err: error }, 'Original appears RAW; using embedded preview');
+      const rawPreview = await extractRawPreviewBuffer(originalBuffer);
+      if (!rawPreview) {
+        throw new Error('Unable to decode RAW preview for derivative generation');
+      }
+      sourceForDerivatives = rawPreview;
+    }
+
+    const [thumbnails, previewJpeg] = await Promise.all([
+      generateAllThumbnails(sourceForDerivatives),
+      generateHighQualityJpeg(sourceForDerivatives),
+    ]);
 
     // Store all derivatives
     logger.info(logContext, 'Storing derivative images');
@@ -86,6 +112,11 @@ export async function generateThumbnailsForPhoto(
       storageAdapter.storeFile(
         photo.storagePaths.derivatives.large_jpeg,
         thumbnails.large_jpeg,
+        { contentType: 'image/jpeg' }
+      ),
+      storageAdapter.storeFile(
+        photo.storagePaths.derivatives.preview_jpeg,
+        previewJpeg,
         { contentType: 'image/jpeg' }
       ),
     ]);

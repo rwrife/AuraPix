@@ -127,3 +127,22 @@ export async function generateAllThumbnails(
     large_jpeg,
   };
 }
+
+/**
+ * Generate a high-quality JPEG preview for full-screen display.
+ */
+export async function generateHighQualityJpeg(
+  inputBuffer: Buffer,
+  maxEdge = 4096
+): Promise<Buffer> {
+  return await sharp(inputBuffer)
+    .rotate()
+    .resize({
+      width: maxEdge,
+      height: maxEdge,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 92, progressive: true, mozjpeg: true })
+    .toBuffer();
+}

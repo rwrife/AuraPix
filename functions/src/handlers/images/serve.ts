@@ -93,7 +93,11 @@ export async function handleServeImage(
     } else if (photo.storagePaths && typeof photo.storagePaths === 'object') {
       // New format: storagePaths object with original and derivatives
       if (size === 'original') {
-        storagePath = normalizeStoragePath(photo.storagePaths.original);
+        const isRawOriginal = photo.metadata.mimeType.startsWith('application/');
+        const previewPath = photo.storagePaths.derivatives.preview_jpeg;
+        storagePath = normalizeStoragePath(
+          isRawOriginal && previewPath ? previewPath : photo.storagePaths.original
+        );
       } else {
         // Get derivative path
         const derivativeKey =

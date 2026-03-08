@@ -1,7 +1,14 @@
 import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
 import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import type { Photo } from '../../models/Photo.js';
-import { generateAllThumbnails } from '../../services/image/processor.js';
+import {
+  generateAllThumbnails,
+  generateHighQualityJpeg,
+} from '../../services/image/processor.js';
+import {
+  extractRawPreviewBuffer,
+  isRawUpload,
+} from '../../services/image/rawSupport.js';
 import { applyEdits } from '../../services/edits/EditProcessor.js';
 import { logger } from '../../utils/logger.js';
 
@@ -36,25 +43,43 @@ export async function regenerateThumbnailsWithEdits(
       photo.storagePaths.original
     );
 
+    const uploadLooksRaw = isRawUpload(photo.originalName, photo.metadata.mimeType);
+
+    // Choose processable source (RAW originals may need embedded preview)
+    let editableSource = originalBuffer;
+    try {
+      await generateHighQualityJpeg(originalBuffer, 32);
+    } catch (error) {
+      if (!uploadLooksRaw) throw error;
+      const rawPreview = await extractRawPreviewBuffer(originalBuffer);
+      if (!rawPreview) {
+        throw new Error('Unable to decode RAW preview for edit regeneration');
+      }
+      editableSource = rawPreview;
+    }
+
     // Apply edits if any
-    let processedBuffer = originalBuffer;
+    let processedBuffer = editableSource;
     if (photo.currentEditVersion > 0) {
       const currentEdit = photo.editHistory.find(
         (e) => e.version === photo.currentEditVersion
       );
-      
+
       if (currentEdit) {
         logger.info(
           { ...logContext, version: currentEdit.version, ops: currentEdit.operations.length },
           'Applying edits before thumbnail generation'
         );
-        processedBuffer = await applyEdits(originalBuffer, currentEdit.operations);
+        processedBuffer = await applyEdits(editableSource, currentEdit.operations);
       }
     }
 
     // Generate thumbnails from processed image
     logger.info(logContext, 'Generating thumbnail variants');
-    const thumbnails = await generateAllThumbnails(processedBuffer);
+    const [thumbnails, previewJpeg] = await Promise.all([
+      generateAllThumbnails(processedBuffer),
+      generateHighQualityJpeg(processedBuffer),
+    ]);
 
     // Store all derivatives (overwrites existing)
     logger.info(logContext, 'Storing derivative images');
@@ -87,6 +112,11 @@ export async function regenerateThumbnailsWithEdits(
       storageAdapter.storeFile(
         photo.storagePaths.derivatives.large_jpeg,
         thumbnails.large_jpeg,
+        { contentType: 'image/jpeg' }
+      ),
+      storageAdapter.storeFile(
+        photo.storagePaths.derivatives.preview_jpeg,
+        previewJpeg,
         { contentType: 'image/jpeg' }
       ),
     ]);

@@ -11,6 +11,7 @@ export interface PhotoPaths {
     medium_jpeg: string;
     large_webp: string;
     large_jpeg: string;
+    preview_jpeg: string;
   };
 }
 
@@ -30,6 +31,7 @@ export function generatePhotoPaths(
       medium_jpeg: `derivatives/${baseDir}/thumb_medium.jpg`,
       large_webp: `derivatives/${baseDir}/thumb_large.webp`,
       large_jpeg: `derivatives/${baseDir}/thumb_large.jpg`,
+      preview_jpeg: `derivatives/${baseDir}/preview.jpg`,
     },
   };
 }
