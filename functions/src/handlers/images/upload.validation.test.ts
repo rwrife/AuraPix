@@ -28,7 +28,7 @@ function createStorageAdapter(): StorageAdapter {
   };
 }
 
-describe('handleUpload idempotency validation', () => {
+describe('handleUpload validation', () => {
   it('returns 400 INVALID_IDEMPOTENCY_KEY for overly long keys', async () => {
     const req: any = {
       params: { libraryId: 'lib-1' },
@@ -53,5 +53,37 @@ describe('handleUpload idempotency validation', () => {
       statusCode: 400,
       code: 'INVALID_IDEMPOTENCY_KEY',
     } satisfies Partial<AppError>);
+  });
+
+  it('accepts RAW uploads identified by extension with generic mime type', async () => {
+    const req: any = {
+      params: { libraryId: 'lib-1' },
+      user: { uid: 'user-1' },
+      file: {
+        originalname: 'nikon.nef',
+        mimetype: 'application/octet-stream',
+        size: 128,
+        buffer: Buffer.from('raw-data'),
+      },
+      header: () => undefined,
+      app: {
+        locals: {
+          storageAdapter: createStorageAdapter(),
+          dataAdapter: createDataAdapter(),
+        },
+      },
+    };
+
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
+    const res: any = { status, json };
+
+    await expect(handleUpload(req, res)).resolves.toBeUndefined();
+    expect(status).toHaveBeenCalledWith(202);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'processing',
+      })
+    );
   });
 });

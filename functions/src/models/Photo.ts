@@ -42,6 +42,7 @@ export interface StoragePaths {
     medium_jpeg: string;
     large_webp: string;
     large_jpeg: string;
+    preview_jpeg?: string;
   };
 }
 

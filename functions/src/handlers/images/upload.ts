@@ -19,6 +19,7 @@ import { securityConfig } from '../../config/index.js';
 import { createPhotoDocument } from '../../models/Photo.js';
 import type { PhotoMetadata } from '../../models/Photo.js';
 import { evaluateUploadPolicy } from '../../services/host/uploadPolicy.js';
+import { fileExtension, isRawUpload } from '../../services/image/rawSupport.js';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -27,9 +28,9 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024, // 100MB max
   },
   fileFilter: (req, file, cb) => {
-    // Accept images only
-    if (!file.mimetype.startsWith('image/')) {
-      cb(new AppError(400, 'INVALID_FILE_TYPE', 'Only image files are allowed'));
+    // Accept standard images plus common RAW camera formats.
+    if (!file.mimetype.startsWith('image/') && !isRawUpload(file.originalname, file.mimetype)) {
+      cb(new AppError(400, 'INVALID_FILE_TYPE', 'Only image/RAW photo files are allowed'));
       return;
     }
     cb(null, true);
@@ -42,10 +43,17 @@ export const uploadMiddleware = upload.single('file');
  * Extract metadata from image using Sharp and complete EXIF data
  */
 async function extractMetadata(
-  imageBuffer: Buffer
+  imageBuffer: Buffer,
+  originalName: string,
+  mimeType: string
 ): Promise<PhotoMetadata & { extension: string }> {
-  const image = sharp(imageBuffer);
-  const metadata = await image.metadata();
+  let metadata: sharp.Metadata | null = null;
+
+  try {
+    metadata = await sharp(imageBuffer).metadata();
+  } catch {
+    metadata = null;
+  }
 
   // Extract comprehensive EXIF data using exifr
   logger.info('Extracting EXIF data from image');
@@ -66,17 +74,22 @@ async function extractMetadata(
         }
       : undefined;
 
+  const extension = metadata?.format || fileExtension(originalName) || 'jpg';
+  const normalizedMimeType = metadata?.format
+    ? `image/${metadata.format}`
+    : mimeType || (isRawUpload(originalName, mimeType) ? 'application/x-raw-image' : 'image/jpeg');
+
   return {
-    width: metadata.width || 0,
-    height: metadata.height || 0,
-    mimeType: `image/${metadata.format}`,
+    width: metadata?.width || 0,
+    height: metadata?.height || 0,
+    mimeType: normalizedMimeType,
     sizeBytes: imageBuffer.length,
     takenAt,
     location,
     cameraMake,
     cameraModel,
     exif: exifData || undefined, // Store complete EXIF data
-    extension: metadata.format || 'jpg',
+    extension,
   };
 }
 
@@ -174,7 +187,11 @@ export async function handleUpload(
 
     // Extract metadata from image
     logger.info({ photoId, libraryId }, 'Extracting image metadata');
-    const { extension, ...metadata } = await extractMetadata(file.buffer);
+    const { extension, ...metadata } = await extractMetadata(
+      file.buffer,
+      file.originalname,
+      file.mimetype
+    );
 
     // Generate storage paths
     const storagePaths = generatePhotoPaths(libraryId, photoId, extension);
