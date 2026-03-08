@@ -88,6 +88,9 @@ app.use('/images', createImageRoutes(dataAdapter));
 // These routes require authentication
 app.use('/internal', authMiddleware, internalRouter);
 app.use('/edits', authMiddleware, editsRouter);
+
+// Versioned API surface (desktop/web clients)
+app.use('/api', apiVersionMiddleware);
 app.use('/api/signing', authMiddleware, signingRouter);
 
 // Error handlers (must be last)
