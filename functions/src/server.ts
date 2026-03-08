@@ -9,6 +9,7 @@ import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
 import { FirestoreDataAdapter } from './adapters/data/FirestoreDataAdapter.js';
+import { createDomainModules } from './composition/domainModules.js';
 
 const app = express();
 
@@ -65,6 +66,8 @@ if (storageConfig.mode === 'firebase') {
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
 
+const domainModules = createDomainModules();
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
@@ -80,6 +83,7 @@ import { createImageRoutes } from './routes/images.js';
 import internalRouter from './routes/internal.js';
 import editsRouter from './routes/edits.js';
 import signingRouter from './routes/signing.js';
+import { createAlbumsRouter } from './routes/albums.js';
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
@@ -91,6 +95,7 @@ app.use('/edits', authMiddleware, editsRouter);
 
 // Versioned API surface (desktop/web clients)
 app.use('/api', apiVersionMiddleware);
+app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/signing', authMiddleware, signingRouter);
 
 // Error handlers (must be last)
