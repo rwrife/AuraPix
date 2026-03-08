@@ -1,0 +1,108 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Compliance API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/compliance/exports": {
+      "post": {
+        "summary": "Create a data export request for the authenticated user",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "enum": ["json"]
+                  },
+                  "includeAssets": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Export request queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRequestEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Feature disabled"
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/exports/{id}": {
+      "get": {
+        "summary": "Get export request status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current export request status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRequestEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ExportRequest": {
+        "type": "object",
+        "required": ["id", "userId", "status", "format", "includeAssets", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "processing", "completed", "failed", "cancelled"]
+          },
+          "format": { "type": "string", "enum": ["json"] },
+          "includeAssets": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ExportRequestEnvelope": {
+        "type": "object",
+        "required": ["exportRequest"],
+        "properties": {
+          "exportRequest": {
+            "$ref": "#/components/schemas/ExportRequest"
+          }
+        }
+      }
+    }
+  }
+}

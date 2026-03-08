@@ -51,6 +51,10 @@ export const authConfig = {
   mode: (process.env.AUTH_MODE || 'mock') as 'mock' | 'firebase',
 } as const;
 
+export const featureConfig = {
+  complianceExportsEnabled: process.env.FEATURE_COMPLIANCE_EXPORTS_ENABLED === 'true',
+} as const;
+
 export const securityConfig = {
   uploadRateLimit: {
     windowMs: parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || '60000', 10),
