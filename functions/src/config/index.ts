@@ -60,6 +60,10 @@ export const securityConfig = {
     enforceUploads: process.env.APP_CHECK_ENFORCE_UPLOADS === 'true',
     bypassTokens: process.env.APP_CHECK_BYPASS_TOKENS || '',
   },
+  hostPolicy: {
+    uploadWebhookUrl: process.env.HOST_UPLOAD_POLICY_WEBHOOK_URL,
+    timeoutMs: parseInt(process.env.HOST_UPLOAD_POLICY_TIMEOUT_MS || '1500', 10),
+  },
 } as const;
 
 // Signing configuration for HMAC-signed URLs
