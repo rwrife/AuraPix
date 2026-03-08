@@ -15,8 +15,10 @@ import {
   uploadFingerprintMatches,
 } from './uploadIdempotency.js';
 import { generatePhotoPaths } from '../../config/storage-paths.js';
+import { securityConfig } from '../../config/index.js';
 import { createPhotoDocument } from '../../models/Photo.js';
 import type { PhotoMetadata } from '../../models/Photo.js';
+import { evaluateUploadPolicy } from '../../services/host/uploadPolicy.js';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -102,6 +104,28 @@ export async function handleUpload(
 
   // TODO: Verify user has access to this library
   const userId = req.user?.uid || 'anonymous';
+
+  const policyDecision = await evaluateUploadPolicy(
+    {
+      userId,
+      libraryId,
+      sizeBytes: file.size,
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+    },
+    {
+      webhookUrl: securityConfig.hostPolicy.uploadWebhookUrl,
+      timeoutMs: securityConfig.hostPolicy.timeoutMs,
+    }
+  );
+
+  if (!policyDecision.allow) {
+    throw new AppError(
+      403,
+      'UPLOAD_BLOCKED_BY_HOST_POLICY',
+      policyDecision.reason || 'Upload denied by host integration policy'
+    );
+  }
 
   let idempotencyKey: string | null;
   try {
