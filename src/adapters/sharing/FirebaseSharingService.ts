@@ -42,6 +42,7 @@ export class FirebaseSharingService implements SharingService {
       expiresAt: input.policy.expiresAt ?? null,
       passwordProtected: !!input.password,
       maxUses: input.policy.maxUses ?? null,
+      accessMode: input.policy.accessMode ?? 'public',
       downloadPolicy: input.policy.downloadPolicy,
       watermarkEnabled: input.policy.watermarkEnabled,
     });
@@ -262,6 +263,11 @@ export class FirebaseSharingService implements SharingService {
       return null;
     }
 
+    if (link.policy.accessMode === 'authenticated' && !input.isAuthenticated) {
+      await this.logAccessEvent(input.token, link.id, 'denied_auth_required', attempt, link);
+      return null;
+    }
+
     if (link.policy.passwordProtected) {
       if (!input.password) {
         await this.logAccessEvent(input.token, link.id, 'denied_invalid_password', attempt, link);
@@ -305,6 +311,7 @@ export class FirebaseSharingService implements SharingService {
     expiresAt: SharePolicy['expiresAt'];
     passwordProtected: SharePolicy['passwordProtected'];
     maxUses: SharePolicy['maxUses'];
+    accessMode: SharePolicy['accessMode'];
     downloadPolicy?: SharePolicy['downloadPolicy'];
     watermarkEnabled?: SharePolicy['watermarkEnabled'];
   }): SharePolicy {
@@ -318,6 +325,7 @@ export class FirebaseSharingService implements SharingService {
       expiresAt: input.expiresAt,
       passwordProtected: input.passwordProtected,
       maxUses: input.maxUses,
+      accessMode: input.accessMode,
       downloadPolicy,
       watermarkEnabled:
         downloadPolicy === 'none' ? false : (input.watermarkEnabled ?? false),

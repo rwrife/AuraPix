@@ -31,6 +31,25 @@ describe('InMemorySharingService', () => {
     expect(events.every((event) => event.resourceId === 'album-1')).toBe(true);
   });
 
+  it('enforces authenticated-only access mode and records audit denial', async () => {
+    const service = new InMemorySharingService();
+
+    const link = await service.createShareLink({
+      resourceType: 'album',
+      resourceId: 'album-auth-1',
+      policy: { accessMode: 'authenticated' },
+    });
+
+    const anonymous = await service.resolveShareLink({ token: link.token });
+    const authenticated = await service.resolveShareLink({ token: link.token, isAuthenticated: true });
+
+    expect(anonymous).toBeNull();
+    expect(authenticated?.id).toBe(link.id);
+
+    const events = await service.listAccessEvents('album-auth-1');
+    expect(events.map((event) => event.outcome)).toEqual(['granted', 'denied_auth_required']);
+  });
+
   it('blocks max-use links after quota and records denial', async () => {
     const service = new InMemorySharingService();
 

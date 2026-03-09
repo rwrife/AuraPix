@@ -36,6 +36,7 @@ export class InMemorySharingService implements SharingService {
         expiresAt: input.policy.expiresAt ?? null,
         passwordProtected: !!input.password,
         maxUses: input.policy.maxUses ?? null,
+        accessMode: input.policy.accessMode ?? 'public',
         downloadPolicy:
           input.policy.downloadPolicy ??
           (permission === 'download' ? 'original_and_derivative' : 'none'),
@@ -182,6 +183,11 @@ export class InMemorySharingService implements SharingService {
 
     if (link.policy.maxUses !== null && link.useCount >= link.policy.maxUses) {
       this.recordEvent({ token: input.token, attempt, link, outcome: 'denied_max_uses' });
+      return null;
+    }
+
+    if (link.policy.accessMode === 'authenticated' && !input.isAuthenticated) {
+      this.recordEvent({ token: input.token, attempt, link, outcome: 'denied_auth_required' });
       return null;
     }
 
