@@ -67,7 +67,19 @@ export class InMemorySharingService implements SharingService {
   }
 
   async revokeShareLink(linkId: string): Promise<void> {
-    this.links = this.links.map((l) => (l.id === linkId ? { ...l, revoked: true } : l));
+    const link = this.links.find((l) => l.id === linkId);
+    if (!link || link.revoked) {
+      return;
+    }
+
+    const revokedLink = { ...link, revoked: true };
+    this.links = this.links.map((l) => (l.id === linkId ? revokedLink : l));
+    this.recordEvent({
+      token: revokedLink.token,
+      link: revokedLink,
+      attempt: 'link_revoke',
+      outcome: 'revoked',
+    });
   }
 
   async updateShareLinkPolicy(input: UpdateShareLinkPolicyInput): Promise<ShareLink> {

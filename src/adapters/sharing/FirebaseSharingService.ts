@@ -88,10 +88,29 @@ export class FirebaseSharingService implements SharingService {
   }
 
   async revokeShareLink(linkId: string): Promise<void> {
+    const existing = await getDocs(
+      query(collection(this.db, 'shareLinks'), where('__name__', '==', linkId))
+    );
+
+    if (existing.empty) {
+      return;
+    }
+
+    const linkDoc = existing.docs[0];
+    const link = { id: linkDoc.id, ...linkDoc.data() } as ShareLink;
+    if (link.revoked) {
+      return;
+    }
+
     const docRef = doc(this.db, 'shareLinks', linkId);
     await updateDoc(docRef, {
       revoked: true,
       revokedAt: serverTimestamp(),
+    });
+
+    await this.logAccessEvent(link.token, link.id, 'revoked', 'link_revoke', {
+      ...link,
+      revoked: true,
     });
   }
 
