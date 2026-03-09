@@ -50,6 +50,25 @@ describe('InMemorySharingService', () => {
     expect(events.map((event) => event.outcome)).toEqual(['denied_max_uses', 'granted']);
   });
 
+  it('records a revoke audit event and denies future access', async () => {
+    const service = new InMemorySharingService();
+
+    const link = await service.createShareLink({
+      resourceType: 'album',
+      resourceId: 'album-9',
+      policy: { permission: 'view' },
+    });
+
+    await service.revokeShareLink(link.id);
+    const blocked = await service.resolveShareLink({ token: link.token });
+
+    expect(blocked).toBeNull();
+
+    const events = await service.listAccessEvents('album-9');
+    expect(events.map((event) => event.outcome)).toEqual(['denied_revoked', 'revoked']);
+    expect(events.map((event) => event.attempt)).toEqual(['link_resolve', 'link_revoke']);
+  });
+
   it('enforces download policies and deterministic watermark behavior', async () => {
     const service = new InMemorySharingService();
 

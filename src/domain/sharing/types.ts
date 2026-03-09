@@ -52,6 +52,7 @@ export interface ShareDownloadResolution {
 export type ShareAccessOutcome =
   | 'granted'
   | 'granted_download'
+  | 'revoked'
   | 'denied_not_found'
   | 'denied_revoked'
   | 'denied_expired'
@@ -59,7 +60,11 @@ export type ShareAccessOutcome =
   | 'denied_invalid_password'
   | 'denied_download_disallowed';
 
-export type ShareAccessAttempt = 'link_resolve' | 'download_original' | 'download_derivative';
+export type ShareAccessAttempt =
+  | 'link_resolve'
+  | 'link_revoke'
+  | 'download_original'
+  | 'download_derivative';
 
 export interface ShareAccessEvent {
   id: string;
