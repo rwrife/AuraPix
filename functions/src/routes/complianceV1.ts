@@ -65,6 +65,26 @@ function parseLimit(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function parseWindowDays(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(90, Math.max(1, Math.floor(value)));
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return Math.min(90, Math.max(1, parsed));
+    }
+  }
+  return fallback;
+}
+
+export function summarizeAuditEventsByType(auditEvents: AuditEventRecord[]): Record<string, number> {
+  return auditEvents.reduce<Record<string, number>>((acc, event) => {
+    acc[event.eventType] = (acc[event.eventType] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
 export function createComplianceV1Router(dataAdapter: DataAdapter): Router {
   const router = Router();
 
@@ -173,6 +193,41 @@ export function createComplianceV1Router(dataAdapter: DataAdapter): Router {
       res.json({
         auditEvents: sortedEvents,
         total: sortedEvents.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/audit-events/summary', async (req, res, next) => {
+    try {
+      if (!featureConfig.complianceExportsEnabled) {
+        sendError(res, 404, 'FEATURE_DISABLED', 'Compliance exports API is disabled');
+        return;
+      }
+
+      if (!req.user) {
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
+        return;
+      }
+
+      const windowDays = parseWindowDays(req.query.windowDays, 7);
+      const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+
+      const auditEvents = await dataAdapter.queryData<AuditEventRecord>('auditEvents', [
+        { field: 'actorId', operator: '==', value: req.user.uid },
+        { field: 'createdAt', operator: '>=', value: windowStart },
+      ]);
+
+      const byEventType = summarizeAuditEventsByType(auditEvents);
+      const uniqueEventTypes = Object.keys(byEventType).length;
+
+      res.json({
+        windowDays,
+        windowStart,
+        total: auditEvents.length,
+        uniqueEventTypes,
+        byEventType,
       });
     } catch (error) {
       next(error);
