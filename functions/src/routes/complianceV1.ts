@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import { featureConfig } from '../config/index.js';
+import type { AuditEventRecord } from '../services/audit/AuditService.js';
+import { recordAuditEvent } from '../services/audit/AuditService.js';
 
 export type ExportRequestStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
@@ -50,6 +52,19 @@ function toBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function parseLimit(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(100, Math.max(1, Math.floor(value)));
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return Math.min(100, Math.max(1, parsed));
+    }
+  }
+  return fallback;
+}
+
 export function createComplianceV1Router(dataAdapter: DataAdapter): Router {
   const router = Router();
 
@@ -87,7 +102,7 @@ export function createComplianceV1Router(dataAdapter: DataAdapter): Router {
 
       await dataAdapter.storeData<ExportRequestRecord>('complianceExportRequests', exportRequestId, exportRequest);
 
-      await dataAdapter.storeData('auditEvents', randomUUID(), {
+      await recordAuditEvent(dataAdapter, {
         eventType: 'compliance.export.requested',
         actorId: req.user.uid,
         targetId: exportRequestId,
@@ -127,6 +142,38 @@ export function createComplianceV1Router(dataAdapter: DataAdapter): Router {
       }
 
       res.json({ exportRequest });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/audit-events', async (req, res, next) => {
+    try {
+      if (!featureConfig.complianceExportsEnabled) {
+        sendError(res, 404, 'FEATURE_DISABLED', 'Compliance exports API is disabled');
+        return;
+      }
+
+      if (!req.user) {
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
+        return;
+      }
+
+      const limit = parseLimit(req.query.limit, 25);
+
+      const auditEvents = await dataAdapter.queryData<AuditEventRecord>('auditEvents', [
+        { field: 'actorId', operator: '==', value: req.user.uid },
+      ]);
+
+      const sortedEvents = auditEvents
+        .slice()
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit);
+
+      res.json({
+        auditEvents: sortedEvents,
+        total: sortedEvents.length,
+      });
     } catch (error) {
       next(error);
     }

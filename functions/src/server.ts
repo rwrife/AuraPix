@@ -82,7 +82,7 @@ app.get('/health', (req, res) => {
 import { createImageRoutes } from './routes/images.js';
 import internalRouter from './routes/internal.js';
 import editsRouter from './routes/edits.js';
-import signingRouter from './routes/signing.js';
+import { createSigningRouter } from './routes/signing.js';
 import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
@@ -100,7 +100,7 @@ app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
-app.use('/api/signing', authMiddleware, signingRouter);
+app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
 
 // Error handlers (must be last)
 app.use(notFoundHandler);
