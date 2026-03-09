@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   ShareAccessEvent,
+  ShareAccessMode,
   ShareDownloadPolicy,
   ShareDownloadResolution,
   ShareLink,
@@ -21,6 +22,7 @@ interface CreateShareLinkOptions {
   expiresAt?: string;
   password?: string;
   permission?: SharePermission;
+  accessMode?: ShareAccessMode;
   downloadPolicy?: ShareDownloadPolicy;
   watermarkEnabled?: boolean;
 }
@@ -105,6 +107,7 @@ export function useSharing(resourceId: string): UseSharingReturn {
         policy: {
           permission,
           expiresAt: options?.expiresAt ?? null,
+          accessMode: options?.accessMode ?? 'public',
           downloadPolicy: options?.downloadPolicy ?? defaultDownloadPolicy,
           watermarkEnabled: options?.watermarkEnabled ?? false,
         },

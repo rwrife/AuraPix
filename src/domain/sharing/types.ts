@@ -1,11 +1,14 @@
 export type SharePermission = 'view' | 'download' | 'collaborate';
 export type ShareDownloadPolicy = 'none' | 'derivative_only' | 'original_and_derivative';
 
+export type ShareAccessMode = 'public' | 'authenticated';
+
 export interface SharePolicy {
   permission: SharePermission;
   expiresAt: string | null;
   passwordProtected: boolean;
   maxUses: number | null;
+  accessMode: ShareAccessMode;
   downloadPolicy: ShareDownloadPolicy;
   watermarkEnabled: boolean;
 }
@@ -32,6 +35,7 @@ export interface CreateShareLinkInput {
 export interface ResolveShareLinkInput {
   token: string;
   password?: string;
+  isAuthenticated?: boolean;
 }
 
 export interface UpdateShareLinkPolicyInput {
@@ -58,7 +62,8 @@ export type ShareAccessOutcome =
   | 'denied_expired'
   | 'denied_max_uses'
   | 'denied_invalid_password'
-  | 'denied_download_disallowed';
+  | 'denied_download_disallowed'
+  | 'denied_auth_required';
 
 export type ShareAccessAttempt =
   | 'link_resolve'
