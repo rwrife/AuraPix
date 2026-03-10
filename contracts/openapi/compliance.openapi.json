@@ -74,6 +74,66 @@
           }
         }
       }
+    },
+    "/api/v1/compliance/audit-events": {
+      "get": {
+        "summary": "List recent audit events for the authenticated user",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent audit events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventsEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/audit-events/summary": {
+      "get": {
+        "summary": "Get audit event volume summary grouped by event type",
+        "parameters": [
+          {
+            "name": "windowDays",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90,
+              "default": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit event summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventSummary"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -100,6 +160,54 @@
         "properties": {
           "exportRequest": {
             "$ref": "#/components/schemas/ExportRequest"
+          }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": ["id", "eventType", "actorId", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "eventType": { "type": "string" },
+          "actorId": { "type": "string" },
+          "targetId": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "AuditEventsEnvelope": {
+        "type": "object",
+        "required": ["auditEvents", "total"],
+        "properties": {
+          "auditEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AuditEventSummary": {
+        "type": "object",
+        "required": ["windowDays", "windowStart", "total", "uniqueEventTypes", "byEventType"],
+        "properties": {
+          "windowDays": { "type": "integer", "minimum": 1, "maximum": 90 },
+          "windowStart": { "type": "string", "format": "date-time" },
+          "total": { "type": "integer", "minimum": 0 },
+          "uniqueEventTypes": { "type": "integer", "minimum": 0 },
+          "byEventType": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         }
       }
