@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Albums API",
-    "version": "1.0.0",
-    "description": "Contract artifact for albums list/create endpoints."
+    "version": "1.1.0",
+    "description": "Contract artifact for albums list/create/update endpoints."
   },
   "servers": [
     {
@@ -116,6 +116,54 @@
           }
         }
       }
+    },
+    "/api/v1/albums/{albumId}": {
+      "patch": {
+        "operationId": "renameAlbum",
+        "summary": "Rename album",
+        "parameters": [
+          {
+            "name": "albumId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Album updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateAlbumResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -160,6 +208,22 @@
         }
       },
       "CreateAlbumResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["album"],
+        "properties": {
+          "album": { "$ref": "#/components/schemas/Album" }
+        }
+      },
+      "UpdateAlbumRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 }
+        }
+      },
+      "UpdateAlbumResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": ["album"],

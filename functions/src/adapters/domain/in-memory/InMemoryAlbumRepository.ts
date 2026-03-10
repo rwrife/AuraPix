@@ -17,4 +17,25 @@ export class InMemoryAlbumRepository implements AlbumRepository {
     this.albums.set(input.ownerId, [...existing, record]);
     return record;
   }
+
+  async updateTitle(ownerId: string, albumId: string, title: string): Promise<Album | null> {
+    const existing = this.albums.get(ownerId) ?? [];
+    const index = existing.findIndex((album) => album.id === albumId);
+    if (index === -1) {
+      return null;
+    }
+
+    const album = existing[index]!;
+    const updated: Album = {
+      ...album,
+      title,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const next = [...existing];
+    next[index] = updated;
+    this.albums.set(ownerId, next);
+
+    return updated;
+  }
 }
