@@ -21,6 +21,20 @@ export class AlbumsService {
     });
   }
 
+  async rename(ownerId: string, albumId: string, title: string): Promise<Album> {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      throw new Error('album-title-required');
+    }
+
+    const updated = await this.albums.updateTitle(ownerId, albumId, nextTitle);
+    if (!updated) {
+      throw new Error('album-not-found');
+    }
+
+    return updated;
+  }
+
   static createAlbumRecord(input: CreateAlbumInput): Album {
     const now = new Date().toISOString();
     return {

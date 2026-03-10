@@ -17,6 +17,15 @@ export interface GetAlbumResponse {
   album: Album;
 }
 
+export interface UpdateAlbumRequest {
+  albumId: string;
+  name: string;
+}
+
+export interface UpdateAlbumResponse {
+  album: Album;
+}
+
 export interface DeleteAlbumRequest {
   albumId: string;
 }
