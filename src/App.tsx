@@ -41,7 +41,7 @@ export default function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route index element={<Navigate to="/library" replace />} />
-              <Route path="/library" element={<LibraryPage />} />
+              
               <Route path="/albums" element={<AlbumsPage />} />
               <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
               <Route path="/albums/folders/:folderId" element={<FolderDetailPage />} />
