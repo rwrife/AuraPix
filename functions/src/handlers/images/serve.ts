@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { getImageCache } from '../../services/caching/ImageCache.js';
 import { ServeImageQuerySchema } from '../../utils/validation.js';
 import { applyEdits } from '../../services/edits/EditProcessor.js';
+import { isRawUpload } from '../../services/image/rawSupport.js';
 
 /**
  * Normalize a storage path by removing gs://bucket-name/ prefix if present
@@ -93,7 +94,12 @@ export async function handleServeImage(
     } else if (photo.storagePaths && typeof photo.storagePaths === 'object') {
       // New format: storagePaths object with original and derivatives
       if (size === 'original') {
-        const isRawOriginal = photo.metadata.mimeType.startsWith('application/');
+        // RAW uploads should always serve the generated JPEG preview for display.
+        // We cannot rely on mimetype prefixes here because some RAWs come through as image/x-sony-arw.
+        const isRawOriginal =
+          photo.sourceType === 'raw' ||
+          photo.metadata.mimeType === 'application/x-raw-image' ||
+          isRawUpload(photo.originalName, photo.metadata?.mimeType ?? '');
         const previewPath = photo.storagePaths.derivatives.preview_jpeg;
         storagePath = normalizeStoragePath(
           isRawOriginal && previewPath ? previewPath : photo.storagePaths.original

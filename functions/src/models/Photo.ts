@@ -42,15 +42,31 @@ export interface StoragePaths {
     medium_jpeg: string;
     large_webp: string;
     large_jpeg: string;
-    preview_jpeg?: string;
+    preview_jpeg: string;
   };
 }
+
+export type PhotoSourceType = 'raster' | 'raw';
 
 export interface Photo {
   id: string;
   libraryId: string;
   albumIds: string[];
   originalName: string;
+  /**
+   * Indicates what was originally uploaded.
+   * - raster: jpeg/png/heic/etc
+   * - raw: camera RAW (arw/cr3/nef/etc)
+   */
+  sourceType?: PhotoSourceType;
+  /**
+   * For RAW uploads, remember the original container/extension so we can
+   * later enable RAW-aware editing pipelines.
+   */
+  rawOriginal?: {
+    extension: string;
+    mimeType: string;
+  };
   // Support both old format (single string) and new format (object with derivatives)
   storagePath?: string; // Old format: single path to original (used when no thumbnails exist)
   storagePaths?: StoragePaths; // New format: paths object with original and derivatives
@@ -68,7 +84,11 @@ export function createPhotoDocument(
   libraryId: string,
   originalName: string,
   storagePaths: StoragePaths,
-  metadata: PhotoMetadata
+  metadata: PhotoMetadata,
+  source?: {
+    sourceType: PhotoSourceType;
+    rawOriginal?: { extension: string; mimeType: string };
+  }
 ): Photo {
   const now = new Date().toISOString();
 
@@ -77,6 +97,8 @@ export function createPhotoDocument(
     libraryId,
     albumIds: [],
     originalName,
+    sourceType: source?.sourceType,
+    rawOriginal: source?.rawOriginal,
     storagePaths,
     metadata,
     status: 'uploading',
