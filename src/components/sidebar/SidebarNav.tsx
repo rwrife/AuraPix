@@ -68,6 +68,7 @@ function ParentItem({ item }: ParentItemProps) {
   // Group children by groupLabel
   const groupedChildren: Record<string, ChildSidebarItem[]> = {};
   const ungroupedChildren: ChildSidebarItem[] = [];
+  const hasFolders = item.children.some((child) => child.groupLabel);
 
   item.children.forEach((child) => {
     if (child.groupLabel) {
@@ -116,18 +117,26 @@ function ParentItem({ item }: ParentItemProps) {
             </div>
           ))}
 
-          {/* Render ungrouped children */}
-          {ungroupedChildren.length > 0 && (
-            <ul className="sidebar-album-list">
-              {ungroupedChildren.map((child) => (
-                <li key={child.id}>
-                  <NavLink to={child.to} className={navClass}>
-                    {child.label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          )}
+          {/* Render ungrouped children under an "Ungrouped" label (only when folders also exist) so they don't appear nested inside a folder */}
+          {ungroupedChildren.length > 0 && (() => {
+            const list = (
+              <ul className="sidebar-album-list">
+                {ungroupedChildren.map((child) => (
+                  <li key={child.id}>
+                    <NavLink to={child.to} className={navClass}>
+                      {child.label}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            );
+            return hasFolders ? (
+              <div className="sidebar-folder">
+                <span className="sidebar-folder-label">Ungrouped</span>
+                {list}
+              </div>
+            ) : list;
+          })()}
         </>
       )}
     </div>
