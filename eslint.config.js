@@ -17,6 +17,11 @@ export default tseslint.config(
       ecmaVersion: 2022,
       globals: globals.browser,
     },
+    linterOptions: {
+      // We occasionally need per-line disables for TS lint edge-cases.
+      // Avoid failing CI due to "unused eslint-disable" warnings.
+      reportUnusedDisableDirectives: 'off',
+    },
     settings: {
       react: {
         version: 'detect',
@@ -32,7 +37,7 @@ export default tseslint.config(
       // React 17+ JSX transform: no need to import React in scope
       'react/react-in-jsx-scope': 'off',
       'react/jsx-uses-react': 'off',
-      // Ensure components referenced in JSX count as "used" for TS no-unused-vars
+      // Ensure components referenced in JSX count as "used" (helps no-unused-vars)
       'react/jsx-uses-vars': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },

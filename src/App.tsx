@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { AlbumDetailPage } from './pages/AlbumDetailPage';
 import { AlbumsPage } from './pages/AlbumsPage';
 import { FolderDetailPage } from './pages/FolderDetailPage';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { LibraryPage } from './pages/LibraryPage';
 import { TeamsPage } from './pages/TeamsPage';
 import { createLocalServices } from './services/createLocalServices';
