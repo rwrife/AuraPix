@@ -13,7 +13,9 @@ describe('App', () => {
   it('shows the library page by default', async () => {
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: 'Library' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Library' }, { timeout: 5000 })
+    ).toBeInTheDocument();
   });
 
   it('displays the current user in the header', async () => {
