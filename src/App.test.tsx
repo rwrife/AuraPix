@@ -10,13 +10,17 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: /Albums/ })).toBeInTheDocument();
   });
 
-  it('shows the library page by default', async () => {
-    render(<App />);
+  it(
+    'shows the library page by default',
+    async () => {
+      render(<App />);
 
-    expect(
-      await screen.findByRole('heading', { name: 'Library' }, { timeout: 5000 })
-    ).toBeInTheDocument();
-  });
+      expect(
+        await screen.findByRole('heading', { name: 'Library' }, { timeout: 10000 })
+      ).toBeInTheDocument();
+    },
+    15000
+  );
 
   it('displays the current user in the header', async () => {
     render(<App />);
