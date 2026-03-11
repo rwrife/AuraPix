@@ -75,9 +75,13 @@ async function extractMetadata(
       : undefined;
 
   const extension = metadata?.format || fileExtension(originalName) || 'jpg';
+
+  const looksRaw = isRawUpload(originalName, mimeType);
   const normalizedMimeType = metadata?.format
     ? `image/${metadata.format}`
-    : mimeType || (isRawUpload(originalName, mimeType) ? 'application/x-raw-image' : 'image/jpeg');
+    : looksRaw
+      ? 'application/x-raw-image'
+      : mimeType || 'image/jpeg';
 
   return {
     width: metadata?.width || 0,
@@ -208,12 +212,23 @@ export async function handleUpload(
     });
 
     // Create photo document
+    const uploadIsRaw = isRawUpload(file.originalname, file.mimetype);
+
     const photo = createPhotoDocument(
       photoId,
       libraryId,
       file.originalname,
       storagePaths,
-      metadata
+      metadata,
+      uploadIsRaw
+        ? {
+            sourceType: 'raw',
+            rawOriginal: {
+              extension,
+              mimeType: file.mimetype || metadata.mimeType,
+            },
+          }
+        : { sourceType: 'raster' }
     );
 
     // Update status to processing (thumbnails will be generated next)

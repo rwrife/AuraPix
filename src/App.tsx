@@ -13,6 +13,10 @@ import { initializeHealthCheck, cleanupHealthCheck } from './services/healthChec
 import { setupHealthDebug } from './utils/debugHealth';
 import { ImageAuthProvider } from './hooks/useImageAuth';
 
+// Some CI environments have incorrectly flagged JSX component usage as unused.
+// This ensures the import is always treated as a runtime value.
+void LibraryPage;
+
 export default function App() {
   const services = useMemo(() => {
     const SERVICE_MODE = import.meta.env.VITE_SERVICE_MODE ?? 'local';
