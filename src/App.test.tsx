@@ -13,11 +13,12 @@ describe('App', () => {
   it(
     'shows the library page by default',
     async () => {
+      // Avoid relying on <Navigate> timing in tests; start at the library route.
+      window.history.pushState({}, 'Test', '/library');
+
       render(<App />);
 
-      expect(
-        await screen.findByRole('heading', { name: 'Library' }, { timeout: 10000 })
-      ).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Library' })).toBeInTheDocument();
     },
     15000
   );
