@@ -42,5 +42,30 @@ export function createAlbumsRouter(albums: AlbumsService): Router {
     }
   });
 
+  router.delete('/:albumId', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const albumId = typeof req.params.albumId === 'string' ? req.params.albumId.trim() : '';
+      if (!albumId) {
+        res.status(400).json({ error: 'albumId is required' });
+        return;
+      }
+
+      await albums.remove(req.user.uid, albumId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'album-not-found') {
+        res.status(404).json({ error: 'Album not found' });
+        return;
+      }
+
+      next(error);
+    }
+  });
+
   return router;
 }

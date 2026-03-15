@@ -40,7 +40,11 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["createdAt", "updatedAt", "name"],
+              "enum": [
+                "createdAt",
+                "updatedAt",
+                "name"
+              ],
               "default": "updatedAt"
             }
           },
@@ -49,7 +53,10 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["asc", "desc"],
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "default": "desc"
             }
           },
@@ -163,6 +170,48 @@
             "$ref": "#/components/responses/ErrorResponse"
           }
         }
+      },
+      "delete": {
+        "summary": "Delete album",
+        "tags": [
+          "Albums"
+        ],
+        "parameters": [
+          {
+            "name": "albumId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Album identifier"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Album deleted"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Album not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -183,69 +232,159 @@
       "Album": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "createdAt", "updatedAt", "photoIds"],
+        "required": [
+          "id",
+          "name",
+          "createdAt",
+          "updatedAt",
+          "photoIds"
+        ],
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "description": { "type": ["string", "null"], "maxLength": 500 },
-          "folderId": { "type": ["string", "null"] },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "folderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "photoIds": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "createdAt": { "type": "string", "format": "date-time" },
-          "updatedAt": { "type": "string", "format": "date-time" }
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "CreateAlbumRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "description": { "type": "string", "maxLength": 500 },
-          "folderId": { "type": "string" }
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "folderId": {
+            "type": "string"
+          }
         }
       },
       "CreateAlbumResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["album"],
+        "required": [
+          "album"
+        ],
         "properties": {
-          "album": { "$ref": "#/components/schemas/Album" }
+          "album": {
+            "$ref": "#/components/schemas/Album"
+          }
         }
       },
       "UpdateAlbumRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1, "maxLength": 120 }
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
         }
       },
       "UpdateAlbumResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["album"],
+        "required": [
+          "album"
+        ],
         "properties": {
-          "album": { "$ref": "#/components/schemas/Album" }
+          "album": {
+            "$ref": "#/components/schemas/Album"
+          }
         }
       },
       "Pagination": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page", "pageSize", "total", "hasNextPage", "sortBy", "sortOrder", "filters"],
+        "required": [
+          "page",
+          "pageSize",
+          "total",
+          "hasNextPage",
+          "sortBy",
+          "sortOrder",
+          "filters"
+        ],
         "properties": {
-          "page": { "type": "integer", "minimum": 1 },
-          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
-          "total": { "type": "integer", "minimum": 0 },
-          "hasNextPage": { "type": "boolean" },
-          "sortBy": { "type": "string" },
-          "sortOrder": { "type": "string", "enum": ["asc", "desc"] },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "sortBy": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
           "filters": {
             "type": "object",
             "additionalProperties": {
-              "type": ["string", "number", "boolean", "null"]
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
             }
           }
         }
@@ -253,29 +392,54 @@
       "ListAlbumsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["albums", "pagination"],
+        "required": [
+          "albums",
+          "pagination"
+        ],
         "properties": {
           "albums": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/Album" }
+            "items": {
+              "$ref": "#/components/schemas/Album"
+            }
           },
-          "pagination": { "$ref": "#/components/schemas/Pagination" }
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
         }
       },
       "ErrorEnvelope": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["code", "message", "requestId"],
+            "required": [
+              "code",
+              "message",
+              "requestId"
+            ],
             "properties": {
-              "code": { "type": "string" },
-              "message": { "type": "string" },
-              "requestId": { "type": "string" },
-              "details": { "type": ["object", "null"], "additionalProperties": true }
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "details": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              }
             }
           }
         }
