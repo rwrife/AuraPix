@@ -35,6 +35,13 @@ export class AlbumsService {
     return updated;
   }
 
+  async remove(ownerId: string, albumId: string): Promise<void> {
+    const deleted = await this.albums.delete(ownerId, albumId);
+    if (!deleted) {
+      throw new Error('album-not-found');
+    }
+  }
+
   static createAlbumRecord(input: CreateAlbumInput): Album {
     const now = new Date().toISOString();
     return {

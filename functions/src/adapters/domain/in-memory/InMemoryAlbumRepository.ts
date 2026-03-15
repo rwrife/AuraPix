@@ -38,4 +38,15 @@ export class InMemoryAlbumRepository implements AlbumRepository {
 
     return updated;
   }
+
+  async delete(ownerId: string, albumId: string): Promise<boolean> {
+    const existing = this.albums.get(ownerId) ?? [];
+    const next = existing.filter((album) => album.id !== albumId);
+    if (next.length === existing.length) {
+      return false;
+    }
+
+    this.albums.set(ownerId, next);
+    return true;
+  }
 }
