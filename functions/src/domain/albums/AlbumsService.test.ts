@@ -23,4 +23,15 @@ describe('AlbumsService remove', () => {
 
     await expect(service.remove('user-1', 'missing')).rejects.toThrowError('album-not-found');
   });
+
+  it('treats cross-owner album deletion as not found', async () => {
+    const service = new AlbumsService(new InMemoryAlbumRepository());
+    const ownerAlbum = await service.create({ ownerId: 'owner', title: 'Owner album' });
+    const otherAlbum = await service.create({ ownerId: 'other', title: 'Other album' });
+
+    await expect(service.remove('owner', otherAlbum.id)).rejects.toThrowError('album-not-found');
+
+    await expect(service.list('owner')).resolves.toEqual([ownerAlbum]);
+    await expect(service.list('other')).resolves.toEqual([otherAlbum]);
+  });
 });

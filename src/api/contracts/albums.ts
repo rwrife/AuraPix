@@ -29,3 +29,5 @@ export interface UpdateAlbumResponse {
 export interface DeleteAlbumRequest {
   albumId: string;
 }
+
+export type DeleteAlbumResponse = void;
