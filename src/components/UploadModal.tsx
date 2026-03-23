@@ -30,6 +30,7 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
   const [newAlbumName, setNewAlbumName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [unsupportedFiles, setUnsupportedFiles] = useState<string[]>([]);
   const [uploadedCount, setUploadedCount] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,8 +38,19 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
 
   function mergeFiles(incoming: FileList | File[] | null) {
     if (!incoming) return;
-    const supportedFiles = Array.from(incoming).filter((f) => isSupportedUploadFile(f));
+
+    const incomingFiles = Array.from(incoming);
+    const supportedFiles = incomingFiles.filter((f) => isSupportedUploadFile(f));
+    const rejectedFileNames = incomingFiles
+      .filter((f) => !isSupportedUploadFile(f))
+      .map((f) => f.name);
+
+    if (rejectedFileNames.length > 0) {
+      setUnsupportedFiles((prev) => Array.from(new Set([...prev, ...rejectedFileNames])));
+    }
+
     if (supportedFiles.length === 0) return;
+
     setFiles((prev) => {
       const existingKeys = new Set(prev.map((f) => `${f.name}-${f.size}`));
       return [
@@ -176,6 +188,12 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
             >
               Browse files
             </button>
+            {unsupportedFiles.length > 0 && (
+              <p className="error" role="status" aria-live="polite">
+                Unsupported file{unsupportedFiles.length !== 1 ? 's' : ''} ignored:{' '}
+                {unsupportedFiles.join(', ')}
+              </p>
+            )}
           </div>
 
           {/* Selected files list */}
