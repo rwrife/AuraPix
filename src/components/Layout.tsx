@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlbumsProvider, useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
 import { SidebarNav } from './sidebar';
@@ -66,6 +66,7 @@ function LayoutShell() {
   const { user, signOut, signInWithOAuth } = useAuth();
   const { albums, folders } = useAlbums();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -77,7 +78,19 @@ function LayoutShell() {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    // Full-text search wired in a future phase
+    const params = new URLSearchParams(location.search);
+    const normalized = searchQuery.trim();
+
+    if (normalized) {
+      params.set('q', normalized);
+    } else {
+      params.delete('q');
+    }
+
+    navigate({
+      pathname: '/library',
+      search: params.toString() ? `?${params.toString()}` : '',
+    });
   }
 
   function handleSignOut() {
