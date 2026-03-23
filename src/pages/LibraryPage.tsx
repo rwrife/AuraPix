@@ -21,10 +21,107 @@ import {
 } from '../features/library/quickViewPreferences';
 import { useUploadSessions } from '../features/uploads/useUploadSessions';
 import { useServices } from '../services/useServices';
-import type { LibrarySort, LibraryUsageSummary } from '../domain/library/types';
+import type { LibrarySort, LibraryUsageSummary, Photo } from '../domain/library/types';
 
 function toLibraryId(userId: string) {
   return `library-${userId}`;
+}
+
+interface ParsedSearchFilters {
+  text: string;
+  tags: string[];
+  cameraMake: string | null;
+  collection: 'favorites' | 'tagged' | 'untagged' | 'recent' | null;
+}
+
+function parseSearchFilters(query: string): ParsedSearchFilters {
+  const parts = query
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const tags: string[] = [];
+  let cameraMake: string | null = null;
+  let collection: ParsedSearchFilters['collection'] = null;
+  const textParts: string[] = [];
+
+  for (const part of parts) {
+    const [rawKey, ...rest] = part.split(':');
+    if (rest.length === 0) {
+      textParts.push(part);
+      continue;
+    }
+
+    const key = rawKey.toLowerCase();
+    const value = rest.join(':').trim();
+    if (!value) continue;
+
+    if (key === 'tag') {
+      tags.push(value.toLowerCase());
+      continue;
+    }
+
+    if (key === 'camera') {
+      cameraMake = value.toLowerCase();
+      continue;
+    }
+
+    if (key === 'collection') {
+      const normalized = value.toLowerCase();
+      if (
+        normalized === 'favorites' ||
+        normalized === 'tagged' ||
+        normalized === 'untagged' ||
+        normalized === 'recent'
+      ) {
+        collection = normalized;
+        continue;
+      }
+    }
+
+    textParts.push(part);
+  }
+
+  return {
+    text: textParts.join(' ').trim().toLowerCase(),
+    tags,
+    cameraMake,
+    collection,
+  };
+}
+
+function matchesSearchFilters(photo: Photo, parsed: ParsedSearchFilters): boolean {
+  if (parsed.tags.length > 0) {
+    const normalizedPhotoTags = photo.tags.map((tag) => tag.toLowerCase());
+    const hasAllTags = parsed.tags.every((tag) => normalizedPhotoTags.includes(tag));
+    if (!hasAllTags) return false;
+  }
+
+  if (parsed.cameraMake) {
+    const photoCamera = photo.metadata?.cameraMake?.toLowerCase() ?? '';
+    if (!photoCamera.includes(parsed.cameraMake)) return false;
+  }
+
+  if (parsed.collection === 'favorites' && !photo.isFavorite) return false;
+  if (parsed.collection === 'tagged' && photo.tags.length === 0) return false;
+  if (parsed.collection === 'untagged' && photo.tags.length > 0) return false;
+  if (parsed.collection === 'recent') {
+    const photoAgeMs = Date.now() - new Date(photo.createdAt).getTime();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    if (photoAgeMs > thirtyDaysMs) return false;
+  }
+
+  if (!parsed.text) return true;
+  const haystack = [
+    photo.originalName,
+    ...(photo.tags ?? []),
+    photo.metadata?.cameraMake ?? '',
+    photo.metadata?.cameraModel ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(parsed.text);
 }
 
 export function LibraryPage() {
@@ -52,6 +149,12 @@ export function LibraryPage() {
   );
   const [selectedQuickViewId, setSelectedQuickViewId] = useState<string>('');
   const [quickViewNameInput, setQuickViewNameInput] = useState<string>('');
+  const searchQuery = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('q')?.trim() ?? '';
+  }, [location.search]);
+  const parsedSearch = useMemo(() => parseSearchFilters(searchQuery), [searchQuery]);
+
   const metadataFilters = useMemo(
     () => ({
       metadata: cameraMakeFilter ? { cameraMake: cameraMakeFilter } : undefined,
@@ -246,6 +349,10 @@ export function LibraryPage() {
     [photos]
   );
   const topQuickTags = useMemo(() => availableTags.slice(0, 4), [availableTags]);
+  const visiblePhotos = useMemo(() => {
+    if (!searchQuery) return photos;
+    return photos.filter((photo) => matchesSearchFilters(photo, parsedSearch));
+  }, [photos, searchQuery, parsedSearch]);
 
   const queuedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'queued').length;
   const completedDerivativeJobs = derivativeJobs.filter((job) => job.status === 'completed').length;
@@ -366,17 +473,77 @@ export function LibraryPage() {
     setSelectedQuickViewId('');
   }
 
+  function removeSearchToken(token: string) {
+    const nextQuery = searchQuery
+      .split(/\s+/)
+      .filter((part) => part.trim() && part !== token)
+      .join(' ')
+      .trim();
+
+    const params = new URLSearchParams(location.search);
+    if (nextQuery) {
+      params.set('q', nextQuery);
+    } else {
+      params.delete('q');
+    }
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : '',
+      },
+      { replace: true }
+    );
+  }
+
   return (
     <>
       <div className="page-titlebar">
         <h1 className="page-title">Library</h1>
+        {searchQuery && (
+          <div className="titlebar-controls" style={{ marginBottom: 8 }}>
+            {parsedSearch.text && (
+              <span className="btn-ghost btn-sm" title="Free text search term">
+                text: {parsedSearch.text}
+              </span>
+            )}
+            {parsedSearch.collection && (
+              <button
+                className="btn-ghost btn-sm"
+                title="Remove collection filter"
+                onClick={() => removeSearchToken(`collection:${parsedSearch.collection}`)}
+              >
+                collection:{parsedSearch.collection} ✕
+              </button>
+            )}
+            {parsedSearch.cameraMake && (
+              <button
+                className="btn-ghost btn-sm"
+                title="Remove camera filter"
+                onClick={() => removeSearchToken(`camera:${parsedSearch.cameraMake}`)}
+              >
+                camera:{parsedSearch.cameraMake} ✕
+              </button>
+            )}
+            {parsedSearch.tags.map((tag) => (
+              <button
+                key={tag}
+                className="btn-ghost btn-sm"
+                title={`Remove tag:${tag} filter`}
+                onClick={() => removeSearchToken(`tag:${tag}`)}
+              >
+                tag:{tag} ✕
+              </button>
+            ))}
+          </div>
+        )}
         {usageSummary && !isFilmstrip && (
           <p className="state-message" role="status" aria-live="polite">
             Usage: {usageSummary.totalPhotos} photo(s) · {formattedUsageBytes} ·{' '}
             {usageSummary.favoritePhotos} favorites · {usageSummary.taggedPhotos} tagged
           </p>
         )}
-        {!isFilmstrip && photos.length > 0 && (
+        {!isFilmstrip && visiblePhotos.length > 0 && (
           <div className="titlebar-controls">
             <button
               className={`btn-ghost btn-sm${quickCollection === 'all' ? ' active' : ''}`}
@@ -501,7 +668,7 @@ export function LibraryPage() {
             <button
               className="btn-ghost btn-sm"
               title="Select all"
-              onClick={() => setSelectedPhotoIds(new Set(photos.map((p) => p.id)))}
+              onClick={() => setSelectedPhotoIds(new Set(visiblePhotos.map((p) => p.id)))}
             >
               ☑
             </button>
@@ -548,7 +715,7 @@ export function LibraryPage() {
 
           {loading ? (
             <p className="state-message">Loading library…</p>
-          ) : photos.length === 0 ? (
+          ) : visiblePhotos.length === 0 ? (
             <div className="empty-state">
               <p>No photos yet.</p>
               <p>
@@ -557,7 +724,7 @@ export function LibraryPage() {
             </div>
           ) : (
             <PhotoGallery
-              photos={photos}
+              photos={visiblePhotos}
               gridMode={gridMode}
               selectedPhotoIds={selectedPhotoIds}
               onSelectionChange={setSelectedPhotoIds}
