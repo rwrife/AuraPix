@@ -46,7 +46,10 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
       .map((f) => f.name);
 
     if (rejectedFileNames.length > 0) {
-      setUnsupportedFiles((prev) => Array.from(new Set([...prev, ...rejectedFileNames])));
+      setUnsupportedFiles((prev) => {
+        const next = Array.from(new Set([...prev, ...rejectedFileNames]));
+        return next.sort((a, b) => a.localeCompare(b));
+      });
     }
 
     if (supportedFiles.length === 0) return;

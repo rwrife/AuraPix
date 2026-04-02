@@ -9,6 +9,30 @@ vi.mock('../features/albums/useAlbums', () => ({
 }));
 
 describe('UploadModal', () => {
+  it('deduplicates ignored unsupported files in the warning list', async () => {
+    render(<UploadModal onClose={vi.fn()} onUpload={vi.fn()} />);
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).toBeTruthy();
+
+    const unsupported = new File(['notes'], 'notes.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [unsupported],
+      },
+    });
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [unsupported],
+      },
+    });
+
+    expect(await screen.findByText('Unsupported file ignored: notes.txt', { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('notes.txt');
+  });
+
   it('shows ignored unsupported files while keeping supported files selected', async () => {
     render(<UploadModal onClose={vi.fn()} onUpload={vi.fn()} />);
 
