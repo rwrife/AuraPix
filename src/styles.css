@@ -1857,6 +1857,38 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
+/* ── Upload warnings ───────────────────────────────────────────────────── */
+.upload-warning {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #7c2d12;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.18);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.upload-warning-text {
+  margin: 0;
+  flex: 1;
+}
+
+.upload-warning-dismiss {
+  border: 1px solid #fb7185;
+  background: transparent;
+  color: #fecdd3;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.upload-warning-dismiss:hover {
+  background: rgba(251, 113, 133, 0.14);
+}
+
 /* ── Upload progress bar ───────────────────────────────────────────────── */
 .upload-progress {
   display: flex;

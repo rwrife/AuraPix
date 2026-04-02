@@ -88,6 +88,10 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
     }
   }
 
+  function clearUnsupportedFiles() {
+    setUnsupportedFiles([]);
+  }
+
   async function handleUpload() {
     if (files.length === 0) return;
     setUploadError(null);
@@ -115,6 +119,7 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
       await onUpload(files, albumId, (completed) => {
         setUploadedCount(completed);
       });
+      clearUnsupportedFiles();
       onClose();
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
@@ -189,10 +194,15 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
               Browse files
             </button>
             {unsupportedFiles.length > 0 && (
-              <p className="error" role="status" aria-live="polite">
-                Unsupported file{unsupportedFiles.length !== 1 ? 's' : ''} ignored:{' '}
-                {unsupportedFiles.join(', ')}
-              </p>
+              <div className="upload-warning" role="status" aria-live="polite">
+                <p className="error upload-warning-text">
+                  Unsupported file{unsupportedFiles.length !== 1 ? 's' : ''} ignored:{' '}
+                  {unsupportedFiles.join(', ')}
+                </p>
+                <button type="button" className="upload-warning-dismiss" onClick={clearUnsupportedFiles}>
+                  Dismiss
+                </button>
+              </div>
             )}
           </div>
 
