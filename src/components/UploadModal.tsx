@@ -92,6 +92,14 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
     setUnsupportedFiles([]);
   }
 
+  function formatUnsupportedSummary(fileNames: string[]) {
+    const uniqueNames = Array.from(new Set(fileNames));
+    const visibleNames = uniqueNames.slice(0, 3);
+    const remainingCount = uniqueNames.length - visibleNames.length;
+    const suffix = remainingCount > 0 ? ` and ${remainingCount} more` : '';
+    return `${uniqueNames.length} unsupported file${uniqueNames.length !== 1 ? 's' : ''} ignored: ${visibleNames.join(', ')}${suffix}`;
+  }
+
   async function handleUpload() {
     if (files.length === 0) return;
     setUploadError(null);
@@ -195,10 +203,7 @@ export function UploadModal({ preselectedAlbumId, onClose, onUpload }: UploadMod
             </button>
             {unsupportedFiles.length > 0 && (
               <div className="upload-warning" role="status" aria-live="polite">
-                <p className="error upload-warning-text">
-                  Unsupported file{unsupportedFiles.length !== 1 ? 's' : ''} ignored:{' '}
-                  {unsupportedFiles.join(', ')}
-                </p>
+                <p className="error upload-warning-text">{formatUnsupportedSummary(unsupportedFiles)}</p>
                 <button type="button" className="upload-warning-dismiss" onClick={clearUnsupportedFiles}>
                   Dismiss
                 </button>
