@@ -25,7 +25,7 @@ describe('UploadModal', () => {
       },
     });
 
-    expect(await screen.findByText('Unsupported file ignored: notes.txt', { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText('1 unsupported file ignored: notes.txt', { exact: false })).toBeInTheDocument();
     expect(await screen.findByText('1 file selected')).toBeInTheDocument();
   });
 
@@ -40,8 +40,26 @@ describe('UploadModal', () => {
       },
     });
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Unsupported file ignored: notes.txt');
+    expect(await screen.findByRole('status')).toHaveTextContent('1 unsupported file ignored: notes.txt');
     await user.click(screen.getByRole('button', { name: /dismiss/i }));
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('summarizes large unsupported selections without losing the file names', async () => {
+    render(<UploadModal onClose={vi.fn()} onUpload={vi.fn()} />);
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(['one'], 'one.txt', { type: 'text/plain' }),
+          new File(['two'], 'two.md', { type: 'text/markdown' }),
+          new File(['three'], 'three.pdf', { type: 'application/pdf' }),
+          new File(['four'], 'four.csv', { type: 'text/csv' }),
+        ],
+      },
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('4 unsupported files ignored: one.txt, two.md, three.pdf and 1 more');
   });
 });
