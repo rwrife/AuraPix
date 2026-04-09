@@ -5,6 +5,7 @@ import { AlbumDetailPage } from './pages/AlbumDetailPage';
 import { AlbumsPage } from './pages/AlbumsPage';
 import { FolderDetailPage } from './pages/FolderDetailPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { TeamsPage } from './pages/TeamsPage';
 import { createLocalServices } from './services/createLocalServices';
 import { ServiceProvider } from './services/ServiceContext';
@@ -49,6 +50,9 @@ export default function App() {
               <Route path="/albums" element={<AlbumsPage />} />
               <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
               <Route path="/albums/folders/:folderId" element={<FolderDetailPage />} />
+              <Route path="/recent" element={<Navigate to="/library?q=collection:recent" replace />} />
+              <Route path="/favorites" element={<Navigate to="/library?q=collection:favorites" replace />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/teams" element={<TeamsPage />} />
               {/* Catch-all: redirect unknown paths to library */}
               <Route path="*" element={<Navigate to="/library" replace />} />
