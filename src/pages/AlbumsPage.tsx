@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Album, AlbumFolder } from '../domain/albums/types';
 import type { Photo } from '../domain/library/types';
@@ -327,6 +327,8 @@ export function AlbumsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'name-asc' | 'name-desc'>('newest');
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
 
   const visibleAlbums = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -341,6 +343,20 @@ export function AlbumsPage() {
       return b.createdAt.localeCompare(a.createdAt);
     });
   }, [albums, searchQuery, sortMode]);
+
+  const totalPages = Math.max(1, Math.ceil(visibleAlbums.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedAlbums = visibleAlbums.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, sortMode]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   async function handleCreateAlbum(e: React.FormEvent) {
     e.preventDefault();
@@ -496,6 +512,28 @@ export function AlbumsPage() {
           </select>
         </div>
 
+        {visibleAlbums.length > 0 && (
+          <div className="page-pagination" aria-label="Album pagination">
+            <button
+              className="btn-ghost btn-sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={currentPage <= 1}
+            >
+              Previous
+            </button>
+            <span className="pagination-summary">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              className="btn-ghost btn-sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="error" role="alert">
             <span>{error}</span>{' '}
@@ -516,7 +554,7 @@ export function AlbumsPage() {
               <FolderSection
                 key={folder.id}
                 folder={folder}
-                folderAlbums={visibleAlbums.filter((a) => a.folderId === folder.id)}
+                folderAlbums={pagedAlbums.filter((a) => a.folderId === folder.id)}
                 allPhotos={photos}
                 allFolders={folders}
                 viewMode={viewMode}
@@ -529,10 +567,10 @@ export function AlbumsPage() {
             ))}
 
             {/* Ungrouped albums */}
-            {visibleAlbums.filter((a) => !a.folderId).length > 0 && (
+            {pagedAlbums.filter((a) => !a.folderId).length > 0 && (
               <FolderSection
                 folder={null}
-                folderAlbums={visibleAlbums.filter((a) => !a.folderId)}
+                folderAlbums={pagedAlbums.filter((a) => !a.folderId)}
                 allPhotos={photos}
                 allFolders={folders}
                 viewMode={viewMode}
