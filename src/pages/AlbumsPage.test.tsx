@@ -93,6 +93,36 @@ describe('AlbumsPage', () => {
     expect(filteredAlbumLinks).not.toContain('Alpha Trip');
   });
 
+  it('keeps album search, sort, and pagination state in the URL', async () => {
+    window.history.pushState({}, '', '/albums?q=zoo&sort=name-asc');
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Albums' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Search albums')).toHaveValue('zoo');
+    expect(screen.getByLabelText('Sort albums')).toHaveValue('name-asc');
+
+    await user.clear(screen.getByLabelText('Search albums'));
+    await user.type(screen.getByLabelText('Search albums'), 'alpha');
+    expect(window.location.search).toContain('q=alpha');
+    expect(window.location.search).toContain('sort=name-asc');
+
+    await user.clear(screen.getByLabelText('Search albums'));
+    expect(window.location.search).not.toContain('q=');
+
+    for (let i = 0; i < 13; i += 1) {
+      await user.clear(screen.getByPlaceholderText('New album name'));
+      await user.type(screen.getByPlaceholderText('New album name'), `Paged Album ${i + 1}`);
+      await user.click(screen.getByRole('button', { name: 'Create album' }));
+    }
+
+    expect(await screen.findByRole('button', { name: 'Next' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(window.location.search).toContain('page=2');
+  });
+
   it('renames an album from the list actions', async () => {
     window.history.pushState({}, '', '/albums');
     const user = userEvent.setup();

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { Album, AlbumFolder } from '../domain/albums/types';
 import type { Photo } from '../domain/library/types';
 import { useAlbums } from '../features/albums/useAlbums';
@@ -299,6 +299,8 @@ function FolderSection({
 
 // ── Page ──────────────────────────────────────────────────────────────────
 export function AlbumsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const libraryId = toLibraryId(user?.id ?? 'local-user-1');
   const {
@@ -325,10 +327,25 @@ export function AlbumsPage() {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'name-asc' | 'name-desc'>('newest');
-  const [page, setPage] = useState(1);
+  const initialFilters = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return {
+      q: params.get('q')?.trim() ?? '',
+      sort: (params.get('sort') as 'newest' | 'oldest' | 'name-asc' | 'name-desc' | null) ?? 'newest',
+      page: Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1),
+    };
+  }, [location.search]);
+
+  const [searchQuery, setSearchQuery] = useState(initialFilters.q);
+  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'name-asc' | 'name-desc'>(initialFilters.sort);
+  const [page, setPage] = useState(initialFilters.page);
   const pageSize = 12;
+
+  useEffect(() => {
+    setSearchQuery(initialFilters.q);
+    setSortMode(initialFilters.sort);
+    setPage(initialFilters.page);
+  }, [initialFilters]);
 
   const visibleAlbums = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -351,6 +368,21 @@ export function AlbumsPage() {
   useEffect(() => {
     setPage(1);
   }, [searchQuery, sortMode]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
+    else params.delete('q');
+    if (sortMode !== 'newest') params.set('sort', sortMode);
+    else params.delete('sort');
+    if (currentPage > 1) params.set('page', String(currentPage));
+    else params.delete('page');
+
+    const nextSearch = params.toString();
+    if (nextSearch !== location.search.replace(/^\?/, '')) {
+      navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+    }
+  }, [currentPage, location.pathname, location.search, navigate, searchQuery, sortMode]);
 
   useEffect(() => {
     if (page > totalPages) {
