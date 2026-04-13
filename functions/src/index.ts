@@ -16,6 +16,9 @@ import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import imagesRouter from './routes/images.js';
 import internalRouter from './routes/internal.js';
 import editsRouter from './routes/edits.js';
+import { createAlbumsRouter } from './routes/albums.js';
+import { createAlbumsV1Router } from './routes/albumsV1.js';
+import { createDomainModules } from './composition/domainModules.js';
 
 const app = express();
 
@@ -94,9 +97,12 @@ app.get('/health', (req, res) => {
 });
 
 // Mount routes
+const domainModules = createDomainModules();
 app.use('/images', imagesRouter);
 app.use('/internal', internalRouter);
 app.use('/edits', editsRouter);
+app.use('/api/albums', createAlbumsRouter(domainModules.albums));
+app.use('/api/v1/albums', createAlbumsV1Router(domainModules.albums));
 
 // Error handlers (must be last)
 app.use(notFoundHandler);
