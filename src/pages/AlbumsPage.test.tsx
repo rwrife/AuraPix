@@ -15,6 +15,9 @@ describe('AlbumsPage', () => {
     await user.type(albumInput, 'Road Trip 2026');
     await user.click(screen.getByRole('button', { name: 'Create album' }));
 
+    expect((await screen.findByRole('link', { name: 'Open it now' })).getAttribute('href')).toMatch(
+      /^\/albums\/album-/
+    );
     expect((await screen.findAllByRole('link', { name: 'Road Trip 2026' })).length).toBeGreaterThan(0);
   });
 
