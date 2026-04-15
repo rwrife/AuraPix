@@ -327,6 +327,7 @@ export function AlbumsPage() {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [createdAlbumId, setCreatedAlbumId] = useState<string | null>(null);
   const initialFilters = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return {
@@ -405,13 +406,18 @@ export function AlbumsPage() {
     setAlbumFolderId('');
     setCreatingCount((count) => count + 1);
 
-    const created = await createAlbum(trimmedName, selectedFolderId);
-    if (!created) {
-      setAlbumName(trimmedName);
-      setAlbumFolderId(selectedFolderId ?? '');
-    }
+    try {
+      const created = await createAlbum(trimmedName, selectedFolderId);
+      if (!created) {
+        setAlbumName(trimmedName);
+        setAlbumFolderId(selectedFolderId ?? '');
+        return;
+      }
 
-    setCreatingCount((count) => Math.max(0, count - 1));
+      setCreatedAlbumId(created.id);
+    } finally {
+      setCreatingCount((count) => Math.max(0, count - 1));
+    }
   }
 
   async function handleCreateFolder(e: React.FormEvent) {
@@ -521,6 +527,12 @@ export function AlbumsPage() {
         </form>
 
         {albumFormError && <p className="error">{albumFormError}</p>}
+
+        {createdAlbumId && (
+          <p className="state-message" role="status">
+            Album created. <Link to={`/albums/${createdAlbumId}`}>Open it now</Link>
+          </p>
+        )}
 
         <div className="album-form" role="group" aria-label="Album list controls">
           <input
