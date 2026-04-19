@@ -87,6 +87,11 @@ export class InMemoryAlbumsService implements AlbumsService {
     const name = input.name.trim();
     if (!name) throw new Error('Album name is required.');
 
+    if (input.folderId !== undefined && input.folderId !== null) {
+      const folderExists = this.folders.some((folder) => folder.id === input.folderId);
+      if (!folderExists) throw new Error('Folder not found.');
+    }
+
     const normalizedName = normalizeName(name);
     const duplicate = this.albums.some((album) => normalizeName(album.name) === normalizedName);
     if (duplicate) throw new Error('An album with this name already exists.');
@@ -115,6 +120,11 @@ export class InMemoryAlbumsService implements AlbumsService {
       (album) => album.id !== albumId && normalizeName(album.name) === normalizedName
     );
     if (duplicate) throw new Error('An album with this name already exists.');
+
+    if (updates.folderId !== undefined && updates.folderId !== null) {
+      const folderExists = this.folders.some((folder) => folder.id === updates.folderId);
+      if (!folderExists) throw new Error('Folder not found.');
+    }
 
     const updated: Album = { ...this.albums[idx], ...updates, name: nextName };
     this.albums = this.albums.map((a) => (a.id === albumId ? updated : a));

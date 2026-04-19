@@ -46,6 +46,12 @@ describe('InMemoryAlbumsService', () => {
         folderId: null,
         createdAt: new Date().toISOString(),
       },
+    ], [
+      {
+        id: 'folder-1',
+        name: 'Trips',
+        createdAt: new Date().toISOString(),
+      },
     ]);
 
     const updated = await svc.updateAlbum('a1', {
@@ -110,5 +116,28 @@ describe('InMemoryAlbumsService', () => {
 
     const folders = await svc.listFolders();
     expect(folders[0].name).toBe('New Name');
+  });
+
+  it('rejects albums assigned to missing folders', async () => {
+    const svc = new InMemoryAlbumsService();
+
+    await expect(svc.createAlbum({ name: 'Foldered', folderId: 'missing' })).rejects.toThrow(
+      'Folder not found.'
+    );
+  });
+
+  it('rejects moving albums to missing folders', async () => {
+    const svc = new InMemoryAlbumsService([
+      {
+        id: 'a1',
+        name: 'Before',
+        folderId: null,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    await expect(svc.updateAlbum('a1', { folderId: 'missing' })).rejects.toThrow(
+      'Folder not found.'
+    );
   });
 });
