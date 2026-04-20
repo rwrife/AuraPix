@@ -18,6 +18,10 @@
     "contract:validate": "node scripts/validate-contract.mjs",
     "contract:breaking": "node scripts/check-contract-breaking.mjs",
     "contract:check": "npm run contract:validate && npm run contract:breaking",
+    "firestore:indexes:validate": "node scripts/validate-firestore-indexes.mjs",
+    "test:uploads:firebase-adapter": "vitest src/adapters/uploads/FirebaseUploadService.test.ts",
+    "preflight:uploads:firebase-emulator": "node scripts/check-firebase-emulator-prereqs.mjs",
+    "test:uploads:firebase-emulator": "npm run preflight:uploads:firebase-emulator && npx -y firebase-tools@14.3.1 emulators:exec --project demo-aurapix --config functions/firebase.json \"vitest run src/adapters/uploads/FirebaseUploadService.emulator.test.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

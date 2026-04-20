@@ -40,7 +40,7 @@ export function createFirebaseServices(
   );
   const albums = new FirebaseAlbumsService(firebaseInstances.db, userId);
   const sharing = new FirebaseSharingService(firebaseInstances.db);
-  const uploads = new FirebaseUploadService();
+  const uploads = new FirebaseUploadService(firebaseInstances.db, { userId });
 
   return {
     auth,
