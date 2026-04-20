@@ -129,6 +129,35 @@ npm run test:coverage
 npm run contract:check
 ```
 
+### Upload-session CI parity checks
+
+Run these before opening a PR that touches upload-session/query/index paths:
+
+```bash
+# from AuraPix repo root
+npm ci
+npm run firestore:indexes:validate
+npm run test:uploads:firebase-adapter
+npm run test:uploads:firebase-emulator
+```
+
+`npm run test:uploads:firebase-emulator` now includes a deterministic preflight that fails fast with actionable output when Java, emulator tooling, or required files are missing.
+
+### Firebase Emulator Prerequisites
+
+The upload emulator test command is designed to be one-command runnable from a fresh checkout after dependency install:
+
+```bash
+npm ci
+npm run test:uploads:firebase-emulator
+```
+
+Preflight requirements:
+- Java runtime available on `PATH` (`java -version` succeeds).
+- Root dependencies installed (`node_modules` exists).
+- `functions/firebase.json` and the emulator test file exist.
+- `npx -y firebase-tools@14.3.1 --version` is executable.
+
 ## Architecture
 
 AuraPix follows a clean architecture approach with:

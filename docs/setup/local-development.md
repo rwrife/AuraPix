@@ -247,6 +247,22 @@ cd functions
 npm run test:integration
 ```
 
+### Firebase Upload Emulator Validation
+
+Run this from the AuraPix repo root to execute the upload integration suite against Firestore emulator:
+
+```bash
+npm run test:uploads:firebase-emulator
+```
+
+The command performs an automatic preflight before emulator startup. If prerequisites are missing, it exits with explicit remediation steps.
+
+Preflight checks:
+- Java runtime available on `PATH`.
+- Root dependencies already installed.
+- Required project files (`functions/firebase.json`, emulator test file) exist.
+- `firebase-tools@14.3.1` can be invoked via `npx`.
+
 ## Next Steps
 
 - Review [Architecture Documentation](../IMPLEMENTATION_PLAN.md)

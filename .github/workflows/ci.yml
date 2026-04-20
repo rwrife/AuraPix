@@ -21,6 +21,15 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Validate Firestore indexes (upload-session paths)
+        run: npm run firestore:indexes:validate
+
+      - name: Targeted Firebase upload-session adapter tests
+        run: npm run test:uploads:firebase-adapter
+
+      - name: Firestore emulator upload-session integration tests
+        run: npm run test:uploads:firebase-emulator
+
       - name: Lint
         run: npm run lint
 
