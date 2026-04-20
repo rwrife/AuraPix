@@ -12,7 +12,7 @@
     "build:backend": "npm --prefix functions run build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest --exclude src/**/*.emulator.test.ts",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "contract:validate": "node scripts/validate-contract.mjs",
