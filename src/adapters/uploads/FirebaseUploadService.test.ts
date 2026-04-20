@@ -161,7 +161,7 @@ vi.mock('firebase/firestore', () => {
     },
     getDocs: async (target: QueryRefMock | CollectionRefMock) => {
       const isQuery = 'constraints' in target;
-      const collectionPath = target.collectionPath ?? target.path;
+      const collectionPath = isQuery ? target.collectionPath : target.path;
       const constraints = isQuery ? target.constraints : [];
       const collectionStore = ensureCollection(collectionPath);
       const rawDocs = [...collectionStore.entries()].map(([id, data]) => ({
