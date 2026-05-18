@@ -86,6 +86,7 @@ import { createSigningRouter } from './routes/signing.js';
 import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
+import { createBrandingV1Router } from './routes/brandingV1.js';
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
@@ -101,6 +102,18 @@ app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums))
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
+
+// Tenant branding: GET is public (no auth), PUT requires auth.
+// Use a per-method gate so the public GET is reachable without a Bearer token.
+const brandingRouter = createBrandingV1Router(dataAdapter);
+app.use(
+  '/api/v1/tenants',
+  (req, res, next) => {
+    if (req.method === 'GET') return next();
+    return authMiddleware(req, res, next);
+  },
+  brandingRouter
+);
 
 // Error handlers (must be last)
 app.use(notFoundHandler);

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlbumsProvider, useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
+import { useBranding } from '../features/branding/BrandingProvider';
 import { SidebarNav } from './sidebar';
 import type { SidebarItem } from './sidebar';
 
@@ -65,6 +66,7 @@ function SearchIcon() {
 function LayoutShell() {
   const { user, signOut, signInWithOAuth } = useAuth();
   const { albums, folders } = useAlbums();
+  const { branding } = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,7 +192,7 @@ function LayoutShell() {
     <div className="app-shell">
       <header className="app-topbar">
         <div className="topbar-left">
-          <span className="app-logo">AuraPix</span>
+          <span className="app-logo">{branding.appName}</span>
           <button
             className="btn-primary topbar-add-btn"
             onClick={() => navigate('/library?upload=1')}
