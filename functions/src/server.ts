@@ -88,6 +88,12 @@ import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
+import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
+import {
+  InMemoryDailyDocStore,
+  UsageRollupConsumer,
+} from './services/metering/UsageRollupConsumer.js';
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
@@ -108,6 +114,26 @@ app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+
+// --- Metering / usage rollups (issue #133) ---
+// In-memory wiring suitable for local mode; Firebase mode will swap in a
+// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
+const meteringBus = new InMemoryUsageMeteringBus();
+const usageDailyStore = new InMemoryDailyDocStore();
+const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
+usageRollupConsumer.attach(meteringBus);
+app.locals.meteringBus = meteringBus;
+app.locals.usageDailyStore = usageDailyStore;
+app.use(
+  '/api/v1/tenants',
+  authMiddleware,
+  createTenantUsageRouter({
+    store: usageDailyStore,
+    // Until the tenantId model lands, treat the authenticated user's uid as
+    // their own tenantId (legacy single-tenant-per-user mapping).
+    ownsTenant: async (userId, tenantId) => userId === tenantId,
+  })
+);
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
 
 // Tenant branding: GET is public (no auth), PUT requires auth.
