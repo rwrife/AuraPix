@@ -10,6 +10,10 @@ import {
   isRawUpload,
 } from '../../services/image/rawSupport.js';
 import { logger } from '../../utils/logger.js';
+import {
+  emitMeteringEvent,
+  resolveTenantId,
+} from '../../services/metering/index.js';
 
 /**
  * Generate thumbnails for a photo
@@ -127,6 +131,20 @@ export async function generateThumbnailsForPhoto(
       thumbnailsOutdated: false,
       updatedAt: new Date().toISOString(),
     });
+
+    // Metering: one event per generated derivative (7 variants today:
+    // small/medium/large × webp+jpeg plus preview_jpeg).
+    const derivativeCount = 7;
+    const tenantId = resolveTenantId({ libraryId });
+    for (let i = 0; i < derivativeCount; i++) {
+      emitMeteringEvent({
+        tenantId,
+        type: 'image.processed',
+        count: 1,
+        resourceId: photoId,
+        meta: { libraryId, stage: 'thumbnail' },
+      });
+    }
 
     logger.info(logContext, 'Thumbnail generation complete');
   } catch (error) {

@@ -15,6 +15,10 @@ import {
   getNormalizedIdempotencyKey,
   storeEditIdempotencyRecord,
 } from './editIdempotency.js';
+import {
+  emitMeteringEvent,
+  resolveTenantId,
+} from '../../services/metering/index.js';
 
 function parseExpectedCurrentVersion(headerValue: string | undefined): number | null {
   if (!headerValue) return null;
@@ -191,6 +195,18 @@ export async function handleApplyEdits(
       },
       'Edits applied successfully'
     );
+
+    emitMeteringEvent({
+      tenantId: resolveTenantId({ libraryId }),
+      type: 'edit.applied',
+      count: 1,
+      resourceId: photoId,
+      meta: {
+        libraryId,
+        version: newVersion.version,
+        operationCount: operations.length,
+      },
+    });
 
     const responseBody = {
       photoId,

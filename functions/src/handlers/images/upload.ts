@@ -20,6 +20,10 @@ import { createPhotoDocument } from '../../models/Photo.js';
 import type { PhotoMetadata } from '../../models/Photo.js';
 import { evaluateUploadPolicy } from '../../services/host/uploadPolicy.js';
 import { fileExtension, isRawUpload } from '../../services/image/rawSupport.js';
+import {
+  emitMeteringEvent,
+  resolveTenantId,
+} from '../../services/metering/index.js';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -263,6 +267,21 @@ export async function handleUpload(
         createdAt: new Date().toISOString(),
       });
     }
+
+    // Metering: record the accepted upload (count + bytes).
+    emitMeteringEvent({
+      tenantId: resolveTenantId({ libraryId }),
+      type: 'upload.accepted',
+      count: 1,
+      bytes: metadata.sizeBytes,
+      resourceId: photoId,
+      meta: {
+        userId,
+        libraryId,
+        mimeType: metadata.mimeType,
+        sourceType: uploadIsRaw ? 'raw' : 'raster',
+      },
+    });
 
     // Return response immediately
     res.status(202).json({
