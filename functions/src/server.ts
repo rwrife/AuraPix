@@ -3,7 +3,8 @@ import pinoHttp from 'pino-http';
 import { serverConfig, storageConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
+import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
@@ -91,8 +92,14 @@ import { createComplianceV1Router } from './routes/complianceV1.js';
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
 app.use('/images', createImageRoutes(dataAdapter));
 
-// These routes require authentication
-app.use('/internal', authMiddleware, internalRouter);
+// /internal endpoints accept EITHER a Firebase user token OR a host API
+// key (Authorization: Bearer ak_live_...). The hostApiKeyAuth middleware
+// short-circuits on a valid key and sets req.tenant; otherwise we fall
+// through to optional Firebase auth so per-route guards can decide what to
+// require. Individual routes inside internalRouter enforce admin or scope
+// requirements via requireUserOrTenantScopes / requireAdmin.
+const hostApiKeyAuth = createHostApiKeyAuth(dataAdapter);
+app.use('/internal', hostApiKeyAuth, optionalAuthMiddleware, internalRouter);
 app.use('/edits', authMiddleware, editsRouter);
 
 // Versioned API surface (desktop/web clients)
