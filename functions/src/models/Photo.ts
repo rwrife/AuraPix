@@ -3,6 +3,7 @@
  */
 
 import type { ExifData } from '../utils/exif.js';
+import { DEFAULT_TENANT_ID, type TenantId } from '../domain/tenant/Tenant.js';
 
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'error';
 
@@ -51,6 +52,12 @@ export type PhotoSourceType = 'raster' | 'raw';
 export interface Photo {
   id: string;
   libraryId: string;
+  /**
+   * Host-customer / billing tenant that owns this photo. Optional on the
+   * type for backwards compatibility with documents written before the
+   * tenant rollout — treat a missing value as {@link DEFAULT_TENANT_ID}.
+   */
+  tenantId?: TenantId;
   albumIds: string[];
   originalName: string;
   /**
@@ -88,13 +95,15 @@ export function createPhotoDocument(
   source?: {
     sourceType: PhotoSourceType;
     rawOriginal?: { extension: string; mimeType: string };
-  }
+  },
+  tenantId: TenantId = DEFAULT_TENANT_ID
 ): Photo {
   const now = new Date().toISOString();
 
   return {
     id,
     libraryId,
+    tenantId,
     albumIds: [],
     originalName,
     sourceType: source?.sourceType,
