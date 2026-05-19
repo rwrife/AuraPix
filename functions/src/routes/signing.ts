@@ -7,6 +7,10 @@ import { logger } from '../utils/logger.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import { recordAuditEvent } from '../services/audit/AuditService.js';
+import {
+  emitMeteringEvent,
+  resolveTenantId,
+} from '../services/metering/index.js';
 
 // Initialize signing key service
 const signingKeyService = new SigningKeyService(
@@ -40,6 +44,14 @@ export function createSigningRouter(dataAdapter: DataAdapter): Router {
           keyFingerprint: signingKey.key.slice(0, 12),
           expiresAt: signingKey.expiresAt,
         },
+      });
+
+      emitMeteringEvent({
+        tenantId: resolveTenantId({}),
+        type: 'signed_url.issued',
+        count: 1,
+        resourceId: signingKey.key.slice(0, 12),
+        meta: { grantType: 'user', userId },
       });
 
       res.status(200).json(signingKey);
@@ -78,6 +90,17 @@ export function createSigningRouter(dataAdapter: DataAdapter): Router {
           },
         });
       }
+
+      emitMeteringEvent({
+        tenantId: resolveTenantId({}),
+        type: 'signed_url.issued',
+        count: 1,
+        resourceId: signingKey.key.slice(0, 12),
+        meta: {
+          grantType: 'share',
+          shareTokenPrefix: token.substring(0, 8),
+        },
+      });
 
       res.status(200).json(signingKey);
     } catch (error) {
