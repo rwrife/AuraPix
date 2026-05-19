@@ -1,0 +1,146 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Branding API",
+    "version": "0.1.0",
+    "description": "Per-tenant branding/theme configuration served to the embedded UI. The GET endpoint is intentionally public so deep-linked and share pages can render branded chrome without authentication."
+  },
+  "paths": {
+    "/api/v1/tenants/{tenantId}/branding": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "get": {
+        "summary": "Fetch a tenant's public branding/theme",
+        "description": "Public, cacheable. Returns sensible defaults if no branding doc exists.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Branding (possibly defaults)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BrandingEnvelope" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tenantId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a tenant's branding/theme",
+        "description": "Requires the `tenants.write` scope (host API key) or the tenant owner user.",
+        "security": [{ "bearerAuth": [] }, { "hostApiKey": ["tenants.write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BrandingInput" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated branding",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BrandingEnvelope" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body or tenantId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenants.write scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "hostApiKey": { "type": "apiKey", "in": "header", "name": "X-Host-API-Key" }
+    },
+    "schemas": {
+      "BrandingInput": {
+        "type": "object",
+        "required": ["appName", "primaryColor", "accentColor"],
+        "properties": {
+          "appName": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "primaryColor": { "type": "string", "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" },
+          "accentColor": { "type": "string", "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" },
+          "logoUrl": { "type": "string", "format": "uri", "maxLength": 2048 },
+          "faviconUrl": { "type": "string", "format": "uri", "maxLength": 2048 }
+        },
+        "additionalProperties": false
+      },
+      "Branding": {
+        "type": "object",
+        "required": ["tenantId", "appName", "primaryColor", "accentColor", "updatedAt"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "appName": { "type": "string" },
+          "primaryColor": { "type": "string" },
+          "accentColor": { "type": "string" },
+          "logoUrl": { "type": "string", "format": "uri" },
+          "faviconUrl": { "type": "string", "format": "uri" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "BrandingEnvelope": {
+        "type": "object",
+        "required": ["branding"],
+        "properties": {
+          "branding": { "$ref": "#/components/schemas/Branding" }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

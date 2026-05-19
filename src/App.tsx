@@ -13,6 +13,7 @@ import { HealthBanner } from './components/HealthBanner';
 import { initializeHealthCheck, cleanupHealthCheck } from './services/healthCheck';
 import { setupHealthDebug } from './utils/debugHealth';
 import { ImageAuthProvider } from './hooks/useImageAuth';
+import { BrandingProvider } from './features/branding/BrandingProvider';
 
 // Some CI environments have incorrectly flagged JSX component usage as unused.
 // This ensures the import is always treated as a runtime value.
@@ -38,9 +39,12 @@ export default function App() {
     };
   }, []);
 
+  const tenantId = import.meta.env.VITE_TENANT_ID as string | undefined;
+
   return (
     <ServiceProvider services={services}>
       <ImageAuthProvider authService={services.auth}>
+        <BrandingProvider tenantId={tenantId}>
         <HealthBanner />
         <BrowserRouter>
           <Routes>
@@ -59,6 +63,7 @@ export default function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </BrandingProvider>
       </ImageAuthProvider>
     </ServiceProvider>
   );

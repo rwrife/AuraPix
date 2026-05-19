@@ -4,6 +4,12 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
+/* ── Brand tokens (overridden at runtime by BrandingProvider) ──────────── */
+:root {
+  --brand-primary: #2563eb;
+  --brand-accent: #7c3aed;
+}
+
 /* ── Reset / base ──────────────────────────────────────────────────────── */
 *,
 *::before,
