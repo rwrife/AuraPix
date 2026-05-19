@@ -1,0 +1,135 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Usage API",
+    "version": "0.1.0",
+    "description": "Per-tenant daily usage rollups. The canonical pull surface for host billing systems (issue #133)."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/api/v1/tenants/{tenantId}/usage": {
+      "get": {
+        "operationId": "getTenantUsage",
+        "summary": "Fetch daily usage rollups for a tenant over a date range",
+        "description": "Returns one document per UTC day in [from, to] inclusive. Days with no recorded activity are returned as zero-filled docs so callers can iterate without gap handling. Max range: 100 days.\n\nAuth: tenant owner (Bearer) OR host API key with `usage.read` scope.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Inclusive start date, YYYY-MM-DD (UTC).",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "description": "Inclusive end date, YYYY-MM-DD (UTC). Must be >= from and <= from + 99 days.",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily usage rollups",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TenantUsageResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or range too large",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not authorized for this tenant",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "UsageDailyDoc": {
+        "type": "object",
+        "required": [
+          "tenantId",
+          "date",
+          "storageBytesDelta",
+          "imagesUploaded",
+          "imagesProcessed",
+          "signedUrlsIssued",
+          "editsApplied",
+          "apiCalls",
+          "storageBytesTotal",
+          "updatedAt"
+        ],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "storageBytesDelta": {
+            "type": "integer",
+            "description": "Net storage bytes change for the day (positive on upload, negative after deletes)."
+          },
+          "imagesUploaded": { "type": "integer", "minimum": 0 },
+          "imagesProcessed": { "type": "integer", "minimum": 0 },
+          "signedUrlsIssued": { "type": "integer", "minimum": 0 },
+          "editsApplied": { "type": "integer", "minimum": 0 },
+          "apiCalls": { "type": "integer", "minimum": 0 },
+          "storageBytesTotal": {
+            "type": ["integer", "null"],
+            "description": "Absolute storage footprint at end-of-day, written by the scheduled snapshot job. Null until the first snapshot for the day completes."
+          },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TenantUsageResponse": {
+        "type": "object",
+        "required": ["tenantId", "from", "to", "days", "items"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "from": { "type": "string", "format": "date" },
+          "to": { "type": "string", "format": "date" },
+          "days": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/UsageDailyDoc" }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
