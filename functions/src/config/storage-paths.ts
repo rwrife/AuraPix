@@ -2,6 +2,27 @@
  * Centralized path generation for consistent storage organization
  */
 
+import { DEFAULT_TENANT_ID, type TenantId } from '../domain/tenant/Tenant.js';
+
+/**
+ * Feature flag: when enabled, original/derivative storage paths are
+ * partitioned by tenant id (`originals/{tenantId}/{libraryId}/{photoId}/...`).
+ * Defaults to off so existing deployments keep using the legacy layout.
+ */
+export const TENANT_AWARE_STORAGE_PATHS =
+  process.env.TENANT_AWARE_STORAGE_PATHS === 'true';
+
+function buildBaseDir(
+  libraryId: string,
+  photoId: string,
+  tenantId: TenantId | undefined
+): string {
+  if (TENANT_AWARE_STORAGE_PATHS) {
+    return `${tenantId ?? DEFAULT_TENANT_ID}/${libraryId}/${photoId}`;
+  }
+  return `${libraryId}/${photoId}`;
+}
+
 export interface PhotoPaths {
   original: string;
   derivatives: {
@@ -18,9 +39,10 @@ export interface PhotoPaths {
 export function generatePhotoPaths(
   libraryId: string,
   photoId: string,
-  originalExtension: string
+  originalExtension: string,
+  tenantId?: TenantId
 ): PhotoPaths {
-  const baseDir = `${libraryId}/${photoId}`;
+  const baseDir = buildBaseDir(libraryId, photoId, tenantId);
   
   return {
     original: `originals/${baseDir}/original.${originalExtension}`,
