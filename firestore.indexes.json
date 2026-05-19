@@ -169,6 +169,34 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "tenantApiKeys",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "keyPrefix",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "revokedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tenantApiKeys",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

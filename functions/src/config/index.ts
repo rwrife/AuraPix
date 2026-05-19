@@ -55,6 +55,25 @@ export const featureConfig = {
   complianceExportsEnabled: process.env.FEATURE_COMPLIANCE_EXPORTS_ENABLED === 'true',
 } as const;
 
+// Comma-separated allowlist of user UIDs (or emails) treated as admins for
+// internal management endpoints (e.g. minting tenant API keys).
+const adminIds = (process.env.ADMIN_USER_IDS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+export const adminConfig = {
+  userIds: new Set<string>(adminIds),
+} as const;
+
+export function isAdminUser(user: { uid?: string; email?: string } | undefined): boolean {
+  if (!user) return false;
+  if (adminConfig.userIds.size === 0) return false;
+  if (user.uid && adminConfig.userIds.has(user.uid)) return true;
+  if (user.email && adminConfig.userIds.has(user.email)) return true;
+  return false;
+}
+
 export const securityConfig = {
   uploadRateLimit: {
     windowMs: parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || '60000', 10),
