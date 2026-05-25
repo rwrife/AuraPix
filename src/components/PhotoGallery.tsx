@@ -313,6 +313,43 @@ export function PhotoGallery({
               </div>
 
               <LazyImage photo={photo} className="gallery-tile-img" alt={photo.originalName} />
+              {(photo.rating > 0 || photo.flag) && (
+                <div
+                  className="gallery-tile-triage"
+                  aria-label={`Rating ${photo.rating}, flag ${photo.flag ?? 'none'}`}
+                  style={{
+                    position: 'absolute',
+                    bottom: 4,
+                    left: 4,
+                    display: 'flex',
+                    gap: 4,
+                    alignItems: 'center',
+                    pointerEvents: 'none',
+                    fontSize: 12,
+                    lineHeight: 1,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'rgba(0,0,0,0.55)',
+                    color: 'var(--brand-star, #ffd166)',
+                  }}
+                >
+                  {photo.rating > 0 && (
+                    <span className="gallery-tile-rating" aria-hidden="true">
+                      {'★'.repeat(photo.rating)}
+                    </span>
+                  )}
+                  {photo.flag === 'pick' && (
+                    <span className="gallery-tile-flag gallery-tile-flag--pick" style={{ color: '#7CFC9A' }}>
+                      ⚑
+                    </span>
+                  )}
+                  {photo.flag === 'reject' && (
+                    <span className="gallery-tile-flag gallery-tile-flag--reject" style={{ color: '#ff6b6b' }}>
+                      ✕
+                    </span>
+                  )}
+                </div>
+              )}
               {mode === 'large' && <p className="gallery-tile-name">{photo.originalName}</p>}
             </div>
           );
