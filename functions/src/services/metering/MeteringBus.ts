@@ -11,11 +11,11 @@ export type MeteringEventType =
   | 'upload.accepted'
   | 'image.processed'
   | 'signed_url.issued'
-  | 'edit.applied';
+  | 'edit.applied'
+  | 'share.viewed'
+  | 'plugin.ran';
 // Future (placeholder; not emitted in this PR):
-//   | 'plugin.ran'
 //   | 'user.active'
-//   | 'share.viewed'
 
 export interface MeteringEvent {
   /**
