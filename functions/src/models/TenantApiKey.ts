@@ -14,11 +14,12 @@
  * cross-referenced against a tenants collection.
  */
 
-export type TenantApiKeyScope = 'usage.read' | 'tenants.read';
+export type TenantApiKeyScope = 'usage.read' | 'tenants.read' | 'tenants.write';
 
 export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'usage.read',
   'tenants.read',
+  'tenants.write',
 ] as const;
 
 export interface TenantApiKeyRecord {

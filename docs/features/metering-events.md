@@ -41,9 +41,19 @@ type MeteringEvent = {
 | `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
 | `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
+| `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
+| `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
 
 Reserved for follow-ups (not emitted yet): `plugin.ran`, `user.active`,
 `share.viewed`.
+
+### Quota warning thresholds
+
+Thresholds default to `[0.8, 0.95]` (80% and 95%). Override with the
+env var `TENANT_QUOTA_WARNING_THRESHOLDS` as a comma-separated list of
+fractions strictly between 0 and 1 (e.g. `0.5,0.75,0.9`). Each threshold
+fires at most once per tenant per UTC day; the daily rollup doc tracks
+the set of already-emitted thresholds in `quotaWarningsEmitted`.
 
 ## Tenant resolution
 

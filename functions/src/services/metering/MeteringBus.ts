@@ -11,7 +11,9 @@ export type MeteringEventType =
   | 'upload.accepted'
   | 'image.processed'
   | 'signed_url.issued'
-  | 'edit.applied';
+  | 'edit.applied'
+  | 'quota.exceeded'
+  | 'quota.warning';
 // Future (placeholder; not emitted in this PR):
 //   | 'plugin.ran'
 //   | 'user.active'
