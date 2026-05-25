@@ -89,6 +89,7 @@ import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createTenantUsersRouter } from './routes/tenantUsersV1.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   InMemoryDailyDocStore,
@@ -134,6 +135,25 @@ app.use(
     ownsTenant: async (userId, tenantId) => userId === tenantId,
   })
 );
+// Tenant user (membership) management. Host API key authenticated.
+// Mount BEFORE branding's GET-public router so the /v1/tenants/:id/users
+// paths are matched here first.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantUsersRouter({
+    dataAdapter,
+    meteringBus: {
+      emit: (event) => {
+        // Bridge into the existing usage rollup bus where applicable.
+        // user.* events are emitted via logger today; a follow-up wires the
+        // shared MeteringBus end-to-end.
+        logger.info({ event: 'metering', ...event }, 'metering event emitted');
+      },
+    },
+  })
+);
+
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
 
 // Tenant branding: GET is public (no auth), PUT requires auth.

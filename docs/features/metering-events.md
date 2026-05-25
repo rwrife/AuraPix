@@ -41,9 +41,11 @@ type MeteringEvent = {
 | `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
 | `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
+| `user.active` | `routes/tenantUsersV1.ts` activity tracker — **at most once per `(tenantId, userId)` per UTC day** | `resourceId=userId`. This is the per-seat billing signal hosts asked for in #143. |
+| `user.provisioned` | `routes/tenantUsersV1.ts` on `POST /v1/tenants/:id/users` (newly created membership only; no-op on idempotent re-POST) | `resourceId=userId`, `meta.role`, `meta.email` |
+| `user.revoked` | `routes/tenantUsersV1.ts` on `DELETE /v1/tenants/:id/users/:userId` | `resourceId=userId`, `meta.role` |
 
-Reserved for follow-ups (not emitted yet): `plugin.ran`, `user.active`,
-`share.viewed`.
+Reserved for follow-ups (not emitted yet): `plugin.ran`, `share.viewed`.
 
 ## Tenant resolution
 
