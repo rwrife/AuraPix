@@ -89,6 +89,7 @@ import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createPhotosV1Router } from './routes/photosV1.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   InMemoryDailyDocStore,
@@ -114,6 +115,9 @@ app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+// Bulk photo operations (issue #142). Express routes treat `:` as a param
+// separator, so we register the exact literal path.
+app.use('/api/v1/photos\\:batch', authMiddleware, createPhotosV1Router(dataAdapter));
 
 // --- Metering / usage rollups (issue #133) ---
 // In-memory wiring suitable for local mode; Firebase mode will swap in a

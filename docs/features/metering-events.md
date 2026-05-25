@@ -41,6 +41,7 @@ type MeteringEvent = {
 | `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
 | `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
+| `bulk.batch` | `handlers/photos/batch.ts` after a `POST /api/v1/photos:batch` call completes | exactly one event per call regardless of N; `meta.action`, `meta.requested`, `meta.succeeded`, `meta.failed`. Per-photo events (e.g. delete audits) are still emitted in addition and are NOT collapsed. |
 
 Reserved for follow-ups (not emitted yet): `plugin.ran`, `user.active`,
 `share.viewed`.
