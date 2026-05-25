@@ -89,7 +89,12 @@ import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
+import {
+  getHostWebhookSink,
+  getWebhookDeliveryStore,
+} from './services/metering/index.js';
 import {
   InMemoryDailyDocStore,
   UsageRollupConsumer,
@@ -135,6 +140,22 @@ app.use(
   })
 );
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
+
+// Host webhook delivery observability + manual replay (issue #144).
+// Host-key-authenticated: accepts `Authorization: Bearer ak_live_...` with
+// the `webhooks.write` scope. Falls through optional Firebase auth so the
+// per-route guard (`requireUserOrTenantScopes`) can issue the right 401/403.
+const webhookDeliveryStore = getWebhookDeliveryStore();
+app.locals.webhookDeliveryStore = webhookDeliveryStore;
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  createWebhookDeliveriesRouter({
+    store: webhookDeliveryStore,
+    sink: getHostWebhookSink() ?? undefined,
+  })
+);
 
 // Tenant branding: GET is public (no auth), PUT requires auth.
 // Use a per-method gate so the public GET is reachable without a Bearer token.
