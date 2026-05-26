@@ -50,6 +50,38 @@ function assertEditVersionMatch(
   }
 }
 
+/**
+ * Emit a `plugin.ran` metering event for every operation in the recipe.
+ * Called once for an entire apply attempt: success=true after the version
+ * is committed, success=false if the apply fails after validation.
+ * `durationMs` is the elapsed wall-clock time of the apply attempt and is
+ * reported per-op (a coarse but stable proxy at this scope).
+ */
+function emitPluginRanEvents(opts: {
+  libraryId: string;
+  photoId: string;
+  operations: { type: string }[];
+  durationMs: number;
+  success: boolean;
+}): void {
+  const { libraryId, photoId, operations, durationMs, success } = opts;
+  const tenantId = resolveTenantId({ libraryId });
+  for (const op of operations) {
+    emitMeteringEvent({
+      tenantId,
+      type: 'plugin.ran',
+      count: 1,
+      resourceId: photoId,
+      meta: {
+        libraryId,
+        pluginId: op.type,
+        durationMs,
+        success,
+      },
+    });
+  }
+}
+
 
 /**
  * List edit plugins and recipe contract version
@@ -166,6 +198,22 @@ export async function handleApplyEdits(
 
     assertEditVersionMatch(expectedCurrentVersion, photo.currentEditVersion);
 
+    const pluginStartedAt = Date.now();
+    let pluginRanEmitted = false;
+
+    const onPluginFailure = (): void => {
+      if (pluginRanEmitted) return;
+      pluginRanEmitted = true;
+      emitPluginRanEvents({
+        libraryId,
+        photoId,
+        operations,
+        durationMs: Date.now() - pluginStartedAt,
+        success: false,
+      });
+    };
+
+    try {
     // Create new edit version
     const newVersion: EditVersion = {
       version: photo.currentEditVersion + 1,
@@ -207,6 +255,18 @@ export async function handleApplyEdits(
         operationCount: operations.length,
       },
     });
+
+    // Emit one `plugin.ran` event per operation. We emit exactly once
+    // per op per apply attempt; the failure-path emission is guarded by
+    // `pluginRanEmitted` to prevent double counting.
+    emitPluginRanEvents({
+      libraryId,
+      photoId,
+      operations,
+      durationMs: Date.now() - pluginStartedAt,
+      success: true,
+    });
+    pluginRanEmitted = true;
 
     const responseBody = {
       photoId,
@@ -266,6 +326,10 @@ export async function handleApplyEdits(
         );
       }
     });
+    } catch (innerError) {
+      onPluginFailure();
+      throw innerError;
+    }
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
