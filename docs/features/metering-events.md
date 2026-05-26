@@ -121,3 +121,105 @@ X-AuraPix-Signature: v1=<hex(hmac_sha256(SIGNING_MASTER_SECRET, raw_body))>
 | Webhook 5xx/timeout | Retried with backoff; dropped after 3 attempts. |
 | `emit()` called during high load | Bus continues to buffer; if a batch is in flight, additional events accumulate for the next flush. |
 | Process exits with pending events | Best-effort `shutdown()` flush at the call site; otherwise events in memory are lost (acceptable for usage telemetry). |
+
+## Delivery observability (issue #144)
+
+Metering POSTs are fire-and-forget by default, which makes it hard for hosts
+to know *what* failed during an outage of their billing service. To close that
+gap, every POST attempt records a **delivery record** scoped under the tenant:
+
+```
+tenants/{tenantId}/webhookDeliveries/{batchId}
+```
+
+Record shape:
+
+```ts
+type WebhookDeliveryRecord = {
+  batchId: string;            // also the Firestore doc id
+  tenantId: string;
+  sentAt: string;             // ISO-8601 of first attempt
+  statusCode: number | null;  // last observed HTTP status, null on network err
+  ok: boolean;                // statusCode is 2xx
+  attemptCount: number;       // number of attempts so far
+  eventCount: number;         // events in the batch
+  contentHash: string;        // sha256(raw body); NO body is persisted
+  status: 'pending' | 'ok' | 'failed';
+  errorMessage?: string;      // truncated to 500 chars
+  updatedAt: string;          // ISO-8601 of last attempt
+  expiresAt: string;          // Firestore TTL anchor (sentAt + 30d)
+};
+```
+
+**No event bodies are stored** (privacy + cost). The `contentHash` field is
+enough to correlate a record with a known payload; if the host needs the
+raw events for a failed batch they can also derive them from the daily
+rollup window.
+
+Every POST attempt — success or failure — updates the same record (one row
+per batch, not per attempt). Records are auto-purged by a Firestore TTL
+policy on `expiresAt` after **30 days**.
+
+Each outbound POST also carries an `X-AuraPix-Idempotency-Key: <batchId>`
+header so the host can dedupe across automatic retries *and* manual
+replays.
+
+### Endpoints
+
+Both endpoints require a host API key (`Authorization: Bearer ak_live_...`)
+with the `webhooks.write` scope, scoped to the tenant in the URL.
+Cross-tenant calls return 403.
+
+#### `GET /api/v1/tenants/:tenantId/webhooks/deliveries`
+
+Returns paginated delivery records, newest first.
+
+| Query param | Type | Description |
+| --- | --- | --- |
+| `status` | `pending`\|`ok`\|`failed` | Filter by current status. |
+| `since` | ISO-8601 | Inclusive lower bound on `sentAt`. |
+| `limit` | int | Page size (default 50, max 200). |
+| `cursor` | string | `nextCursor` from a previous response. |
+
+Response:
+
+```json
+{
+  "tenantId": "acme",
+  "items": [ { "...": "WebhookDeliveryRecord" } ],
+  "nextCursor": "b_9a2f..."
+}
+```
+
+#### `POST /api/v1/tenants/:tenantId/webhooks/deliveries/:batchId:replay`
+
+Re-sends a previously-attempted batch. The replayed POST reuses the same
+`batchId` (and therefore the same `X-AuraPix-Idempotency-Key`), so a
+well-behaved host endpoint will not double-count.
+
+Response on success:
+
+```json
+{
+  "tenantId": "acme",
+  "batchId": "b_9a2f...",
+  "replayed": true,
+  "delivery": { "...": "WebhookDeliveryRecord (updated)" }
+}
+```
+
+Important behaviors:
+
+- The existing delivery record is updated in place — there is **no duplicate
+  row** per replay.
+- Concurrent replay calls for the same `batchId` are coalesced: the second
+  call returns immediately without issuing a second POST (in-flight
+  idempotency window).
+- The raw batch body is reconstructed from a small in-process cache (default
+  capacity 256 batches). Once the cache evicts a batch, replay returns
+  `410 BATCH_BODY_EXPIRED`. Hosts that need a guaranteed long replay
+  window can instead derive a fresh batch from the daily rollup.
+- A separate `webhook.delivery_failed` metric event may be emitted after
+  the in-process retries exhaust (planned follow-up; not required for the
+  initial implementation).
+
