@@ -44,3 +44,45 @@ Create a reliable upload and processing pipeline for originals and derivatives.
   - combined totals
   - per-photo storage breakdown, sorted by highest usage
 - This is a safe, read-only primitive that can back cron-based cleanup/optimization in follow-up increments.
+
+## EXIF metadata on upload (Issue #151)
+
+During `POST /images/:libraryId` the server extracts EXIF best-effort from the
+original buffer (via `exifr`) and persists a small, stable summary at
+`photo.exif`:
+
+```ts
+exif?: {
+  capturedAt?: string;      // ISO-8601, UTC
+  camera?: string;          // 'Sony ILCE-7M4'
+  lens?: string;
+  iso?: number;
+  fNumber?: number;
+  exposureTimeSec?: number; // 0.008 = 1/125s
+  focalLengthMm?: number;
+  widthPx?: number;
+  heightPx?: number;
+  orientation?: number;     // 1-8
+}
+```
+
+The full raw EXIF blob continues to live under `photo.metadata.exif` for the
+information panel and search.
+
+**Best-effort guarantees**
+
+- Extraction failure (corrupt or missing EXIF) NEVER fails the upload.
+- The existing `upload.accepted` metering event is augmented with
+  `meta.exifExtracted: boolean` plus, when known, `meta.widthPx` and
+  `meta.heightPx`. Hosts that price by megapixel can start counting without a
+  follow-up release. No new event type was introduced.
+
+**Photo list endpoint**
+
+`GET /api/v1/photos?libraryId=...&sort=capturedAt` (or `-capturedAt`) lists
+photos sorted by capture date with a graceful fallback to upload time when a
+photo has no `exif.capturedAt`. Results are tenant-scoped. See
+`contracts/openapi/photos.openapi.json`.
+
+Backfill of `exif` on photos uploaded before this change is out of scope and
+will ship as a separate maintenance script.

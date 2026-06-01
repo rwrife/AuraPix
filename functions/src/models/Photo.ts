@@ -2,7 +2,7 @@
  * Photo domain model with edit versioning
  */
 
-import type { ExifData } from '../utils/exif.js';
+import type { ExifData, NormalizedExif } from '../utils/exif.js';
 import { DEFAULT_TENANT_ID, type TenantId } from '../domain/tenant/Tenant.js';
 
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'error';
@@ -78,6 +78,12 @@ export interface Photo {
   storagePath?: string; // Old format: single path to original (used when no thumbnails exist)
   storagePaths?: StoragePaths; // New format: paths object with original and derivatives
   metadata: PhotoMetadata;
+  /**
+   * Normalized EXIF summary (capture date, camera, lens, dimensions).
+   * Best-effort: may be undefined when EXIF extraction failed or yielded no
+   * usable fields. The full raw EXIF blob lives under {@link PhotoMetadata.exif}.
+   */
+  exif?: NormalizedExif;
   status: PhotoStatus;
   currentEditVersion: number;
   editHistory: EditVersion[];
@@ -96,7 +102,8 @@ export function createPhotoDocument(
     sourceType: PhotoSourceType;
     rawOriginal?: { extension: string; mimeType: string };
   },
-  tenantId: TenantId = DEFAULT_TENANT_ID
+  tenantId: TenantId = DEFAULT_TENANT_ID,
+  exif?: NormalizedExif
 ): Photo {
   const now = new Date().toISOString();
 
@@ -110,6 +117,7 @@ export function createPhotoDocument(
     rawOriginal: source?.rawOriginal,
     storagePaths,
     metadata,
+    exif,
     status: 'uploading',
     currentEditVersion: 0,
     editHistory: [],
