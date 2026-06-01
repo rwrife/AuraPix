@@ -43,8 +43,9 @@ type MeteringEvent = {
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
+| `user.active` | `middleware/userActive.ts`, after auth + tenant resolution, on the **first** end-user request of the UTC day for `(tenantId, userId)` | `count=1`, `resourceId=userId`, `meta.firstSeenAt` (ISO-8601), `meta.route=req.path`. Host-API-key (service-to-service) calls do **not** emit this event. Dedupe scope is `(tenantId, userId, utcDay)`, so the same Firebase user active in two tenants emits two seat events. Increments the daily-rollup `activeUsers` counter. |
 
-Reserved for follow-ups (not emitted yet): `user.active`.
+No events currently reserved for follow-ups.
 
 ## Tenant resolution
 

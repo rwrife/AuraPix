@@ -13,9 +13,8 @@ export type MeteringEventType =
   | 'signed_url.issued'
   | 'edit.applied'
   | 'share.viewed'
-  | 'plugin.ran';
-// Future (placeholder; not emitted in this PR):
-//   | 'user.active'
+  | 'plugin.ran'
+  | 'user.active';
 
 export interface MeteringEvent {
   /**

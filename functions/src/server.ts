@@ -6,6 +6,9 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
+import { createUserActiveMiddleware } from './middleware/userActive.js';
+import { InMemoryUserActiveDailyStore } from './services/metering/UserActiveDailyStore.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
@@ -129,9 +132,22 @@ const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
 usageRollupConsumer.attach(meteringBus);
 app.locals.meteringBus = meteringBus;
 app.locals.usageDailyStore = usageDailyStore;
+
+// --- Per-user active-day dedupe (issue #153) ---
+// Emits at most one `user.active` metering event per (tenantId, userId, UTC day).
+// Skipped for host-API-key (service-to-service) requests.
+const userActiveStore = new InMemoryUserActiveDailyStore();
+app.locals.userActiveStore = userActiveStore;
+const userActive = createUserActiveMiddleware({
+  store: userActiveStore,
+  usageBus: meteringBus,
+});
+
 app.use(
   '/api/v1/tenants',
   authMiddleware,
+  resolveTenant,
+  userActive,
   createTenantUsageRouter({
     store: usageDailyStore,
     // Until the tenantId model lands, treat the authenticated user's uid as

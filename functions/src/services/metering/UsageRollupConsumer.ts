@@ -22,6 +22,12 @@ export interface UsageDailyDoc {
   signedUrlsIssued: number;
   editsApplied: number;
   apiCalls: number;
+  /**
+   * Distinct end-users seen for the tenant on this UTC day (seat-based
+   * billing signal). Populated from `user.active` metering events; see
+   * `docs/features/metering-events.md`.
+   */
+  activeUsers: number;
   /** Populated by the scheduled snapshot job; null until first snapshot. */
   storageBytesTotal: number | null;
   /** Idempotency: event IDs already applied to this doc. */
@@ -50,6 +56,7 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'signedUrlsIssued',
   'editsApplied',
   'apiCalls',
+  'activeUsers',
 ];
 
 export function isoDateUtc(input: string | Date | undefined): string {
@@ -70,6 +77,7 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     signedUrlsIssued: 0,
     editsApplied: 0,
     apiCalls: 0,
+    activeUsers: 0,
     storageBytesTotal: null,
     appliedEventIds: [],
     updatedAt: new Date(0).toISOString(),

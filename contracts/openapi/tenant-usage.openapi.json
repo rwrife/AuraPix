@@ -78,6 +78,7 @@
           "signedUrlsIssued",
           "editsApplied",
           "apiCalls",
+          "activeUsers",
           "storageBytesTotal",
           "updatedAt"
         ],
@@ -93,6 +94,11 @@
           "signedUrlsIssued": { "type": "integer", "minimum": 0 },
           "editsApplied": { "type": "integer", "minimum": 0 },
           "apiCalls": { "type": "integer", "minimum": 0 },
+          "activeUsers": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Distinct end-users active for this tenant on this UTC day (seat-based billing signal). Driven by `user.active` metering events; host-API-key (service-to-service) traffic is excluded. Zero-filled when no activity was recorded."
+          },
           "storageBytesTotal": {
             "type": ["integer", "null"],
             "description": "Absolute storage footprint at end-of-day, written by the scheduled snapshot job. Null until the first snapshot for the day completes."
