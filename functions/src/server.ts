@@ -1,11 +1,13 @@
 import express from 'express';
 import pinoHttp from 'pino-http';
-import { serverConfig, storageConfig } from './config/index.js';
+import { serverConfig, storageConfig, tenantRateLimitConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
+import { createTenantTokenBucketRateLimiter } from './middleware/rateLimit.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
@@ -100,6 +102,34 @@ import {
   UsageRollupConsumer,
 } from './services/metering/UsageRollupConsumer.js';
 
+// --- Metering / usage rollups (issue #133) ---
+// In-memory wiring suitable for local mode; Firebase mode will swap in a
+// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
+const meteringBus = new InMemoryUsageMeteringBus();
+const usageDailyStore = new InMemoryDailyDocStore();
+const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
+usageRollupConsumer.attach(meteringBus);
+app.locals.meteringBus = meteringBus;
+app.locals.usageDailyStore = usageDailyStore;
+
+// --- Per-tenant API rate limiter (issue #154) ---
+// Token-bucket keyed by `tenantId` so a misbehaving tenant cannot saturate
+// the function instance and starve every other host's customers. Mounted
+// globally BEFORE route handlers and AFTER `resolveTenant` populates
+// `req.tenantId`. Per-tenant overrides come from
+// `tenants_config/{tenantId}` and take effect on the next request (no
+// restart) thanks to a short in-memory TTL cache. The /health endpoint is
+// registered above and remains unaffected.
+const tenantRateLimiter = createTenantTokenBucketRateLimiter({
+  rps: tenantRateLimitConfig.rps,
+  burst: tenantRateLimitConfig.burst,
+  hostRps: tenantRateLimitConfig.hostRps,
+  dataAdapter,
+  meteringBus,
+});
+app.use(resolveTenant);
+app.use(tenantRateLimiter);
+
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
 app.use('/images', createImageRoutes(dataAdapter));
@@ -120,15 +150,6 @@ app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums))
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 
-// --- Metering / usage rollups (issue #133) ---
-// In-memory wiring suitable for local mode; Firebase mode will swap in a
-// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
-const meteringBus = new InMemoryUsageMeteringBus();
-const usageDailyStore = new InMemoryDailyDocStore();
-const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
-usageRollupConsumer.attach(meteringBus);
-app.locals.meteringBus = meteringBus;
-app.locals.usageDailyStore = usageDailyStore;
 app.use(
   '/api/v1/tenants',
   authMiddleware,

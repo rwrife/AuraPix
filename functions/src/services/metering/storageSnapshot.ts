@@ -69,6 +69,7 @@ export async function snapshotTenantStorage(
         signedUrlsIssued: 0,
         editsApplied: 0,
         apiCalls: 0,
+        rateLimited: 0,
         storageBytesTotal: null,
         appliedEventIds: [] as string[],
         updatedAt: new Date(0).toISOString(),
