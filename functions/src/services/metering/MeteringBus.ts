@@ -13,7 +13,13 @@ export type MeteringEventType =
   | 'signed_url.issued'
   | 'edit.applied'
   | 'share.viewed'
-  | 'plugin.ran';
+  | 'plugin.ran'
+  // Tenant offboarding lifecycle (issue #155). After `tenant.deleted` is
+  // emitted for a given tenantId, no further events for that tenant
+  // should ever fire — sinks may treat the tenant as terminal.
+  | 'tenant.export.requested'
+  | 'tenant.export.completed'
+  | 'tenant.deleted';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 

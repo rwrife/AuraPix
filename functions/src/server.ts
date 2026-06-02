@@ -90,6 +90,8 @@ import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantOffboardingRouter } from './routes/tenantOffboardingV1.js';
+import { TenantOffboardingService } from './services/tenant/TenantOffboardingService.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
@@ -155,6 +157,20 @@ app.use(
     store: webhookDeliveryStore,
     sink: getHostWebhookSink() ?? undefined,
   })
+);
+
+// Tenant offboarding (issue #155). Host-key-only — even tenant owners
+// cannot trigger an export or hard-delete via a Bearer token. The router
+// itself enforces `tenant.admin` scope and the X-Confirm-Tenant-Id header.
+const offboardingService = new TenantOffboardingService({
+  data: dataAdapter,
+  storage: storageAdapter,
+});
+app.locals.tenantOffboardingService = offboardingService;
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantOffboardingRouter({ service: offboardingService })
 );
 
 // Tenant branding: GET is public (no auth), PUT requires auth.
