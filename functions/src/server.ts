@@ -90,6 +90,9 @@ import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createPhotosV1Router } from './routes/photosV1.js';
+import { PhotosService } from './domain/photos/PhotosService.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
@@ -119,6 +122,27 @@ app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+
+// Photos: soft-delete (Trash) + restore + trashed list (issue #152).
+// Mounted at both `/v1/photos` (spec) and `/api/v1/photos` (in-product) so
+// hosts can call the documented contract URL while clients keep the
+// `/api` prefix used elsewhere.
+const photosService = new PhotosService({
+  dataAdapter,
+  storageAdapter,
+});
+app.use(
+  '/v1/photos',
+  authMiddleware,
+  resolveTenant,
+  createPhotosV1Router(photosService)
+);
+app.use(
+  '/api/v1/photos',
+  authMiddleware,
+  resolveTenant,
+  createPhotosV1Router(photosService)
+);
 
 // --- Metering / usage rollups (issue #133) ---
 // In-memory wiring suitable for local mode; Firebase mode will swap in a

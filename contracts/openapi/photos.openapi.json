@@ -1,0 +1,163 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Photos API",
+    "version": "1.0.0",
+    "description": "Soft-delete (Trash) lifecycle for photos. See issue #152."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/v1/photos": {
+      "get": {
+        "operationId": "listPhotos",
+        "summary": "List photos for the caller's tenant",
+        "parameters": [
+          {
+            "name": "trashed",
+            "in": "query",
+            "description": "When true, returns only photos currently in Trash.",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Photos page",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ListPhotosResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/photos/{id}": {
+      "delete": {
+        "operationId": "trashPhoto",
+        "summary": "Soft-delete (Trash) a photo",
+        "description": "Sets `trashedAt = now`; the photo is removed from default list queries but bytes are retained until the TTL purge job runs.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trashed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrashStateResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/photos/{id}/restore": {
+      "post": {
+        "operationId": "restorePhoto",
+        "summary": "Restore a trashed photo",
+        "description": "Clears `trashedAt` / `trashedBy`. Cross-tenant restore returns 403.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restored",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrashStateResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PhotoSummary": {
+        "type": "object",
+        "required": ["id", "libraryId", "originalName", "status", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "libraryId": { "type": "string" },
+          "originalName": { "type": "string" },
+          "status": { "type": "string" },
+          "trashedAt": { "type": ["string", "null"], "format": "date-time" },
+          "trashedBy": { "type": ["string", "null"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ListPhotosResponse": {
+        "type": "object",
+        "required": ["photos"],
+        "properties": {
+          "photos": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PhotoSummary" }
+          }
+        }
+      },
+      "TrashStateResponse": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "trashedAt": { "type": ["string", "null"], "format": "date-time" },
+          "trashedBy": { "type": ["string", "null"] }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing or invalid authentication",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Cross-tenant access denied",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Photo not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    }
+  }
+}
