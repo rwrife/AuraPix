@@ -13,7 +13,9 @@ export type MeteringEventType =
   | 'signed_url.issued'
   | 'edit.applied'
   | 'share.viewed'
-  | 'plugin.ran';
+  | 'plugin.ran'
+  | 'photo.trashed'
+  | 'photo.purged';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 

@@ -84,6 +84,16 @@ export interface Photo {
   thumbnailsOutdated: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Soft-delete (Trash) timestamp. When non-null, the photo is in the
+   * tenant's trash and is hidden from default list queries until either
+   * restored or hard-deleted by the purge job. See issue #152.
+   */
+  trashedAt?: string | null;
+  /**
+   * User id (or tenant subject) that initiated the soft-delete.
+   */
+  trashedBy?: string | null;
 }
 
 export function createPhotoDocument(
@@ -116,5 +126,7 @@ export function createPhotoDocument(
     thumbnailsOutdated: false,
     createdAt: now,
     updatedAt: now,
+    trashedAt: null,
+    trashedBy: null,
   };
 }

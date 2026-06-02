@@ -43,6 +43,8 @@ type MeteringEvent = {
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
+| `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
+| `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
 
 Reserved for follow-ups (not emitted yet): `user.active`.
 
