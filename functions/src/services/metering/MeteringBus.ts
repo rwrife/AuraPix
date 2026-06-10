@@ -15,7 +15,8 @@ export type MeteringEventType =
   | 'share.viewed'
   | 'plugin.ran'
   | 'photo.trashed'
-  | 'photo.purged';
+  | 'photo.purged'
+  | 'webhook.secret_rotated';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 
