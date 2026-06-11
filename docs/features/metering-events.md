@@ -45,6 +45,7 @@ type MeteringEvent = {
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
 | `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
+| `idempotency.replayed` | `middleware/idempotency.ts` on a cached replay (issue #162) | **NOT billable.** Debug-tier; `count=1`, `meta.route`, `meta.key`. Hosts should exclude this type from billing rollups; it exists so operators can observe client retry behavior. |
 
 Reserved for follow-ups (not emitted yet): `user.active`.
 

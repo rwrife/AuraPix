@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Albums API",
-    "version": "1.1.0",
-    "description": "Contract artifact for albums list/create/update endpoints."
+    "version": "1.2.0",
+    "description": "Contract artifact for albums list/create/update endpoints. Mutating endpoints support the `Idempotency-Key` header (issue #162) for safe retries."
   },
   "servers": [
     {
@@ -91,6 +91,11 @@
       "post": {
         "operationId": "createAlbum",
         "summary": "Create album",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -103,7 +108,12 @@
         },
         "responses": {
           "201": {
-            "description": "Album created",
+            "description": "Album created. When `Idempotency-Key` was supplied and this is a cached replay, the response carries `Idempotency-Replayed: true`.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -119,7 +129,14 @@
             "$ref": "#/components/responses/ErrorResponse"
           },
           "409": {
-            "$ref": "#/components/responses/ErrorResponse"
+            "description": "Idempotency-Key reused with a different request body (`IDEMPOTENCY_KEY_CONFLICT`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -216,6 +233,30 @@
     }
   },
   "components": {
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Opaque key (\u2264255 chars; UUIDs recommended) that scopes the request to `(tenantId, route, key)`. Retries within 24h with the same key + same body return the cached response without re-invoking the handler or re-emitting metering events. Same key + different body returns `409 IDEMPOTENCY_KEY_CONFLICT`. See `docs/features/idempotency-keys.md`.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "headers": {
+      "IdempotencyReplayed": {
+        "description": "Present and `true` when this response was served from the idempotency cache. Absent on first-time responses.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        }
+      }
+    },
     "responses": {
       "ErrorResponse": {
         "description": "Error response",
