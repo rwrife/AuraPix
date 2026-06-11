@@ -15,7 +15,11 @@ export type MeteringEventType =
   | 'share.viewed'
   | 'plugin.ran'
   | 'photo.trashed'
-  | 'photo.purged';
+  | 'photo.purged'
+  // Embed handshake (issue #163). Emitted from the CSP middleware and
+  // the `frame-ancestors` violation report endpoint respectively.
+  | 'embed.session_started'
+  | 'embed.origin_blocked';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 

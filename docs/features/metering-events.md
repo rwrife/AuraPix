@@ -45,6 +45,8 @@ type MeteringEvent = {
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
 | `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
+| `embed.session_started` | `routes/embedV1.ts` CSP middleware, when an allowed parent origin frames an embed-eligible response | `count=1`, `meta.origin`, `meta.userAgent`. Debounced to **max 1 per minute per (tenantId, origin)** so high-traffic embeds don't flood the bus. See `docs/features/embed-handshake.md`. |
+| `embed.origin_blocked` | `routes/embedV1.ts` CSP `report-uri` endpoint, on a browser-posted `frame-ancestors` violation | `count=1`, `meta.blockedUri`, `meta.documentUri`, `meta.violatedDirective`. Helps hosts find misconfigured deployments. |
 
 Reserved for follow-ups (not emitted yet): `user.active`.
 

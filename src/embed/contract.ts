@@ -1,0 +1,124 @@
+/**
+ * AuraPix Embed handshake — shared message contract.
+ *
+ * Both the host (`src/embed/host-sdk.ts`) and the embedded AuraPix UI
+ * (`src/embed/embedded.ts`) import these types and guards so the protocol
+ * has exactly one source of truth. See `docs/features/embed-handshake.md`
+ * for the full specification.
+ */
+
+/** Sent by the embedded UI as soon as it mounts. */
+export interface AuraPixReadyMessage {
+  type: 'aurapix:ready';
+  tenantId: string;
+  /** SemVer string of the embedded build. */
+  version: string;
+}
+
+/** Sent by the embedded UI when its content height changes. */
+export interface AuraPixResizeMessage {
+  type: 'aurapix:resize';
+  /** CSS pixel height of the embedded content. */
+  height: number;
+}
+
+/** Generic user-action event emitted by the embedded UI. */
+export interface AuraPixEventMessage {
+  type: 'aurapix:event';
+  /** Event name (`selection-changed`, `upload-started`, ...). */
+  name: string;
+  payload?: unknown;
+}
+
+/** Host → embedded: switch theme. */
+export interface AuraPixSetThemeMessage {
+  type: 'aurapix:set-theme';
+  theme: 'light' | 'dark' | 'system' | (string & {});
+}
+
+/** Host → embedded: navigate to a route inside AuraPix. */
+export interface AuraPixNavigateMessage {
+  type: 'aurapix:navigate';
+  /** Path starting with `/`. */
+  path: string;
+}
+
+export type AuraPixOutboundMessage =
+  | AuraPixReadyMessage
+  | AuraPixResizeMessage
+  | AuraPixEventMessage;
+
+export type AuraPixInboundMessage =
+  | AuraPixSetThemeMessage
+  | AuraPixNavigateMessage;
+
+export type AuraPixMessage = AuraPixOutboundMessage | AuraPixInboundMessage;
+
+export const AURAPIX_MESSAGE_PREFIX = 'aurapix:' as const;
+
+export const AURAPIX_MESSAGE_TYPES = {
+  ready: 'aurapix:ready',
+  resize: 'aurapix:resize',
+  event: 'aurapix:event',
+  setTheme: 'aurapix:set-theme',
+  navigate: 'aurapix:navigate',
+} as const;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** True when `value` looks like any AuraPix postMessage payload. */
+export function isAuraPixMessage(value: unknown): value is AuraPixMessage {
+  if (!isPlainObject(value)) return false;
+  const t = value.type;
+  return typeof t === 'string' && t.startsWith(AURAPIX_MESSAGE_PREFIX);
+}
+
+export function isAuraPixReady(value: unknown): value is AuraPixReadyMessage {
+  return (
+    isPlainObject(value) &&
+    value.type === AURAPIX_MESSAGE_TYPES.ready &&
+    typeof value.tenantId === 'string' &&
+    typeof value.version === 'string'
+  );
+}
+
+export function isAuraPixResize(value: unknown): value is AuraPixResizeMessage {
+  return (
+    isPlainObject(value) &&
+    value.type === AURAPIX_MESSAGE_TYPES.resize &&
+    typeof value.height === 'number' &&
+    Number.isFinite(value.height as number) &&
+    (value.height as number) >= 0
+  );
+}
+
+export function isAuraPixEvent(value: unknown): value is AuraPixEventMessage {
+  return (
+    isPlainObject(value) &&
+    value.type === AURAPIX_MESSAGE_TYPES.event &&
+    typeof value.name === 'string'
+  );
+}
+
+export function isAuraPixSetTheme(
+  value: unknown
+): value is AuraPixSetThemeMessage {
+  return (
+    isPlainObject(value) &&
+    value.type === AURAPIX_MESSAGE_TYPES.setTheme &&
+    typeof value.theme === 'string'
+  );
+}
+
+export function isAuraPixNavigate(
+  value: unknown
+): value is AuraPixNavigateMessage {
+  return (
+    isPlainObject(value) &&
+    value.type === AURAPIX_MESSAGE_TYPES.navigate &&
+    typeof value.path === 'string' &&
+    value.path.startsWith('/')
+  );
+}
