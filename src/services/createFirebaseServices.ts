@@ -6,6 +6,7 @@ import { FirebaseLibraryService } from '../adapters/library/FirebaseLibraryServi
 import { FirebaseAlbumsService } from '../adapters/albums/FirebaseAlbumsService';
 import { FirebaseSharingService } from '../adapters/sharing/FirebaseSharingService';
 import { FirebaseUploadService } from '../adapters/uploads/FirebaseUploadService';
+import { InMemorySmartAlbumsService } from '../adapters/smartAlbums/inMemorySmartAlbumsService';
 import type { OperationAuthorizer } from '../domain/authorization/contract';
 
 // ---------------------------------------------------------------------------
@@ -41,12 +42,18 @@ export function createFirebaseServices(
   const albums = new FirebaseAlbumsService(firebaseInstances.db, userId);
   const sharing = new FirebaseSharingService(firebaseInstances.db);
   const uploads = new FirebaseUploadService(firebaseInstances.db, { userId });
+  // Smart Albums (issue #165): Firebase mode currently uses the in-memory
+  // adapter as a placeholder. The authoritative API lives at
+  // /v1/smart-albums; a REST adapter can be wired here as a follow-up
+  // without changing the contract.
+  const smartAlbums = new InMemorySmartAlbumsService();
 
   return {
     auth,
     library,
     albums,
     sharing,
+    smartAlbums,
     uploads,
   };
 }
