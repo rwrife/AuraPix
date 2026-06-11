@@ -67,7 +67,7 @@ if (storageConfig.mode === 'firebase') {
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
 
-const domainModules = createDomainModules();
+const domainModules = createDomainModules({ dataAdapter });
 
 // Health check
 app.get('/health', (req, res) => {
@@ -92,6 +92,10 @@ import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router } from './routes/photosV1.js';
+import {
+  createSmartAlbumsLibraryRouter,
+  createSmartAlbumsResourceRouter,
+} from './routes/smartAlbumsV1.js';
 import { PhotosService } from './domain/photos/PhotosService.js';
 import { resolveTenant } from './middleware/resolveTenant.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
@@ -143,6 +147,36 @@ app.use(
   authMiddleware,
   resolveTenant,
   createPhotosV1Router(photosService)
+);
+
+// Smart Albums (issue #165). Two mount points:
+//   - /v1/libraries/:libraryId/smart-albums (list/create)
+//   - /v1/smart-albums/:id (get/update/delete/materialize)
+// Mirrored under /api/v1/* for in-product clients.
+const smartAlbumsService = domainModules.smartAlbums;
+app.use(
+  '/v1/libraries/:libraryId/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsLibraryRouter(smartAlbumsService)
+);
+app.use(
+  '/api/v1/libraries/:libraryId/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsLibraryRouter(smartAlbumsService)
+);
+app.use(
+  '/v1/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsResourceRouter(smartAlbumsService)
+);
+app.use(
+  '/api/v1/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
 // --- Metering / usage rollups (issue #133) ---
