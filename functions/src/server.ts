@@ -91,6 +91,7 @@ import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createPhotosV1Router } from './routes/photosV1.js';
+import { createAuditEventsV1Router } from './routes/auditEventsV1.js';
 import { PhotosService } from './domain/photos/PhotosService.js';
 import { resolveTenant } from './middleware/resolveTenant.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
@@ -191,6 +192,32 @@ app.use(
     return authMiddleware(req, res, next);
   },
   brandingRouter
+);
+
+// Host audit-events API (issue #164).
+// Host-API-key authenticated (audit.read scope) with an optional Bearer
+// user fallback for tenant owners. Mounted at the canonical /v1 path per
+// the issue spec, and also under /api/v1 to match the prefix used by the
+// rest of the host surface.
+const auditEventsRouter = createAuditEventsV1Router({
+  dataAdapter,
+  meteringBus: undefined, // wired by host integrations
+  usageBus: meteringBus,
+  // Until a real tenantId model lands, treat the authenticated user's uid
+  // as their own tenantId (mirrors the tenantUsage convention).
+  ownsTenant: async (userId, tenantId) => userId === tenantId,
+});
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  auditEventsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  auditEventsRouter
 );
 
 // Error handlers (must be last)

@@ -17,12 +17,14 @@
 export type TenantApiKeyScope =
   | 'usage.read'
   | 'tenants.read'
-  | 'webhooks.write';
+  | 'webhooks.write'
+  | 'audit.read';
 
 export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'usage.read',
   'tenants.read',
   'webhooks.write',
+  'audit.read',
 ] as const;
 
 export interface TenantApiKeyRecord {
