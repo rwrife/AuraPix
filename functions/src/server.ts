@@ -90,6 +90,7 @@ import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router } from './routes/photosV1.js';
 import { PhotosService } from './domain/photos/PhotosService.js';
 import { resolveTenant } from './middleware/resolveTenant.js';
@@ -191,6 +192,17 @@ app.use(
     return authMiddleware(req, res, next);
   },
   brandingRouter
+);
+
+// Per-tenant plugin allowlist (issue #166).
+// Host-API-key only — mounted under `/api/v1/tenants/:tenantId/plugins...`.
+// The `tenantPluginsV1` router enforces auth/scope itself; we still chain
+// the host-key middleware so `req.tenant` is populated when present.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  createTenantPluginsRouter({ dataAdapter })
 );
 
 // Error handlers (must be last)

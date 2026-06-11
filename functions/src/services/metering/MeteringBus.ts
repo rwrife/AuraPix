@@ -14,6 +14,9 @@ export type MeteringEventType =
   | 'edit.applied'
   | 'share.viewed'
   | 'plugin.ran'
+  | 'plugin.enabled'
+  | 'plugin.disabled'
+  | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged';
 // Future (placeholder; not emitted in this PR):
