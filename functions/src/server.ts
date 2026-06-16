@@ -91,7 +91,7 @@ import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
-import { createPhotosV1Router } from './routes/photosV1.js';
+import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
 import {
   createSmartAlbumsLibraryRouter,
   createSmartAlbumsResourceRouter,
@@ -128,7 +128,8 @@ app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums))
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 
-// Photos: soft-delete (Trash) + restore + trashed list (issue #152).
+// Photos: soft-delete (Trash) + restore + trashed list (issue #152),
+// plus keyword tags add/remove + per-library tag enumeration (issue #173).
 // Mounted at both `/v1/photos` (spec) and `/api/v1/photos` (in-product) so
 // hosts can call the documented contract URL while clients keep the
 // `/api` prefix used elsewhere.
@@ -147,6 +148,18 @@ app.use(
   authMiddleware,
   resolveTenant,
   createPhotosV1Router(photosService)
+);
+app.use(
+  '/v1/libraries/:libraryId/tags',
+  authMiddleware,
+  resolveTenant,
+  createLibraryTagsRouter(photosService)
+);
+app.use(
+  '/api/v1/libraries/:libraryId/tags',
+  authMiddleware,
+  resolveTenant,
+  createLibraryTagsRouter(photosService)
 );
 
 // Smart Albums (issue #165). Two mount points:
@@ -188,6 +201,9 @@ const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
 usageRollupConsumer.attach(meteringBus);
 app.locals.meteringBus = meteringBus;
 app.locals.usageDailyStore = usageDailyStore;
+// Photos service participates in the usage rollup for tag mutations
+// (`tagsApplied` counter, issue #173).
+photosService.setUsageBus(meteringBus);
 app.use(
   '/api/v1/tenants',
   authMiddleware,

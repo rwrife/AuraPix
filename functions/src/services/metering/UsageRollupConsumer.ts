@@ -21,6 +21,7 @@ export interface UsageDailyDoc {
   imagesProcessed: number;
   signedUrlsIssued: number;
   editsApplied: number;
+  tagsApplied: number;
   apiCalls: number;
   /** Populated by the scheduled snapshot job; null until first snapshot. */
   storageBytesTotal: number | null;
@@ -49,6 +50,7 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'imagesProcessed',
   'signedUrlsIssued',
   'editsApplied',
+  'tagsApplied',
   'apiCalls',
 ];
 
@@ -69,6 +71,7 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     imagesProcessed: 0,
     signedUrlsIssued: 0,
     editsApplied: 0,
+    tagsApplied: 0,
     apiCalls: 0,
     storageBytesTotal: null,
     appliedEventIds: [],

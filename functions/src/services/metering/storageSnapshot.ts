@@ -68,6 +68,7 @@ export async function snapshotTenantStorage(
         imagesProcessed: 0,
         signedUrlsIssued: 0,
         editsApplied: 0,
+        tagsApplied: 0,
         apiCalls: 0,
         storageBytesTotal: null,
         appliedEventIds: [] as string[],

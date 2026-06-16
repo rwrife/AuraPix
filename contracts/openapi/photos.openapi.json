@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Photos API",
-    "version": "1.0.0",
-    "description": "Soft-delete (Trash) lifecycle for photos. See issue #152."
+    "version": "1.1.0",
+    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) for photos."
   },
   "servers": [
     { "url": "https://api.aurapix.example" }
@@ -19,6 +19,13 @@
             "in": "query",
             "description": "When true, returns only photos currently in Trash.",
             "schema": { "type": "boolean", "default": false }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "Comma-separated list of keyword tags. Photos must contain **all** tags (AND semantics). Tags are normalized (trimmed, lowercased) before matching.",
+            "schema": { "type": "string" },
+            "example": "wedding,print-ready"
           }
         ],
         "responses": {
@@ -30,6 +37,7 @@
               }
             }
           },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
@@ -79,6 +87,60 @@
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
+    },
+    "/v1/photos/{id}/tags": {
+      "post": {
+        "operationId": "updatePhotoTags",
+        "summary": "Add and/or remove keyword tags on a photo",
+        "description": "Idempotent: re-adding a present tag (or removing an absent one) is a no-op. Tags are normalized to lowercase and trimmed; each tag is 1\u201364 chars and a photo can hold at most 50.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TagMutationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated tag list",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TagMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/libraries/{id}/tags": {
+      "get": {
+        "operationId": "listLibraryTags",
+        "summary": "List distinct tags + counts for a library",
+        "description": "Tags are scoped per-library, not per-tenant: different libraries on the same tenant have independent vocabularies. Results are sorted by count desc, then tag asc.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tag vocabulary for the library",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LibraryTagsResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
     }
   },
   "components": {
@@ -93,6 +155,12 @@
           "status": { "type": "string" },
           "trashedAt": { "type": ["string", "null"], "format": "date-time" },
           "trashedBy": { "type": ["string", "null"] },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Normalized keyword tags. May be empty.",
+            "default": []
+          },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         }
@@ -116,6 +184,53 @@
           "trashedBy": { "type": ["string", "null"] }
         }
       },
+      "TagMutationRequest": {
+        "type": "object",
+        "description": "At least one of `add` or `remove` should be supplied; both empty is a no-op.",
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "maxItems": 50
+          },
+          "remove": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "maxItems": 50
+          }
+        }
+      },
+      "TagMutationResponse": {
+        "type": "object",
+        "required": ["id", "tags", "added", "removed"],
+        "properties": {
+          "id": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "added": { "type": "integer", "minimum": 0 },
+          "removed": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "LibraryTagCount": {
+        "type": "object",
+        "required": ["tag", "count"],
+        "properties": {
+          "tag": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "LibraryTagsResponse": {
+        "type": "object",
+        "required": ["tags"],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/LibraryTagCount" }
+          }
+        }
+      },
       "ErrorEnvelope": {
         "type": "object",
         "required": ["error"],
@@ -134,6 +249,14 @@
       }
     },
     "responses": {
+      "BadRequest": {
+        "description": "Invalid request (e.g. malformed tag list, tag too long, cap exceeded)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
       "Unauthorized": {
         "description": "Missing or invalid authentication",
         "content": {
@@ -161,3 +284,4 @@
     }
   }
 }
+
