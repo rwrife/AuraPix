@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Photos API",
-    "version": "1.1.0",
-    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) for photos."
+    "version": "1.2.0",
+    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) + photo export (#174) for photos."
   },
   "servers": [
     { "url": "https://api.aurapix.example" }
@@ -141,6 +141,107 @@
           "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
+    },
+    "/v1/photos/{id}/export": {
+      "post": {
+        "operationId": "exportPhoto",
+        "summary": "Render a photo at a named export preset and return a signed download URL",
+        "description": "Renders the photo to the requested preset (size + JPEG quality), caches the result keyed by `(photoId, recipeHash, preset)`, and returns a short-lived signed URL pointing at `GET /v1/photos/{id}/export/{token}`. Re-using an unchanged recipe + preset returns the cached render with `cacheHit: true`; the metering event is emitted on both cache hits and misses so hosts may audit downloads.\n\nMetering: emits `photo.exported` with `outputBytes` measured from the rendered buffer, and rolls the bytes into the daily `exportBytes` counter exposed at `/v1/tenants/{id}/usage`.\n\nAuth: end-user Firebase token OR host API key. Tenancy is enforced against the photo's owning tenant.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ExportPhotoRequest" },
+              "example": { "preset": "web-large" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Render succeeded; signed URL returned",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExportPhotoResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid `preset` field",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "description": "Photo or preset not found for the caller's tenant",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "409": {
+            "description": "Photo is in the Trash (refuse to export)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/photos/{id}/export/{token}": {
+      "get": {
+        "operationId": "downloadExportedPhoto",
+        "summary": "Stream a previously-issued export render",
+        "description": "Verifies the HMAC-signed token from `POST /v1/photos/{id}/export` and streams the cached JPEG bytes. No additional auth header is required \u2014 the token IS the bearer (same model as the existing signed-URL image serve). Tokens are bound to `(photoId, tenantId, preset, recipeHash)` and expire in 5 minutes; a recipe change after the URL was issued returns 409 so the host can request a fresh render.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Exported JPEG bytes",
+            "content": {
+              "image/jpeg": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is invalid or expired",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "404": {
+            "description": "Photo or preset no longer exists",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "409": {
+            "description": "Edit recipe changed after URL was issued",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -228,6 +329,52 @@
           "tags": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/LibraryTagCount" }
+          }
+        }
+      },
+      "ExportPhotoRequest": {
+        "type": "object",
+        "required": ["preset"],
+        "properties": {
+          "preset": {
+            "type": "string",
+            "description": "Name of a preset configured for the caller's tenant (see `GET /v1/tenants/{id}/export-presets`)."
+          }
+        }
+      },
+      "ExportPhotoResponse": {
+        "type": "object",
+        "required": [
+          "photoId",
+          "preset",
+          "url",
+          "expiresAt",
+          "ttlSeconds",
+          "outputBytes",
+          "outputWidth",
+          "outputHeight",
+          "cacheHit"
+        ],
+        "properties": {
+          "photoId": { "type": "string" },
+          "preset": { "type": "string" },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Short-lived signed download URL pointing at `GET /v1/photos/{id}/export/{token}`."
+          },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "ttlSeconds": { "type": "integer", "minimum": 1 },
+          "outputBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Size of the rendered (or cached) JPEG buffer. Also published on the `photo.exported` metering event."
+          },
+          "outputWidth": { "type": "integer", "minimum": 0 },
+          "outputHeight": { "type": "integer", "minimum": 0 },
+          "cacheHit": {
+            "type": "boolean",
+            "description": "True when the response came from the `(photoId, recipeHash, preset)` cache. The metering event is still emitted; hosts may choose to discount cache hits at billing time."
           }
         }
       },

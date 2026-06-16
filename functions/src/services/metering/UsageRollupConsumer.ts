@@ -23,6 +23,11 @@ export interface UsageDailyDoc {
   editsApplied: number;
   tagsApplied: number;
   apiCalls: number;
+  /**
+   * Bytes egressed via `POST /v1/photos/:id/export` (issue #174). Hosts
+   * use this to bill bandwidth tiers without parsing every event.
+   */
+  exportBytes: number;
   /** Populated by the scheduled snapshot job; null until first snapshot. */
   storageBytesTotal: number | null;
   /** Idempotency: event IDs already applied to this doc. */
@@ -52,6 +57,7 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'editsApplied',
   'tagsApplied',
   'apiCalls',
+  'exportBytes',
 ];
 
 export function isoDateUtc(input: string | Date | undefined): string {
@@ -73,6 +79,7 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     editsApplied: 0,
     tagsApplied: 0,
     apiCalls: 0,
+    exportBytes: 0,
     storageBytesTotal: null,
     appliedEventIds: [],
     updatedAt: new Date(0).toISOString(),

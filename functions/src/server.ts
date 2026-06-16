@@ -92,6 +92,8 @@ import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createPhotoExportRouter } from './routes/photoExportV1.js';
+import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
 import {
   createSmartAlbumsLibraryRouter,
   createSmartAlbumsResourceRouter,
@@ -149,6 +151,28 @@ app.use(
   resolveTenant,
   createPhotosV1Router(photosService)
 );
+// Photo export (issue #174). The GET handler verifies its own HMAC token,
+// the POST handler accepts either a Firebase user token OR a host API
+// key — so the router is composed with optional + host-key auth. The
+// usage bus is bound below (after the metering wiring is created).
+const photoExportHandle = createPhotoExportRouter({
+  dataAdapter,
+  storageAdapter,
+});
+app.use(
+  '/v1/photos',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  resolveTenant,
+  photoExportHandle.router
+);
+app.use(
+  '/api/v1/photos',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  resolveTenant,
+  photoExportHandle.router
+);
 app.use(
   '/v1/libraries/:libraryId/tags',
   authMiddleware,
@@ -204,6 +228,8 @@ app.locals.usageDailyStore = usageDailyStore;
 // Photos service participates in the usage rollup for tag mutations
 // (`tagsApplied` counter, issue #173).
 photosService.setUsageBus(meteringBus);
+// Photo export endpoint emits the `exportBytes` rollup counter (#174).
+photoExportHandle.setUsageBus(meteringBus);
 app.use(
   '/api/v1/tenants',
   authMiddleware,
@@ -253,6 +279,26 @@ app.use(
   hostApiKeyAuth,
   optionalAuthMiddleware,
   createTenantPluginsRouter({ dataAdapter })
+);
+
+// Per-tenant export presets (issue #174). GET is user-callable so the
+// in-product export menu can render; PUT/DELETE require a host API key
+// with the `export-presets.write` scope. Mounted at both `/v1` (spec
+// path used by hosts) and `/api/v1` (in-product clients).
+const tenantExportPresetsRouter = createTenantExportPresetsRouter({
+  dataAdapter,
+});
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantExportPresetsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantExportPresetsRouter
 );
 
 // Error handlers (must be last)

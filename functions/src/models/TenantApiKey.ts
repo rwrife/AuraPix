@@ -19,7 +19,9 @@ export type TenantApiKeyScope =
   | 'tenants.read'
   | 'webhooks.write'
   | 'plugins.read'
-  | 'plugins.write';
+  | 'plugins.write'
+  | 'export-presets.read'
+  | 'export-presets.write';
 
 export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'usage.read',
@@ -27,6 +29,8 @@ export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'webhooks.write',
   'plugins.read',
   'plugins.write',
+  'export-presets.read',
+  'export-presets.write',
 ] as const;
 
 export interface TenantApiKeyRecord {

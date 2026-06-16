@@ -20,6 +20,7 @@ export type MeteringEventType =
   | 'photo.trashed'
   | 'photo.purged'
   | 'photo.tagged'
+  | 'photo.exported'
   | 'smart_album.created'
   | 'smart_album.deleted'
   | 'smart_album.materialized';
