@@ -41,6 +41,14 @@ export interface WebhookDeliveryRecord {
   updatedAt: string;
   /** ISO-8601 expiry for Firestore TTL (30 days from sentAt). */
   expiresAt: string;
+  /**
+   * Fingerprints (truncated SHA-256) of the signing secret(s) used to
+   * sign this batch. During a rotation grace window the sink signs with
+   * BOTH secrets; this array contains an entry per signature value in
+   * the order they appear in `X-AuraPix-Signature` (`new` first, `old`
+   * second). Empty when no per-tenant fingerprints are available.
+   */
+  signedFingerprints?: string[];
 }
 
 export interface WebhookDeliveryListOptions {

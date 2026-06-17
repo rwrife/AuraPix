@@ -34,6 +34,12 @@ export interface UsageDailyDoc {
    * `docs/features/metering-events.md`.
    */
   activeUsers: number;
+  /**
+   * Number of requests rejected by the per-tenant rate limiter on this day
+   * (issue #154). Aggregated from sampled `rate_limit.exceeded` events so
+   * hosts can chart abuse without consuming the webhook stream directly.
+   */
+  rateLimited: number;
   /** Populated by the scheduled snapshot job; null until first snapshot. */
   storageBytesTotal: number | null;
   /** Idempotency: event IDs already applied to this doc. */
@@ -65,6 +71,7 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'apiCalls',
   'exportBytes',
   'activeUsers',
+  'rateLimited',
 ];
 
 export function isoDateUtc(input: string | Date | undefined): string {
@@ -88,6 +95,7 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     apiCalls: 0,
     exportBytes: 0,
     activeUsers: 0,
+    rateLimited: 0,
     storageBytesTotal: null,
     appliedEventIds: [],
     updatedAt: new Date(0).toISOString(),

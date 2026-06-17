@@ -60,6 +60,20 @@
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
+          },
+          "429": {
+            "description": "Per-tenant API rate limit exceeded (issue #154). Token-bucket keyed by `tenantId`, applied to all tenant-scoped routes after `resolveTenant`. The response sets the `Retry-After` header (whole seconds) and emits a sampled `rate_limit.exceeded` metering event (\u22641/sec/tenant) which is rolled up into the `rateLimited` counter on the daily usage doc. Defaults: `RATE_LIMIT_RPS=20`, `RATE_LIMIT_BURST=60`; host-key traffic uses `RATE_LIMIT_HOST_RPS=100`. A `tenants_config/{tenantId}` doc may override `rateLimit.rps`/`rateLimit.burst` and takes effect on the next request (no restart).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds the client should wait before retrying. Always \u2265 1.",
+                "schema": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" }
+              }
+            }
           }
         }
       }
@@ -79,6 +93,7 @@
           "editsApplied",
           "apiCalls",
           "activeUsers",
+          "rateLimited",
           "storageBytesTotal",
           "updatedAt"
         ],
@@ -98,6 +113,10 @@
             "type": "integer",
             "minimum": 0,
             "description": "Distinct end-users active for this tenant on this UTC day (seat-based billing signal). Driven by `user.active` metering events; host-API-key (service-to-service) traffic is excluded. Zero-filled when no activity was recorded."
+          "rateLimited": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Count of requests rejected by the per-tenant rate limiter on this day (issue #154). Aggregated from sampled `rate_limit.exceeded` metering events (sampled to \u22641/sec/tenant). Lets a host chart abuse without consuming the webhook stream."
           },
           "storageBytesTotal": {
             "type": ["integer", "null"],
@@ -117,6 +136,40 @@
           "items": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/UsageDailyDoc" }
+          }
+        }
+      },
+      "RateLimitErrorResponse": {
+        "type": "object",
+        "required": ["error", "code", "statusCode", "retryAfterSeconds"],
+        "description": "Stable error body returned with 429 responses by the per-tenant rate limiter (issue #154). Distinct from the standard ErrorResponse to keep the limiter shape easy to pattern-match in client SDKs.",
+        "properties": {
+          "error": { "type": "string", "const": "Rate limit exceeded" },
+          "code": { "type": "string", "const": "RATE_LIMIT_EXCEEDED" },
+          "statusCode": { "type": "integer", "const": 429 },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Same value as the `Retry-After` response header."
+          }
+        }
+      },
+      "RateLimitExceededEvent": {
+        "type": "object",
+        "description": "Metering event emitted when the per-tenant token-bucket limiter rejects a request. Sampled to at most one event per second per tenant to avoid event-bus amplification on a sustained spike. Hosts that prefer aggregate counters can read `rateLimited` from the daily usage rollup instead of consuming this event stream.",
+        "required": ["tenantId", "counter", "value", "meta"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "counter": { "type": "string", "const": "rateLimited" },
+          "value": { "type": "integer", "const": 1 },
+          "meta": {
+            "type": "object",
+            "required": ["event", "route", "principal"],
+            "properties": {
+              "event": { "type": "string", "const": "rate_limit.exceeded" },
+              "route": { "type": "string" },
+              "principal": { "type": "string", "enum": ["user", "hostKey"] }
+            }
           }
         }
       },

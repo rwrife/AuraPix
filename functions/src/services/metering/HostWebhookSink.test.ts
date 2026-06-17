@@ -274,3 +274,156 @@ describe('HostWebhookSink + WebhookDeliveryStore (issue #144)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('HostWebhookSink + per-tenant secrets (issue #161 dual-sign)', () => {
+  function makeEvent(
+    overrides: Partial<NormalizedMeteringEvent> = {}
+  ): NormalizedMeteringEvent {
+    return {
+      tenantId: 't1',
+      type: 'upload.accepted',
+      count: 1,
+      occurredAt: '2025-01-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('signs with the tenant secret when a resolver is configured', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 } as Response);
+    const sink = new HostWebhookSink({
+      webhookUrl: 'https://example.com/hook',
+      signingSecret: 'process-wide-fallback',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      secretsResolver: async (tenantId) => {
+        expect(tenantId).toBe('t1');
+        return {
+          current: { secret: 'tenant-current-secret', fingerprint: 'fpnew0000000000a' },
+        };
+      },
+    });
+
+    await sink.deliver([makeEvent()]);
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    const body = init.body as string;
+    const expected = computeWebhookSignature(body, 'tenant-current-secret');
+    expect(init.headers['X-AuraPix-Signature']).toBe(expected);
+    // Fallback secret must NOT appear in the header at all.
+    const fallback = computeWebhookSignature(body, 'process-wide-fallback');
+    expect(init.headers['X-AuraPix-Signature']).not.toContain(fallback);
+  });
+
+  it('falls back to the process-wide secret when the resolver returns null', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 } as Response);
+    const sink = new HostWebhookSink({
+      webhookUrl: 'https://example.com/hook',
+      signingSecret: 'process-wide-fallback',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      secretsResolver: async () => null,
+    });
+
+    await sink.deliver([makeEvent()]);
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    const body = init.body as string;
+    const expected = computeWebhookSignature(body, 'process-wide-fallback');
+    expect(init.headers['X-AuraPix-Signature']).toBe(expected);
+  });
+
+  it('falls back to the process-wide secret when the resolver throws', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 } as Response);
+    const sink = new HostWebhookSink({
+      webhookUrl: 'https://example.com/hook',
+      signingSecret: 'process-wide-fallback',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      secretsResolver: async () => {
+        throw new Error('boom');
+      },
+    });
+
+    await sink.deliver([makeEvent()]);
+    const [, init] = fetchImpl.mock.calls[0]!;
+    const body = init.body as string;
+    expect(init.headers['X-AuraPix-Signature']).toBe(
+      computeWebhookSignature(body, 'process-wide-fallback')
+    );
+  });
+
+  it('sends comma-separated dual signatures inside the rotation grace window', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 } as Response);
+    const store = new InMemoryWebhookDeliveryStore();
+    const sink = new HostWebhookSink({
+      webhookUrl: 'https://example.com/hook',
+      signingSecret: 'process-wide-fallback',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      deliveryStore: store,
+      batchIdFactory: () => 'batch-dual',
+      secretsResolver: async () => ({
+        current: { secret: 'new-secret', fingerprint: 'fpnew0000000000a' },
+        previous: { secret: 'old-secret', fingerprint: 'fpold0000000000b' },
+      }),
+    });
+
+    await sink.deliver([makeEvent()]);
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    const body = init.body as string;
+    const sigNew = computeWebhookSignature(body, 'new-secret');
+    const sigOld = computeWebhookSignature(body, 'old-secret');
+    // Stripe-style: `v1=<new>,v1=<old>` (new first, old second).
+    expect(init.headers['X-AuraPix-Signature']).toBe(`${sigNew},${sigOld}`);
+
+    const rec = await store.get('t1', 'batch-dual');
+    expect(rec!.signedFingerprints).toEqual([
+      'fpnew0000000000a',
+      'fpold0000000000b',
+    ]);
+  });
+
+  it('drops back to single-signature after the previous secret is purged', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 } as Response);
+    const store = new InMemoryWebhookDeliveryStore();
+    let activePreviousSecret: { secret: string; fingerprint: string } | null = {
+      secret: 'old-secret',
+      fingerprint: 'fpold0000000000b',
+    };
+    const sink = new HostWebhookSink({
+      webhookUrl: 'https://example.com/hook',
+      signingSecret: 'process-wide-fallback',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      deliveryStore: store,
+      batchIdFactory: () => `batch-${fetchImpl.mock.calls.length + 1}`,
+      secretsResolver: async () => ({
+        current: { secret: 'new-secret', fingerprint: 'fpnew0000000000a' },
+        ...(activePreviousSecret ? { previous: activePreviousSecret } : {}),
+      }),
+    });
+
+    // First delivery: inside grace window -> two signatures.
+    await sink.deliver([makeEvent()]);
+    const firstSig = (fetchImpl.mock.calls[0]![1] as { headers: Record<string, string> })
+      .headers['X-AuraPix-Signature'];
+    expect(firstSig.split(',').length).toBe(2);
+
+    // Simulate the purge job removing the previous secret.
+    activePreviousSecret = null;
+
+    await sink.deliver([makeEvent()]);
+    const secondSig = (fetchImpl.mock.calls[1]![1] as { headers: Record<string, string> })
+      .headers['X-AuraPix-Signature'];
+    expect(secondSig.split(',').length).toBe(1);
+    // Verify it's the new-secret signature only.
+    const body2 = (fetchImpl.mock.calls[1]![1] as { body: string }).body;
+    expect(secondSig).toBe(computeWebhookSignature(body2, 'new-secret'));
+  });
+});
