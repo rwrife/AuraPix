@@ -90,6 +90,23 @@ export interface Photo {
   thumbnailsOutdated: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Soft-delete (Trash) timestamp. When non-null, the photo is in the
+   * tenant's trash and is hidden from default list queries until either
+   * restored or hard-deleted by the purge job. See issue #152.
+   */
+  trashedAt?: string | null;
+  /**
+   * User id (or tenant subject) that initiated the soft-delete.
+   */
+  trashedBy?: string | null;
+  /**
+   * Freeform keyword tags (Lightroom-style). Normalized lowercase, trimmed,
+   * each entry 1–64 chars. Capped at 50 unique tags per photo. Optional
+   * for backwards compatibility with photos written before issue #173;
+   * treat a missing value as an empty array.
+   */
+  tags?: string[];
 }
 
 export function createPhotoDocument(
@@ -124,5 +141,8 @@ export function createPhotoDocument(
     thumbnailsOutdated: false,
     createdAt: now,
     updatedAt: now,
+    trashedAt: null,
+    trashedBy: null,
+    tags: [],
   };
 }

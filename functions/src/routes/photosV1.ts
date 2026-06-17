@@ -1,146 +1,214 @@
 /**
- * Photo list endpoint (v1).
+ * /v1/photos — Trash (soft-delete) + tag mutation endpoints.
  *
- * Adds `?sort=capturedAt` / `?sort=-capturedAt` (issue #151) with a graceful
- * fallback to `createdAt` (upload time) when a photo has no EXIF capture date.
+ * Routes:
+ *   DELETE /v1/photos/:id          → soft-delete (sets trashedAt)            (#152)
+ *   POST   /v1/photos/:id/restore  → clears trashedAt                        (#152)
+ *   GET    /v1/photos?trashed=true → list trashed photos for caller's tenant (#152)
+ *   GET    /v1/photos              → list active photos for caller's tenant  (#152)
+ *   GET    /v1/photos?tags=a,b     → narrow list by tags (AND semantics)     (#173)
+ *   POST   /v1/photos/:id/tags     → add/remove tags on a photo              (#173)
  */
-import { Router } from 'express';
-import type { DataAdapter } from '../adapters/data/DataAdapter.js';
-import type { Photo } from '../models/Photo.js';
+import { randomUUID } from 'node:crypto';
+import { Router, type Request, type Response } from 'express';
+import {
+  PhotoNotFoundError,
+  type PhotosService,
+} from '../domain/photos/PhotosService.js';
+import {
+  CrossTenantAccessError,
+  DEFAULT_TENANT_ID,
+  type TenantId,
+} from '../domain/tenant/Tenant.js';
+import {
+  parseTagsQuery,
+  TagValidationError,
+} from '../domain/photos/tagNormalization.js';
 
-const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
-
-type SortKey = 'capturedAt' | 'createdAt' | 'updatedAt';
-
-function parseSort(raw: unknown): { key: SortKey; order: 'asc' | 'desc' } {
-  const value = typeof raw === 'string' && raw.trim() ? raw.trim() : '-createdAt';
-  const order: 'asc' | 'desc' = value.startsWith('-') ? 'desc' : 'asc';
-  const keyRaw = value.replace(/^[+-]/, '');
-  const allowed: SortKey[] = ['capturedAt', 'createdAt', 'updatedAt'];
-  if (!(allowed as string[]).includes(keyRaw)) {
-    throw new Error(
-      `sort must be one of capturedAt, createdAt, updatedAt (optionally prefixed with '-')`
-    );
-  }
-  return { key: keyRaw as SortKey, order };
+function sendError(
+  res: Response,
+  status: number,
+  code: string,
+  message: string,
+  details: Record<string, unknown> | null = null
+): void {
+  res.status(status).json({
+    error: {
+      code,
+      message,
+      requestId: randomUUID(),
+      details,
+    },
+  });
 }
 
-function parsePositiveInt(value: unknown, fallback: number, key: string): number {
-  if (value === undefined) return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${key} must be a positive integer`);
-  }
-  return parsed;
+function callerTenant(req: Request): TenantId {
+  return (req.tenantId as TenantId | undefined) ?? DEFAULT_TENANT_ID;
 }
 
-/**
- * Resolve the sort value for a photo. Falls back to `createdAt` (upload time)
- * when `capturedAt` is requested but missing — preserves stable ordering for
- * photos imported without EXIF dates.
- */
-function sortValue(photo: Photo, key: SortKey): string {
-  if (key === 'capturedAt') {
-    return photo.exif?.capturedAt || photo.metadata?.takenAt || photo.createdAt;
-  }
-  return key === 'updatedAt' ? photo.updatedAt : photo.createdAt;
+function callerActor(req: Request): string | null {
+  return req.user?.uid ?? null;
 }
 
-export function createPhotosV1Router(dataAdapter: DataAdapter): Router {
+export function createPhotosV1Router(photos: PhotosService): Router {
   const router = Router();
 
-  /**
-   * GET /api/v1/photos?libraryId=...&sort=capturedAt|-capturedAt
-   */
   router.get('/', async (req, res, next) => {
     try {
       if (!req.user) {
-        res.status(401).json({
-          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
-        });
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
         return;
       }
-
-      const libraryId =
-        typeof req.query.libraryId === 'string' ? req.query.libraryId.trim() : '';
-      if (!libraryId) {
-        res.status(400).json({
-          error: {
-            code: 'INVALID_QUERY',
-            message: 'libraryId query parameter is required',
-          },
-        });
-        return;
-      }
-
-      let sort: { key: SortKey; order: 'asc' | 'desc' };
-      let page: number;
-      let pageSize: number;
+      const trashed = req.query.trashed === 'true' || req.query.trashed === '1';
+      let tags: string[] = [];
       try {
-        sort = parseSort(req.query.sort);
-        page = parsePositiveInt(req.query.page, DEFAULT_PAGE, 'page');
-        pageSize = Math.min(
-          parsePositiveInt(req.query.pageSize, DEFAULT_PAGE_SIZE, 'pageSize'),
-          MAX_PAGE_SIZE
-        );
+        tags = parseTagsQuery(req.query.tags);
       } catch (err) {
-        res.status(400).json({
-          error: {
-            code: 'INVALID_QUERY',
-            message: err instanceof Error ? err.message : 'Invalid query',
-          },
-        });
-        return;
+        if (err instanceof TagValidationError) {
+          sendError(res, 400, err.code, err.message);
+          return;
+        }
+        throw err;
       }
-
-      const photos = await dataAdapter.queryData<Photo>('photos', [
-        { field: 'libraryId', operator: '==', value: libraryId },
-      ]);
-
-      // Tenant scoping: never leak photos across tenants. If the request has a
-      // resolved tenantId, filter; otherwise rely on the underlying adapter's
-      // own scoping (LocalJsonData / Firestore).
-      const requesterTenantId = (req.user as { tenantId?: string }).tenantId;
-      const scoped = requesterTenantId
-        ? photos.filter(
-            (p) => !p.tenantId || p.tenantId === requesterTenantId
-          )
-        : photos;
-
-      const sorted = [...scoped].sort((a, b) => {
-        const left = sortValue(a, sort.key);
-        const right = sortValue(b, sort.key);
-        const cmp = left < right ? -1 : left > right ? 1 : 0;
-        return sort.order === 'asc' ? cmp : -cmp;
-      });
-
-      const total = sorted.length;
-      const start = (page - 1) * pageSize;
-      const paged = sorted.slice(start, start + pageSize);
-
+      const items = tags.length
+        ? await photos.list(callerTenant(req), { trashed, tags })
+        : await photos.list(callerTenant(req), { trashed });
       res.json({
-        photos: paged.map((p) => ({
+        photos: items.map((p) => ({
           id: p.id,
           libraryId: p.libraryId,
           originalName: p.originalName,
           status: p.status,
-          metadata: p.metadata,
-          exif: p.exif,
+          trashedAt: p.trashedAt ?? null,
+          trashedBy: p.trashedBy ?? null,
+          tags: p.tags ?? [],
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
         })),
-        pagination: {
-          page,
-          pageSize,
-          total,
-          hasNextPage: start + pageSize < total,
-          sort: `${sort.order === 'desc' ? '-' : ''}${sort.key}`,
-        },
       });
-    } catch (error) {
-      next(error);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/:id', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
+        return;
+      }
+      const photo = await photos.softDelete(
+        req.params.id,
+        callerTenant(req),
+        callerActor(req)
+      );
+      res.status(200).json({
+        id: photo.id,
+        trashedAt: photo.trashedAt ?? null,
+        trashedBy: photo.trashedBy ?? null,
+      });
+    } catch (err) {
+      if (err instanceof PhotoNotFoundError) {
+        sendError(res, 404, 'PHOTO_NOT_FOUND', err.message);
+        return;
+      }
+      if (err instanceof CrossTenantAccessError) {
+        sendError(res, 403, err.code, err.message);
+        return;
+      }
+      next(err);
+    }
+  });
+
+  router.post('/:id/restore', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
+        return;
+      }
+      const photo = await photos.restore(req.params.id, callerTenant(req));
+      res.status(200).json({
+        id: photo.id,
+        trashedAt: photo.trashedAt ?? null,
+        trashedBy: photo.trashedBy ?? null,
+      });
+    } catch (err) {
+      if (err instanceof PhotoNotFoundError) {
+        sendError(res, 404, 'PHOTO_NOT_FOUND', err.message);
+        return;
+      }
+      if (err instanceof CrossTenantAccessError) {
+        sendError(res, 403, err.code, err.message);
+        return;
+      }
+      next(err);
+    }
+  });
+
+  router.post('/:id/tags', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
+        return;
+      }
+      const body = (req.body ?? {}) as { add?: unknown; remove?: unknown };
+      const { photo, mutation } = await photos.updateTags(
+        req.params.id,
+        callerTenant(req),
+        callerActor(req),
+        body
+      );
+      res.status(200).json({
+        id: photo.id,
+        tags: photo.tags ?? [],
+        added: mutation.added,
+        removed: mutation.removed,
+      });
+    } catch (err) {
+      if (err instanceof PhotoNotFoundError) {
+        sendError(res, 404, 'PHOTO_NOT_FOUND', err.message);
+        return;
+      }
+      if (err instanceof CrossTenantAccessError) {
+        sendError(res, 403, err.code, err.message);
+        return;
+      }
+      if (err instanceof TagValidationError) {
+        sendError(res, 400, err.code, err.message);
+        return;
+      }
+      next(err);
+    }
+  });
+
+  return router;
+}
+
+export function createLibraryTagsRouter(photos: PhotosService): Router {
+  const router = Router({ mergeParams: true });
+
+  router.get('/', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        sendError(res, 401, 'AUTH_REQUIRED', 'Authentication required');
+        return;
+      }
+      const libraryId = (req.params as { libraryId?: string }).libraryId ?? '';
+      if (!libraryId) {
+        sendError(res, 400, 'LIBRARY_ID_REQUIRED', 'libraryId path parameter is required');
+        return;
+      }
+      const items = await photos.listLibraryTags(
+        libraryId,
+        callerTenant(req)
+      );
+      res.json({ tags: items });
+    } catch (err) {
+      if (err instanceof CrossTenantAccessError) {
+        sendError(res, 403, err.code, err.message);
+        return;
+      }
+      next(err);
     }
   });
 

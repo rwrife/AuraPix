@@ -67,7 +67,7 @@ if (storageConfig.mode === 'firebase') {
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
 
-const domainModules = createDomainModules();
+const domainModules = createDomainModules({ dataAdapter });
 
 // Health check
 app.get('/health', (req, res) => {
@@ -86,11 +86,21 @@ import editsRouter from './routes/edits.js';
 import { createSigningRouter } from './routes/signing.js';
 import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
-import { createPhotosV1Router } from './routes/photosV1.js';
+import { createPhotosListV1Router } from './routes/photosListV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
+import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createPhotoExportRouter } from './routes/photoExportV1.js';
+import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
+import {
+  createSmartAlbumsLibraryRouter,
+  createSmartAlbumsResourceRouter,
+} from './routes/smartAlbumsV1.js';
+import { PhotosService } from './domain/photos/PhotosService.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
@@ -119,8 +129,94 @@ app.use('/edits', authMiddleware, editsRouter);
 app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
-app.use('/api/v1/photos', authMiddleware, createPhotosV1Router(dataAdapter));
+app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+
+// Photos: soft-delete (Trash) + restore + trashed list (issue #152),
+// plus keyword tags add/remove + per-library tag enumeration (issue #173).
+// Mounted at both `/v1/photos` (spec) and `/api/v1/photos` (in-product) so
+// hosts can call the documented contract URL while clients keep the
+// `/api` prefix used elsewhere.
+const photosService = new PhotosService({
+  dataAdapter,
+  storageAdapter,
+});
+app.use(
+  '/v1/photos',
+  authMiddleware,
+  resolveTenant,
+  createPhotosV1Router(photosService)
+);
+app.use(
+  '/api/v1/photos',
+  authMiddleware,
+  resolveTenant,
+  createPhotosV1Router(photosService)
+);
+// Photo export (issue #174). The GET handler verifies its own HMAC token,
+// the POST handler accepts either a Firebase user token OR a host API
+// key — so the router is composed with optional + host-key auth. The
+// usage bus is bound below (after the metering wiring is created).
+const photoExportHandle = createPhotoExportRouter({
+  dataAdapter,
+  storageAdapter,
+});
+app.use(
+  '/v1/photos',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  resolveTenant,
+  photoExportHandle.router
+);
+app.use(
+  '/api/v1/photos',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  resolveTenant,
+  photoExportHandle.router
+);
+app.use(
+  '/v1/libraries/:libraryId/tags',
+  authMiddleware,
+  resolveTenant,
+  createLibraryTagsRouter(photosService)
+);
+app.use(
+  '/api/v1/libraries/:libraryId/tags',
+  authMiddleware,
+  resolveTenant,
+  createLibraryTagsRouter(photosService)
+);
+
+// Smart Albums (issue #165). Two mount points:
+//   - /v1/libraries/:libraryId/smart-albums (list/create)
+//   - /v1/smart-albums/:id (get/update/delete/materialize)
+// Mirrored under /api/v1/* for in-product clients.
+const smartAlbumsService = domainModules.smartAlbums;
+app.use(
+  '/v1/libraries/:libraryId/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsLibraryRouter(smartAlbumsService)
+);
+app.use(
+  '/api/v1/libraries/:libraryId/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsLibraryRouter(smartAlbumsService)
+);
+app.use(
+  '/v1/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsResourceRouter(smartAlbumsService)
+);
+app.use(
+  '/api/v1/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsResourceRouter(smartAlbumsService)
+);
 
 // --- Metering / usage rollups (issue #133) ---
 // In-memory wiring suitable for local mode; Firebase mode will swap in a
@@ -131,6 +227,11 @@ const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
 usageRollupConsumer.attach(meteringBus);
 app.locals.meteringBus = meteringBus;
 app.locals.usageDailyStore = usageDailyStore;
+// Photos service participates in the usage rollup for tag mutations
+// (`tagsApplied` counter, issue #173).
+photosService.setUsageBus(meteringBus);
+// Photo export endpoint emits the `exportBytes` rollup counter (#174).
+photoExportHandle.setUsageBus(meteringBus);
 app.use(
   '/api/v1/tenants',
   authMiddleware,
@@ -169,6 +270,37 @@ app.use(
     return authMiddleware(req, res, next);
   },
   brandingRouter
+);
+
+// Per-tenant plugin allowlist (issue #166).
+// Host-API-key only — mounted under `/api/v1/tenants/:tenantId/plugins...`.
+// The `tenantPluginsV1` router enforces auth/scope itself; we still chain
+// the host-key middleware so `req.tenant` is populated when present.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  createTenantPluginsRouter({ dataAdapter })
+);
+
+// Per-tenant export presets (issue #174). GET is user-callable so the
+// in-product export menu can render; PUT/DELETE require a host API key
+// with the `export-presets.write` scope. Mounted at both `/v1` (spec
+// path used by hosts) and `/api/v1` (in-product clients).
+const tenantExportPresetsRouter = createTenantExportPresetsRouter({
+  dataAdapter,
+});
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantExportPresetsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantExportPresetsRouter
 );
 
 // Error handlers (must be last)
