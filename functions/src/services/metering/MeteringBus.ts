@@ -12,6 +12,8 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'quota.exceeded'
+  | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
   // Tenant offboarding lifecycle (issue #155). After `tenant.deleted` is
@@ -25,6 +27,7 @@ export type MeteringEventType =
   | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
+  | 'webhook.secret_rotated'
   | 'photo.tagged'
   | 'photo.exported'
   | 'smart_album.created'
