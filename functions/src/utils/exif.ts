@@ -69,6 +69,86 @@ export interface ExifData {
 }
 
 /**
+ * Normalized EXIF summary persisted at the top level of a photo document.
+ *
+ * This is a small, stable subset suitable for filtering / sorting and
+ * host-side billing hooks. The full raw `ExifData` continues to live under
+ * `photo.metadata.exif`.
+ */
+export interface NormalizedExif {
+  /** ISO-8601 capture timestamp (UTC). */
+  capturedAt?: string;
+  /** Camera body, e.g. 'Sony ILCE-7M4'. */
+  camera?: string;
+  /** Lens, e.g. 'FE 24-70mm F2.8 GM'. */
+  lens?: string;
+  iso?: number;
+  fNumber?: number;
+  /** Exposure time in seconds (e.g. 0.008 for 1/125). */
+  exposureTimeSec?: number;
+  /** Focal length in millimeters. */
+  focalLengthMm?: number;
+  /** Image width in pixels. */
+  widthPx?: number;
+  /** Image height in pixels. */
+  heightPx?: number;
+  /** EXIF orientation (1-8). */
+  orientation?: number;
+}
+
+/**
+ * Build the small, stable normalized EXIF summary from a (raw) ExifData blob
+ * plus the resolved pixel dimensions.
+ *
+ * Returns `undefined` if there is nothing useful to persist.
+ */
+export function buildNormalizedExif(
+  exif: ExifData | null | undefined,
+  dims?: { widthPx?: number; heightPx?: number }
+): NormalizedExif | undefined {
+  const camera =
+    joinNonEmpty([exif?.cameraMake, exif?.cameraModel]) || undefined;
+  const lens =
+    joinNonEmpty([exif?.lensMake, exif?.lensModel]) || undefined;
+
+  const summary: NormalizedExif = {
+    capturedAt: exif?.takenAt,
+    camera,
+    lens,
+    iso: typeof exif?.iso === 'number' ? exif.iso : undefined,
+    fNumber: typeof exif?.fNumber === 'number' ? exif.fNumber : undefined,
+    exposureTimeSec:
+      typeof exif?.exposureTime === 'number' ? exif.exposureTime : undefined,
+    focalLengthMm:
+      typeof exif?.focalLength === 'number' ? exif.focalLength : undefined,
+    widthPx: dims?.widthPx && dims.widthPx > 0 ? dims.widthPx : undefined,
+    heightPx: dims?.heightPx && dims.heightPx > 0 ? dims.heightPx : undefined,
+    orientation:
+      typeof exif?.orientation === 'number' ? exif.orientation : undefined,
+  };
+
+  const hasAny = Object.values(summary).some((v) => v !== undefined);
+  return hasAny ? summary : undefined;
+}
+
+function joinNonEmpty(parts: Array<string | undefined>): string {
+  const seen: string[] = [];
+  for (const part of parts) {
+    if (typeof part !== 'string') continue;
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    // Avoid duplicates like "Canon Canon EOS R5" when Make is already in Model.
+    if (seen.length && trimmed.toLowerCase().startsWith(seen.join(' ').toLowerCase())) {
+      seen.length = 0;
+      seen.push(trimmed);
+      continue;
+    }
+    seen.push(trimmed);
+  }
+  return seen.join(' ').trim();
+}
+
+/**
  * Extract comprehensive EXIF data from image buffer
  */
 export async function extractExifData(

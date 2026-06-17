@@ -86,6 +86,7 @@ import editsRouter from './routes/edits.js';
 import { createSigningRouter } from './routes/signing.js';
 import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
+import { createPhotosListV1Router } from './routes/photosListV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
@@ -129,6 +130,7 @@ app.use('/edits', authMiddleware, editsRouter);
 app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
+app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
