@@ -12,6 +12,10 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'bulk.batch'
+  | 'user.active'
+  | 'user.provisioned'
+  | 'user.revoked'
   | 'quota.exceeded'
   | 'quota.warning'
   | 'share.viewed'
@@ -22,6 +26,7 @@ export type MeteringEventType =
   | 'tenant.export.requested'
   | 'tenant.export.completed'
   | 'tenant.deleted'
+  | 'user.active'
   | 'plugin.enabled'
   | 'plugin.disabled'
   | 'plugin.blocked'
@@ -33,8 +38,6 @@ export type MeteringEventType =
   | 'smart_album.created'
   | 'smart_album.deleted'
   | 'smart_album.materialized';
-// Future (placeholder; not emitted in this PR):
-//   | 'user.active'
 
 export interface MeteringEvent {
   /**
