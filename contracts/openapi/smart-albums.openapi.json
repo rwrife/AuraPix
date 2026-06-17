@@ -1,0 +1,327 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Smart Albums API",
+    "version": "1.0.0",
+    "description": "Smart Albums — saved filter queries that materialize on read. See issue #165."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/v1/libraries/{libraryId}/smart-albums": {
+      "get": {
+        "operationId": "listSmartAlbums",
+        "summary": "List smart albums in a library",
+        "parameters": [
+          { "name": "libraryId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Smart albums for the library",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ListSmartAlbumsResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "createSmartAlbum",
+        "summary": "Create a smart album",
+        "parameters": [
+          { "name": "libraryId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateSmartAlbumRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Smart album created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SmartAlbumResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": {
+            "description": "Per-library smart album cap reached.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/smart-albums/{id}": {
+      "get": {
+        "operationId": "getSmartAlbum",
+        "summary": "Get a smart album",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Smart album metadata",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SmartAlbumResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "operationId": "updateSmartAlbum",
+        "summary": "Rename or update a smart album's filter",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateSmartAlbumRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SmartAlbumResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSmartAlbum",
+        "summary": "Delete a smart album",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/smart-albums/{id}/photos": {
+      "get": {
+        "operationId": "materializeSmartAlbum",
+        "summary": "Materialize a smart album by re-running its filter against photos",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } },
+          { "name": "pageToken", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of photos matching the saved filter",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MaterializeSmartAlbumResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SmartAlbumFilter": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rating": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "gte": { "type": "integer", "minimum": 0, "maximum": 5 },
+              "lte": { "type": "integer", "minimum": 0, "maximum": 5 }
+            }
+          },
+          "flag": { "type": "string", "enum": ["pick", "reject"] },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "minItems": 1,
+            "maxItems": 50
+          },
+          "capturedBetween": {
+            "type": "array",
+            "items": { "type": "string", "format": "date-time" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "mimeTypes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "minItems": 1,
+            "maxItems": 50
+          }
+        }
+      },
+      "SmartAlbum": {
+        "type": "object",
+        "required": ["id", "tenantId", "libraryId", "ownerId", "name", "filter", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "libraryId": { "type": "string" },
+          "ownerId": { "type": "string" },
+          "name": { "type": "string" },
+          "filter": { "$ref": "#/components/schemas/SmartAlbumFilter" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ListSmartAlbumsResponse": {
+        "type": "object",
+        "required": ["smartAlbums"],
+        "properties": {
+          "smartAlbums": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SmartAlbum" }
+          }
+        }
+      },
+      "CreateSmartAlbumRequest": {
+        "type": "object",
+        "required": ["name", "filter"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "filter": { "$ref": "#/components/schemas/SmartAlbumFilter" }
+        }
+      },
+      "UpdateSmartAlbumRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "filter": { "$ref": "#/components/schemas/SmartAlbumFilter" }
+        }
+      },
+      "SmartAlbumResponse": {
+        "type": "object",
+        "required": ["smartAlbum"],
+        "properties": {
+          "smartAlbum": { "$ref": "#/components/schemas/SmartAlbum" }
+        }
+      },
+      "PhotoSummary": {
+        "type": "object",
+        "required": ["id", "libraryId", "originalName", "status", "metadata", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "libraryId": { "type": "string" },
+          "originalName": { "type": "string" },
+          "status": { "type": "string" },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "width": { "type": ["integer", "null"] },
+              "height": { "type": ["integer", "null"] },
+              "mimeType": { "type": ["string", "null"] },
+              "sizeBytes": { "type": ["integer", "null"] },
+              "takenAt": { "type": ["string", "null"], "format": "date-time" }
+            }
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MaterializeSmartAlbumResponse": {
+        "type": "object",
+        "required": ["photos", "nextPageToken", "total"],
+        "properties": {
+          "photos": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PhotoSummary" }
+          },
+          "nextPageToken": { "type": ["string", "null"] },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Validation error (e.g., unknown filter key, invalid name).",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid authentication",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Cross-tenant access denied",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Smart album not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    }
+  }
+}

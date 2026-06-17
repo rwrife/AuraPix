@@ -45,6 +45,11 @@ type MeteringEvent = {
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
 | `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
+| `photo.tagged` | `domain/photos/PhotosService.updateTags` (`POST /v1/photos/:id/tags`) | `count=1`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`, `meta.added`, `meta.removed`. Emitted **once per mutation**, not once per tag, so a photographer tagging 30 photos with 5 keywords each produces 30 events rather than 150. Drives the `tagsApplied` daily counter (sum of `added + removed`). |
+| `photo.exported` | `routes/photoExportV1.ts` after a successful `POST /v1/photos/:id/export` (issue #174) | `count=1`, `bytes=outputBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.preset`, `meta.outputWidth`, `meta.outputHeight`, `meta.cacheHit`, `meta.actor`. Emitted on both cache hits and misses (hosts may choose to discount `cacheHit:true` events at billing time). Drives the daily `exportBytes` counter (rendered bandwidth, billable). |
+| `smart_album.created` | `domain/smartAlbums/SmartAlbumsService.create` (`POST /smart-albums`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
+| `smart_album.deleted` | `domain/smartAlbums/SmartAlbumsService.remove` (`DELETE /smart-albums/:id`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
+| `smart_album.materialized` | `domain/smartAlbums/SmartAlbumsService.materialize` (`GET /smart-albums/:id/photos`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`, `meta.resultCount`, `meta.totalCount`. Hosts can use `resultCount` to detect heavy query patterns. |
 
 Reserved for follow-ups (not emitted yet): `user.active`.
 
