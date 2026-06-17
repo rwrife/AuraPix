@@ -1,0 +1,161 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Offboarding API",
+    "version": "0.1.0",
+    "description": "Tenant data export + irreversible hard-delete (issue #155). Host-API-key only \u2014 these endpoints require the `tenant.admin` scope and are explicitly closed to end-user bearer tokens.\n\nUse `POST /export` when a host's customer churns and needs a copy of their data. Use `DELETE /:tenantId` to irreversibly wipe every byte AuraPix is storing for that tenant. Both endpoints emit billing/audit events on the metering bus."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/api/v1/tenants/{tenantId}/export": {
+      "post": {
+        "operationId": "requestTenantExport",
+        "summary": "Enqueue a tenant data export",
+        "description": "Schedules an async job that bundles photo metadata, album metadata, and originals into a single archive at `exports/{tenantId}/{exportId}.zip`. The endpoint returns immediately with `status: 'pending'`; poll the GET endpoint for completion and the signed download URL.\n\nAuth: host API key with `tenant.admin` scope. Bearer (end-user) tokens are rejected with 401.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "202": {
+            "description": "Export enqueued",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExportRequestResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/exports/{exportId}": {
+      "get": {
+        "operationId": "getTenantExport",
+        "summary": "Fetch export job status + signed download URL",
+        "description": "Returns the export's current status. When `status: 'ready'`, the response includes a freshly-signed `downloadUrl` valid for 24 hours. Returns 404 if no export with that id exists for the path tenant (cross-tenant access also returns 404 to avoid existence leaks).",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "exportId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Export status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExportStatusResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}": {
+      "delete": {
+        "operationId": "deleteTenant",
+        "summary": "Hard-delete every byte AuraPix stores for a tenant",
+        "description": "Performs an irreversible, idempotent, resumable sweep across libraries, albums, photos, upload sessions, signing keys, branding, usage rollups, and storage. The final step removes the tenant doc and emits a single `tenant.deleted` event. After this completes, all subsequent reads for that tenant return 404 and no further events are ever emitted.\n\nRequires the header `X-Confirm-Tenant-Id` to exactly match the path `tenantId`; mismatched or absent confirmation returns 400.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          {
+            "name": "X-Confirm-Tenant-Id",
+            "in": "header",
+            "required": true,
+            "description": "Must exactly equal the path tenantId. Acts as a destructive-action double-check.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delete sweep finished",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeleteTenantResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ExportRequestResponse": {
+        "type": "object",
+        "required": ["exportId", "status", "createdAt"],
+        "properties": {
+          "exportId": { "type": "string", "example": "exp_a1b2c3..." },
+          "status": { "type": "string", "enum": ["pending", "running", "ready", "failed"] },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ExportStatusResponse": {
+        "type": "object",
+        "required": ["exportId", "status", "createdAt", "completedAt", "bytes"],
+        "properties": {
+          "exportId": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "running", "ready", "failed"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": ["string", "null"], "format": "date-time" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "manifestSha256": { "type": ["string", "null"] },
+          "downloadUrl": { "type": ["string", "null"], "format": "uri" },
+          "downloadUrlExpiresAt": { "type": ["string", "null"], "format": "date-time" },
+          "error": { "type": ["string", "null"] }
+        }
+      },
+      "DeleteTenantResponse": {
+        "type": "object",
+        "required": ["tenantId", "completedAt", "itemsDeleted", "bytesFreed"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "completedAt": { "type": "string", "format": "date-time" },
+          "itemsDeleted": { "type": "integer", "minimum": 0 },
+          "bytesFreed": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Validation error",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid host API key",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "Forbidden": {
+        "description": "Cross-tenant or missing scope",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "NotFound": {
+        "description": "No such export for this tenant",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      }
+    }
+  }
+}

@@ -168,7 +168,7 @@ AuraPix follows a clean architecture approach with:
 - **Authentication**: Firebase Authentication
 - **Deployment**: Firebase App Hosting + Cloud Functions
 
-See [docs/](./docs/) for detailed architecture documentation, including [layer boundaries and import guardrails](./docs/ARCHITECTURE_BOUNDARIES.md).
+See [docs/](./docs/) for detailed architecture documentation, including [layer boundaries and import guardrails](./docs/ARCHITECTURE_BOUNDARIES.md) and feature-level guides such as [tenant data export + hard offboarding](./docs/features/tenant-offboarding.md).
 
 ## Contributing
 

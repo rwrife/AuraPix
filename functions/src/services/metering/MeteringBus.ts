@@ -20,6 +20,12 @@ export type MeteringEventType =
   | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
+  // Tenant offboarding lifecycle (issue #155). After `tenant.deleted` is
+  // emitted for a given tenantId, no further events for that tenant
+  // should ever fire — sinks may treat the tenant as terminal.
+  | 'tenant.export.requested'
+  | 'tenant.export.completed'
+  | 'tenant.deleted'
   | 'user.active'
   | 'plugin.enabled'
   | 'plugin.disabled'

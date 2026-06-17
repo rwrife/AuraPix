@@ -97,6 +97,8 @@ import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createTenantUsersRouter } from './routes/tenantUsersV1.js';
 import { createTenantAdminRouter } from './routes/tenantAdmin.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantOffboardingRouter } from './routes/tenantOffboardingV1.js';
+import { TenantOffboardingService } from './services/tenant/TenantOffboardingService.js';
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
@@ -321,6 +323,20 @@ app.use(
     store: webhookDeliveryStore,
     sink: getHostWebhookSink() ?? undefined,
   })
+);
+
+// Tenant offboarding (issue #155). Host-key-only — even tenant owners
+// cannot trigger an export or hard-delete via a Bearer token. The router
+// itself enforces `tenant.admin` scope and the X-Confirm-Tenant-Id header.
+const offboardingService = new TenantOffboardingService({
+  data: dataAdapter,
+  storage: storageAdapter,
+});
+app.locals.tenantOffboardingService = offboardingService;
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantOffboardingRouter({ service: offboardingService })
 );
 
 // Per-tenant webhook signing-secret rotation (issue #161).
