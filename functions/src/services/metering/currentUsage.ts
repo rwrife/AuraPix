@@ -40,6 +40,8 @@ export async function readCurrentUsageBytes(
         signedUrlsIssued: 0,
         editsApplied: 0,
         apiCalls: 0,
+        tagsApplied: 0,
+        exportBytes: 0,
         storageBytesTotal: null,
         appliedEventIds: [],
         updatedAt: new Date(0).toISOString(),

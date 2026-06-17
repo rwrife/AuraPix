@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger.js';
 import { ApplyEditsSchema } from '../../utils/validation.js';
 import { validateOperations } from '../../services/edits/EditProcessor.js';
 import { EDIT_RECIPE_VERSION, listPlugins } from '../../services/edits/pluginRegistry.js';
+import { getEffectiveEnabledPluginIds } from '../../services/host/tenantPluginConfigService.js';
 import {
   createApplyEditsFingerprint,
   createRevertFingerprint,
@@ -50,18 +51,94 @@ function assertEditVersionMatch(
   }
 }
 
+/**
+ * Emit a `plugin.ran` metering event for every operation in the recipe.
+ * Called once for an entire apply attempt: success=true after the version
+ * is committed, success=false if the apply fails after validation.
+ * `durationMs` is the elapsed wall-clock time of the apply attempt and is
+ * reported per-op (a coarse but stable proxy at this scope).
+ */
+function emitPluginRanEvents(opts: {
+  libraryId: string;
+  photoId: string;
+  operations: { type: string }[];
+  durationMs: number;
+  success: boolean;
+}): void {
+  const { libraryId, photoId, operations, durationMs, success } = opts;
+  const tenantId = resolveTenantId({ libraryId });
+  for (const op of operations) {
+    emitMeteringEvent({
+      tenantId,
+      type: 'plugin.ran',
+      count: 1,
+      resourceId: photoId,
+      meta: {
+        libraryId,
+        pluginId: op.type,
+        durationMs,
+        success,
+      },
+    });
+  }
+}
+
 
 /**
  * List edit plugins and recipe contract version
  * GET /edits/plugins
+ *
+ * When called with `?tenantId=...` or `?libraryId=...` the response
+ * `plugins[].enabled` flag is the AND of:
+ *   - the global runtime enable flag (env-driven, see pluginRegistry), and
+ *   - the per-tenant allowlist (issue #166).
+ *
+ * Without those query params the manifest reflects only the global state
+ * (preserves the pre-#166 behavior so unauthenticated discovery flows keep
+ * working). Frontends can still call this endpoint with the active tenant
+ * context to hide disabled plugins from the editor toolbar.
  */
 export async function handleListPlugins(
-  _req: Request,
+  req: Request,
   res: Response
 ): Promise<void> {
+  const dataAdapter = req.app.locals.dataAdapter as DataAdapter | undefined;
+
+  const tenantIdQuery =
+    typeof req.query.tenantId === 'string' && req.query.tenantId.length > 0
+      ? req.query.tenantId
+      : undefined;
+  const libraryIdQuery =
+    typeof req.query.libraryId === 'string' && req.query.libraryId.length > 0
+      ? req.query.libraryId
+      : undefined;
+  const resolvedTenantId =
+    tenantIdQuery || libraryIdQuery
+      ? resolveTenantId({ tenantId: tenantIdQuery, libraryId: libraryIdQuery })
+      : null;
+
+  const globalPlugins = listPlugins();
+
+  if (!resolvedTenantId || !dataAdapter) {
+    res.json({
+      recipeVersion: EDIT_RECIPE_VERSION,
+      plugins: globalPlugins,
+    });
+    return;
+  }
+
+  const enabledForTenant = await getEffectiveEnabledPluginIds(
+    dataAdapter,
+    resolvedTenantId
+  );
+
   res.json({
+    tenantId: resolvedTenantId,
     recipeVersion: EDIT_RECIPE_VERSION,
-    plugins: listPlugins(),
+    plugins: globalPlugins.map((plugin) => ({
+      ...plugin,
+      enabled: plugin.enabled && enabledForTenant.has(plugin.id),
+    })),
   });
 }
 
@@ -116,6 +193,39 @@ export async function handleApplyEdits(
     throw new AppError(400, 'INVALID_OPERATIONS', `Invalid operations: ${opsValidation.errors.join(', ')}`);
   }
 
+  // Per-tenant allowlist enforcement (issue #166).
+  // The executor must reject disabled plugins server-side — clients cannot
+  // bypass by calling the API directly. We resolve the tenant from the
+  // libraryId (matches metering's `resolveTenantId` mapping) and look up
+  // the per-tenant enabled set; tenants without an explicit doc default
+  // to all built-in plugins enabled.
+  const tenantIdForBlocked = resolveTenantId({ libraryId });
+  const enabledForTenant = await getEffectiveEnabledPluginIds(
+    dataAdapter,
+    tenantIdForBlocked
+  );
+  for (const op of operations) {
+    if (!enabledForTenant.has(op.type as never)) {
+      // Emit `plugin.blocked` so hosts can wire upsell/audit signals.
+      emitMeteringEvent({
+        tenantId: tenantIdForBlocked,
+        type: 'plugin.blocked',
+        count: 1,
+        resourceId: photoId,
+        meta: {
+          libraryId,
+          pluginId: op.type,
+          userId,
+        },
+      });
+      throw new AppError(
+        403,
+        'plugin_disabled_for_tenant',
+        `Plugin '${op.type}' is disabled for this tenant`
+      );
+    }
+  }
+
   const requestFingerprint = createApplyEditsFingerprint({
     recipeVersion,
     operations,
@@ -166,6 +276,22 @@ export async function handleApplyEdits(
 
     assertEditVersionMatch(expectedCurrentVersion, photo.currentEditVersion);
 
+    const pluginStartedAt = Date.now();
+    let pluginRanEmitted = false;
+
+    const onPluginFailure = (): void => {
+      if (pluginRanEmitted) return;
+      pluginRanEmitted = true;
+      emitPluginRanEvents({
+        libraryId,
+        photoId,
+        operations,
+        durationMs: Date.now() - pluginStartedAt,
+        success: false,
+      });
+    };
+
+    try {
     // Create new edit version
     const newVersion: EditVersion = {
       version: photo.currentEditVersion + 1,
@@ -207,6 +333,18 @@ export async function handleApplyEdits(
         operationCount: operations.length,
       },
     });
+
+    // Emit one `plugin.ran` event per operation. We emit exactly once
+    // per op per apply attempt; the failure-path emission is guarded by
+    // `pluginRanEmitted` to prevent double counting.
+    emitPluginRanEvents({
+      libraryId,
+      photoId,
+      operations,
+      durationMs: Date.now() - pluginStartedAt,
+      success: true,
+    });
+    pluginRanEmitted = true;
 
     const responseBody = {
       photoId,
@@ -266,6 +404,10 @@ export async function handleApplyEdits(
         );
       }
     });
+    } catch (innerError) {
+      onPluginFailure();
+      throw innerError;
+    }
   } catch (error) {
     if (error instanceof AppError) {
       throw error;

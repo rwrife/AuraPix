@@ -43,9 +43,17 @@ type MeteringEvent = {
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
 | `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
 | `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
+| `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
+| `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
+| `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
+| `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
+| `photo.tagged` | `domain/photos/PhotosService.updateTags` (`POST /v1/photos/:id/tags`) | `count=1`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`, `meta.added`, `meta.removed`. Emitted **once per mutation**, not once per tag, so a photographer tagging 30 photos with 5 keywords each produces 30 events rather than 150. Drives the `tagsApplied` daily counter (sum of `added + removed`). |
+| `photo.exported` | `routes/photoExportV1.ts` after a successful `POST /v1/photos/:id/export` (issue #174) | `count=1`, `bytes=outputBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.preset`, `meta.outputWidth`, `meta.outputHeight`, `meta.cacheHit`, `meta.actor`. Emitted on both cache hits and misses (hosts may choose to discount `cacheHit:true` events at billing time). Drives the daily `exportBytes` counter (rendered bandwidth, billable). |
+| `smart_album.created` | `domain/smartAlbums/SmartAlbumsService.create` (`POST /smart-albums`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
+| `smart_album.deleted` | `domain/smartAlbums/SmartAlbumsService.remove` (`DELETE /smart-albums/:id`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
+| `smart_album.materialized` | `domain/smartAlbums/SmartAlbumsService.materialize` (`GET /smart-albums/:id/photos`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`, `meta.resultCount`, `meta.totalCount`. Hosts can use `resultCount` to detect heavy query patterns. |
 
-Reserved for follow-ups (not emitted yet): `plugin.ran`, `user.active`,
-`share.viewed`.
+Reserved for follow-ups (not emitted yet): `user.active`.
 
 ### Quota warning thresholds
 
@@ -131,3 +139,105 @@ X-AuraPix-Signature: v1=<hex(hmac_sha256(SIGNING_MASTER_SECRET, raw_body))>
 | Webhook 5xx/timeout | Retried with backoff; dropped after 3 attempts. |
 | `emit()` called during high load | Bus continues to buffer; if a batch is in flight, additional events accumulate for the next flush. |
 | Process exits with pending events | Best-effort `shutdown()` flush at the call site; otherwise events in memory are lost (acceptable for usage telemetry). |
+
+## Delivery observability (issue #144)
+
+Metering POSTs are fire-and-forget by default, which makes it hard for hosts
+to know *what* failed during an outage of their billing service. To close that
+gap, every POST attempt records a **delivery record** scoped under the tenant:
+
+```
+tenants/{tenantId}/webhookDeliveries/{batchId}
+```
+
+Record shape:
+
+```ts
+type WebhookDeliveryRecord = {
+  batchId: string;            // also the Firestore doc id
+  tenantId: string;
+  sentAt: string;             // ISO-8601 of first attempt
+  statusCode: number | null;  // last observed HTTP status, null on network err
+  ok: boolean;                // statusCode is 2xx
+  attemptCount: number;       // number of attempts so far
+  eventCount: number;         // events in the batch
+  contentHash: string;        // sha256(raw body); NO body is persisted
+  status: 'pending' | 'ok' | 'failed';
+  errorMessage?: string;      // truncated to 500 chars
+  updatedAt: string;          // ISO-8601 of last attempt
+  expiresAt: string;          // Firestore TTL anchor (sentAt + 30d)
+};
+```
+
+**No event bodies are stored** (privacy + cost). The `contentHash` field is
+enough to correlate a record with a known payload; if the host needs the
+raw events for a failed batch they can also derive them from the daily
+rollup window.
+
+Every POST attempt — success or failure — updates the same record (one row
+per batch, not per attempt). Records are auto-purged by a Firestore TTL
+policy on `expiresAt` after **30 days**.
+
+Each outbound POST also carries an `X-AuraPix-Idempotency-Key: <batchId>`
+header so the host can dedupe across automatic retries *and* manual
+replays.
+
+### Endpoints
+
+Both endpoints require a host API key (`Authorization: Bearer ak_live_...`)
+with the `webhooks.write` scope, scoped to the tenant in the URL.
+Cross-tenant calls return 403.
+
+#### `GET /api/v1/tenants/:tenantId/webhooks/deliveries`
+
+Returns paginated delivery records, newest first.
+
+| Query param | Type | Description |
+| --- | --- | --- |
+| `status` | `pending`\|`ok`\|`failed` | Filter by current status. |
+| `since` | ISO-8601 | Inclusive lower bound on `sentAt`. |
+| `limit` | int | Page size (default 50, max 200). |
+| `cursor` | string | `nextCursor` from a previous response. |
+
+Response:
+
+```json
+{
+  "tenantId": "acme",
+  "items": [ { "...": "WebhookDeliveryRecord" } ],
+  "nextCursor": "b_9a2f..."
+}
+```
+
+#### `POST /api/v1/tenants/:tenantId/webhooks/deliveries/:batchId:replay`
+
+Re-sends a previously-attempted batch. The replayed POST reuses the same
+`batchId` (and therefore the same `X-AuraPix-Idempotency-Key`), so a
+well-behaved host endpoint will not double-count.
+
+Response on success:
+
+```json
+{
+  "tenantId": "acme",
+  "batchId": "b_9a2f...",
+  "replayed": true,
+  "delivery": { "...": "WebhookDeliveryRecord (updated)" }
+}
+```
+
+Important behaviors:
+
+- The existing delivery record is updated in place — there is **no duplicate
+  row** per replay.
+- Concurrent replay calls for the same `batchId` are coalesced: the second
+  call returns immediately without issuing a second POST (in-flight
+  idempotency window).
+- The raw batch body is reconstructed from a small in-process cache (default
+  capacity 256 batches). Once the cache evicts a batch, replay returns
+  `410 BATCH_BODY_EXPIRED`. Hosts that need a guaranteed long replay
+  window can instead derive a fresh batch from the daily rollup.
+- A separate `webhook.delivery_failed` metric event may be emitted after
+  the in-process retries exhaust (planned follow-up; not required for the
+  initial implementation).
+

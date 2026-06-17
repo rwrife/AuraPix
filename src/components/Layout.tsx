@@ -3,6 +3,10 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlbumsProvider, useAlbums } from '../features/albums/useAlbums';
 import { useAuth } from '../features/auth/useAuth';
 import { useBranding } from '../features/branding/BrandingProvider';
+import {
+  SmartAlbumsProvider,
+  useSmartAlbums,
+} from '../features/smartAlbums/SmartAlbumsContext';
 import { SidebarNav } from './sidebar';
 import type { SidebarItem } from './sidebar';
 
@@ -53,6 +57,15 @@ function AlbumsIcon() {
   );
 }
 
+function SmartAlbumsIcon() {
+  // A stylized funnel — “filter” cue for smart albums.
+  return (
+    <svg viewBox="0 0 24 24" className="sidebar-icon-svg" aria-hidden="true">
+      <path d="M4 5h16l-6 8v5l-4 2v-7L4 5Z" />
+    </svg>
+  );
+}
+
 function SearchIcon() {
   return (
     <svg viewBox="0 0 24 24" className="topbar-search-icon-svg" aria-hidden="true">
@@ -66,6 +79,7 @@ function SearchIcon() {
 function LayoutShell() {
   const { user, signOut, signInWithOAuth } = useAuth();
   const { albums, folders } = useAlbums();
+  const { smartAlbums } = useSmartAlbums();
   const { branding } = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
@@ -167,8 +181,25 @@ function LayoutShell() {
       defaultExpanded: true,
     });
 
+    // Smart Albums (issue #165): saved filters that materialize on read.
+    // Render under the existing albums sidebar so users have a single mental
+    // model for “collections in the sidebar”. Smart albums have no children
+    // beyond their own link — they are read-only by definition.
+    items.push({
+      type: 'parent',
+      id: 'smart-albums',
+      label: 'Smart Albums',
+      icon: <SmartAlbumsIcon />,
+      children: smartAlbums.map((album) => ({
+        id: album.id,
+        label: album.name,
+        to: `/smart-albums/${album.id}`,
+      })),
+      defaultExpanded: smartAlbums.length > 0,
+    });
+
     return items;
-  }, [albums, folders]);
+  }, [albums, folders, smartAlbums]);
 
   const sidebarBottomItems = useMemo<SidebarItem[]>(() => {
     return [
@@ -288,7 +319,9 @@ function LayoutShell() {
 export function Layout() {
   return (
     <AlbumsProvider>
-      <LayoutShell />
+      <SmartAlbumsProvider>
+        <LayoutShell />
+      </SmartAlbumsProvider>
     </AlbumsProvider>
   );
 }
