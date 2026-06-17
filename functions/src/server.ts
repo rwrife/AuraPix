@@ -6,6 +6,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
+import { createUserActiveMiddleware } from './middleware/userActive.js';
+import { InMemoryUserActiveDailyStore } from './services/metering/UserActiveDailyStore.js';
 import { resolveTenant } from './middleware/resolveTenant.js';
 import { createTenantTokenBucketRateLimiter } from './middleware/rateLimit.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
@@ -246,6 +248,18 @@ app.use(
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
+// --- Per-user active-day dedupe (issue #153) ---
+// Emits at most one `user.active` metering event per (tenantId, userId, UTC day).
+// Skipped for host-API-key (service-to-service) requests.
+const userActiveStore = new InMemoryUserActiveDailyStore();
+app.locals.userActiveStore = userActiveStore;
+const userActive = createUserActiveMiddleware({
+  store: userActiveStore,
+  usageBus: meteringBus,
+});
+
+// Photos service participates in the usage rollup for tag mutations
+// (`tagsApplied` counter, issue #173).
 // Bind metering bus to photo services (must come after meteringBus exists).
 photosService.setUsageBus(meteringBus);
 photoExportHandle.setUsageBus(meteringBus);
@@ -253,6 +267,8 @@ photoExportHandle.setUsageBus(meteringBus);
 app.use(
   '/api/v1/tenants',
   authMiddleware,
+  resolveTenant,
+  userActive,
   createTenantUsageRouter({
     store: usageDailyStore,
     // Until the tenantId model lands, treat the authenticated user's uid as

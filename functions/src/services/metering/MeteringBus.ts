@@ -20,6 +20,7 @@ export type MeteringEventType =
   | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
+  | 'user.active'
   | 'plugin.enabled'
   | 'plugin.disabled'
   | 'plugin.blocked'

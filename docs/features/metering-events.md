@@ -49,6 +49,7 @@ type MeteringEvent = {
 | `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
+| `user.active` | `middleware/userActive.ts`, after auth + tenant resolution, on the **first** end-user request of the UTC day for `(tenantId, userId)` | `count=1`, `resourceId=userId`, `meta.firstSeenAt` (ISO-8601), `meta.route=req.path`. Host-API-key (service-to-service) calls do **not** emit this event. Dedupe scope is `(tenantId, userId, utcDay)`, so the same Firebase user active in two tenants emits two seat events. Increments the daily-rollup `activeUsers` counter. |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
 | `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
 | `photo.tagged` | `domain/photos/PhotosService.updateTags` (`POST /v1/photos/:id/tags`) | `count=1`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`, `meta.added`, `meta.removed`. Emitted **once per mutation**, not once per tag, so a photographer tagging 30 photos with 5 keywords each produces 30 events rather than 150. Drives the `tagsApplied` daily counter (sum of `added + removed`). |
@@ -57,7 +58,7 @@ type MeteringEvent = {
 | `smart_album.deleted` | `domain/smartAlbums/SmartAlbumsService.remove` (`DELETE /smart-albums/:id`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
 | `smart_album.materialized` | `domain/smartAlbums/SmartAlbumsService.materialize` (`GET /smart-albums/:id/photos`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`, `meta.resultCount`, `meta.totalCount`. Hosts can use `resultCount` to detect heavy query patterns. |
 
-Reserved for follow-ups (not emitted yet): `user.active`.
+No events currently reserved for follow-ups.
 
 ### Non-billable metadata writes (explicit exclusions)
 

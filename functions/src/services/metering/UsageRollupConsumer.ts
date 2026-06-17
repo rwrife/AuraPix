@@ -29,6 +29,12 @@ export interface UsageDailyDoc {
    */
   exportBytes: number;
   /**
+   * Distinct end-users seen for the tenant on this UTC day (seat-based
+   * billing signal). Populated from `user.active` metering events; see
+   * `docs/features/metering-events.md`.
+   */
+  activeUsers: number;
+  /**
    * Number of requests rejected by the per-tenant rate limiter on this day
    * (issue #154). Aggregated from sampled `rate_limit.exceeded` events so
    * hosts can chart abuse without consuming the webhook stream directly.
@@ -64,6 +70,7 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'tagsApplied',
   'apiCalls',
   'exportBytes',
+  'activeUsers',
   'rateLimited',
 ];
 
@@ -87,6 +94,7 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     tagsApplied: 0,
     apiCalls: 0,
     exportBytes: 0,
+    activeUsers: 0,
     rateLimited: 0,
     storageBytesTotal: null,
     appliedEventIds: [],
