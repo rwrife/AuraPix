@@ -58,6 +58,22 @@ type MeteringEvent = {
 
 Reserved for follow-ups (not emitted yet): `user.active`.
 
+### Non-billable metadata writes (explicit exclusions)
+
+Pure photo-metadata writes — such as the Lightroom-style triage fields
+(`rating`, `flag`), favoriting, and tag edits — are deliberately **not**
+emitted as metering events. In particular:
+
+- `PATCH /v1/photos/:id { rating, flag }` (issue #141) MUST NOT emit
+  `edit.applied`. That event is reserved for non-destructive image edits
+  committed via `handlers/edits/applyEdits.ts` (a new version is written to
+  storage and indexed). Triage updates only touch a small Firestore field set
+  and do not produce a new derivative.
+- The same exclusion applies to `isFavorite` toggles and `tags` updates.
+
+If a host wants to bill culling activity, it can do so today by counting
+photo writes in its own audit log; AuraPix will not double-count it as an
+edit.
 ### Quota warning thresholds
 
 Thresholds default to `[0.8, 0.95]` (80% and 95%). Override with the
