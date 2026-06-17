@@ -1,11 +1,13 @@
 import express from 'express';
 import pinoHttp from 'pino-http';
-import { serverConfig, storageConfig } from './config/index.js';
+import { serverConfig, storageConfig, tenantRateLimitConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
+import { createTenantTokenBucketRateLimiter } from './middleware/rateLimit.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
@@ -101,7 +103,6 @@ import {
   createSmartAlbumsResourceRouter,
 } from './routes/smartAlbumsV1.js';
 import { PhotosService } from './domain/photos/PhotosService.js';
-import { resolveTenant } from './middleware/resolveTenant.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
@@ -111,6 +112,34 @@ import {
   InMemoryDailyDocStore,
   UsageRollupConsumer,
 } from './services/metering/UsageRollupConsumer.js';
+
+// --- Metering / usage rollups (issue #133) ---
+// In-memory wiring suitable for local mode; Firebase mode will swap in a
+// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
+const meteringBus = new InMemoryUsageMeteringBus();
+const usageDailyStore = new InMemoryDailyDocStore();
+const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
+usageRollupConsumer.attach(meteringBus);
+app.locals.meteringBus = meteringBus;
+app.locals.usageDailyStore = usageDailyStore;
+
+// --- Per-tenant API rate limiter (issue #154) ---
+// Token-bucket keyed by `tenantId` so a misbehaving tenant cannot saturate
+// the function instance and starve every other host's customers. Mounted
+// globally BEFORE route handlers and AFTER `resolveTenant` populates
+// `req.tenantId`. Per-tenant overrides come from
+// `tenants_config/{tenantId}` and take effect on the next request (no
+// restart) thanks to a short in-memory TTL cache. The /health endpoint is
+// registered above and remains unaffected.
+const tenantRateLimiter = createTenantTokenBucketRateLimiter({
+  rps: tenantRateLimitConfig.rps,
+  burst: tenantRateLimitConfig.burst,
+  hostRps: tenantRateLimitConfig.hostRps,
+  dataAdapter,
+  meteringBus,
+});
+app.use(resolveTenant);
+app.use(tenantRateLimiter);
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
@@ -135,9 +164,6 @@ app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapt
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
-// Mounted at both `/v1/photos` (spec) and `/api/v1/photos` (in-product) so
-// hosts can call the documented contract URL while clients keep the
-// `/api` prefix used elsewhere.
 const photosService = new PhotosService({
   dataAdapter,
   storageAdapter,
@@ -154,10 +180,6 @@ app.use(
   resolveTenant,
   createPhotosV1Router(photosService)
 );
-// Photo export (issue #174). The GET handler verifies its own HMAC token,
-// the POST handler accepts either a Firebase user token OR a host API
-// key — so the router is composed with optional + host-key auth. The
-// usage bus is bound below (after the metering wiring is created).
 const photoExportHandle = createPhotoExportRouter({
   dataAdapter,
   storageAdapter,
@@ -189,10 +211,7 @@ app.use(
   createLibraryTagsRouter(photosService)
 );
 
-// Smart Albums (issue #165). Two mount points:
-//   - /v1/libraries/:libraryId/smart-albums (list/create)
-//   - /v1/smart-albums/:id (get/update/delete/materialize)
-// Mirrored under /api/v1/* for in-product clients.
+// Smart Albums (issue #165).
 const smartAlbumsService = domainModules.smartAlbums;
 app.use(
   '/v1/libraries/:libraryId/smart-albums',
@@ -219,20 +238,10 @@ app.use(
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
-// --- Metering / usage rollups (issue #133) ---
-// In-memory wiring suitable for local mode; Firebase mode will swap in a
-// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
-const meteringBus = new InMemoryUsageMeteringBus();
-const usageDailyStore = new InMemoryDailyDocStore();
-const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
-usageRollupConsumer.attach(meteringBus);
-app.locals.meteringBus = meteringBus;
-app.locals.usageDailyStore = usageDailyStore;
-// Photos service participates in the usage rollup for tag mutations
-// (`tagsApplied` counter, issue #173).
+// Bind metering bus to photo services (must come after meteringBus exists).
 photosService.setUsageBus(meteringBus);
-// Photo export endpoint emits the `exportBytes` rollup counter (#174).
 photoExportHandle.setUsageBus(meteringBus);
+
 app.use(
   '/api/v1/tenants',
   authMiddleware,
@@ -284,9 +293,6 @@ app.use(
 );
 
 // Per-tenant plugin allowlist (issue #166).
-// Host-API-key only — mounted under `/api/v1/tenants/:tenantId/plugins...`.
-// The `tenantPluginsV1` router enforces auth/scope itself; we still chain
-// the host-key middleware so `req.tenant` is populated when present.
 app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
@@ -294,10 +300,7 @@ app.use(
   createTenantPluginsRouter({ dataAdapter })
 );
 
-// Per-tenant export presets (issue #174). GET is user-callable so the
-// in-product export menu can render; PUT/DELETE require a host API key
-// with the `export-presets.write` scope. Mounted at both `/v1` (spec
-// path used by hosts) and `/api/v1` (in-product clients).
+// Per-tenant export presets (issue #174).
 const tenantExportPresetsRouter = createTenantExportPresetsRouter({
   dataAdapter,
 });
@@ -313,7 +316,6 @@ app.use(
   optionalAuthMiddleware,
   tenantExportPresetsRouter
 );
-
 // Error handlers (must be last)
 app.use(notFoundHandler);
 app.use(errorHandler);
