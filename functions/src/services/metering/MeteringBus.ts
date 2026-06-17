@@ -14,10 +14,19 @@ export type MeteringEventType =
   | 'edit.applied'
   | 'user.active'
   | 'user.provisioned'
-  | 'user.revoked';
-// Future (placeholder; not emitted in this PR):
-//   | 'plugin.ran'
-//   | 'share.viewed'
+  | 'user.revoked'
+  | 'share.viewed'
+  | 'plugin.ran'
+  | 'plugin.enabled'
+  | 'plugin.disabled'
+  | 'plugin.blocked'
+  | 'photo.trashed'
+  | 'photo.purged'
+  | 'photo.tagged'
+  | 'photo.exported'
+  | 'smart_album.created'
+  | 'smart_album.deleted'
+  | 'smart_album.materialized';
 
 export interface MeteringEvent {
   /**

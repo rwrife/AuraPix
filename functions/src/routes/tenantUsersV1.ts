@@ -9,7 +9,7 @@
  *   PATCH  /v1/tenants/:tenantId/users/:userId    — change role
  *   DELETE /v1/tenants/:tenantId/users/:userId    — revoke membership
  *
- * Auth: host API key with `tenants:write` scope (or `tenants.read` for GET).
+ * Auth: host API key with `tenants.write` scope (or `tenants.read` for GET).
  * Cross-tenant access returns 404 (not 403) so the existence of memberships
  * in other tenants is never leaked.
  *
@@ -158,7 +158,7 @@ export function createTenantUsersRouter(deps: TenantUsersRouterDeps): Router {
   // POST /v1/tenants/:tenantId/users
   router.post(
     '/:tenantId/users',
-    requireTenantScope('tenants:write'),
+    requireTenantScope('tenants.write'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const tenantId = String(req.params.tenantId);
@@ -227,7 +227,7 @@ export function createTenantUsersRouter(deps: TenantUsersRouterDeps): Router {
   // PATCH /v1/tenants/:tenantId/users/:userId
   router.patch(
     '/:tenantId/users/:userId',
-    requireTenantScope('tenants:write'),
+    requireTenantScope('tenants.write'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const tenantId = String(req.params.tenantId);
@@ -256,7 +256,7 @@ export function createTenantUsersRouter(deps: TenantUsersRouterDeps): Router {
   // DELETE /v1/tenants/:tenantId/users/:userId
   router.delete(
     '/:tenantId/users/:userId',
-    requireTenantScope('tenants:write'),
+    requireTenantScope('tenants.write'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const tenantId = String(req.params.tenantId);

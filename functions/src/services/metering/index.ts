@@ -1,6 +1,10 @@
 import { signingConfig } from '../../config/index.js';
 import { HostWebhookSink } from './HostWebhookSink.js';
 import {
+  InMemoryWebhookDeliveryStore,
+  type WebhookDeliveryStore,
+} from './WebhookDeliveryStore.js';
+import {
   MeteringBus,
   NoopMeteringSink,
   type MeteringEvent,
@@ -31,16 +35,50 @@ export function resolveTenantId(opts: {
 }
 
 let busInstance: MeteringBus | null = null;
+let sinkInstance: HostWebhookSink | null = null;
+let deliveryStoreInstance: WebhookDeliveryStore | null = null;
+
+/**
+ * Process-wide delivery store used by the host webhook sink. Records are
+ * scoped to `tenants/{tenantId}/webhookDeliveries/{batchId}` and surfaced
+ * through the `/v1/tenants/:id/webhooks/deliveries*` routes (issue #144).
+ */
+export function getWebhookDeliveryStore(): WebhookDeliveryStore {
+  if (!deliveryStoreInstance) {
+    deliveryStoreInstance = new InMemoryWebhookDeliveryStore();
+  }
+  return deliveryStoreInstance;
+}
+
+export function setWebhookDeliveryStore(store: WebhookDeliveryStore | null): void {
+  deliveryStoreInstance = store;
+  // Force the sink to be rebuilt next time getHostWebhookSink() is called.
+  sinkInstance = null;
+  busInstance = null;
+}
 
 function buildSink(): MeteringSink {
   const webhookUrl = process.env.HOST_METERING_WEBHOOK_URL?.trim();
   if (!webhookUrl) {
     return new NoopMeteringSink();
   }
-  return new HostWebhookSink({
+  sinkInstance = new HostWebhookSink({
     webhookUrl,
     signingSecret: signingConfig.masterSecret,
+    deliveryStore: getWebhookDeliveryStore(),
   });
+  return sinkInstance;
+}
+
+/**
+ * Returns the host webhook sink instance (or null when metering is
+ * disabled / no webhook URL is configured). Exposed so the replay route
+ * (issue #144) can reuse the in-process batch cache.
+ */
+export function getHostWebhookSink(): HostWebhookSink | null {
+  // Ensure the bus has been initialized so sinkInstance is populated.
+  getMeteringBus();
+  return sinkInstance;
 }
 
 /**
