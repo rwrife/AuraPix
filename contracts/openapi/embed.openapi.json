@@ -1,0 +1,214 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Embed Handshake API",
+    "version": "0.1.0",
+    "description": "Per-tenant allowed-origins configuration for embedding AuraPix in host applications. Drives the server-emitted `Content-Security-Policy: frame-ancestors` header and the documented postMessage handshake. See `docs/features/embed-handshake.md`."
+  },
+  "paths": {
+    "/v1/tenants/{tenantId}/embed/allowed-origins": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "get": {
+        "summary": "Get the embed allow-list for a tenant",
+        "description": "Returns the current list of origins permitted to iframe AuraPix for the tenant. Requires the `tenants.write` scope (the topology is sensitive).",
+        "security": [{ "bearerAuth": [] }, { "hostApiKey": ["tenants.write"] }],
+        "responses": {
+          "200": {
+            "description": "Current embed configuration",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EmbedConfigEnvelope" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tenantId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenants.write scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Replace the embed allow-list for a tenant",
+        "description": "Replaces the full list of allowed embed origins. An empty list disables embedding (server responds with `frame-ancestors 'none'`).",
+        "security": [{ "bearerAuth": [] }, { "hostApiKey": ["tenants.write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EmbedConfigInput" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated embed configuration",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EmbedConfigEnvelope" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body or tenantId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenants.write scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenantId}/embed/csp-report": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "post": {
+        "summary": "CSP `frame-ancestors` violation report",
+        "description": "Endpoint browsers POST to when a `frame-ancestors` directive blocks rendering. Body is treated as untrusted. Emits the metering event `embed.origin_blocked` on the existing bus. Intentionally unauthenticated (UAs do not attach credentials to CSP reports).",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/csp-report": {
+              "schema": { "$ref": "#/components/schemas/CspReport" }
+            },
+            "application/reports+json": {
+              "schema": {
+                "type": "array",
+                "items": { "type": "object", "additionalProperties": true }
+              }
+            },
+            "application/json": {
+              "schema": { "type": "object", "additionalProperties": true }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "Acknowledged" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "hostApiKey": { "type": "apiKey", "in": "header", "name": "X-Host-API-Key" }
+    },
+    "schemas": {
+      "EmbedConfigInput": {
+        "type": "object",
+        "required": ["origins"],
+        "properties": {
+          "origins": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "description": "Exact-match origin (scheme://host[:port]). HTTPS always; HTTP only for loopback hosts."
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmbedConfig": {
+        "type": "object",
+        "required": ["tenantId", "allowedOrigins", "updatedAt"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "allowedOrigins": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "EmbedConfigEnvelope": {
+        "type": "object",
+        "required": ["embed"],
+        "properties": {
+          "embed": { "$ref": "#/components/schemas/EmbedConfig" }
+        }
+      },
+      "CspReport": {
+        "type": "object",
+        "properties": {
+          "csp-report": {
+            "type": "object",
+            "properties": {
+              "document-uri": { "type": "string" },
+              "violated-directive": { "type": "string" },
+              "blocked-uri": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

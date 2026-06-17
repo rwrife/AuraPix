@@ -32,6 +32,10 @@ export type MeteringEventType =
   | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
+  // Embed handshake (issue #163). Emitted from the CSP middleware and
+  // the `frame-ancestors` violation report endpoint respectively.
+  | 'embed.session_started'
+  | 'embed.origin_blocked'
   // Reserved, low-volume debug-tier event. Emitted by the Idempotency-Key
   // middleware on a cached replay so hosts can observe client retry
   // behavior. NOT billable; consumers should exclude it from rollups.

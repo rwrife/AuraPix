@@ -22,8 +22,17 @@ const app = express();
 // Request logging
 app.use(pinoHttp({ logger }));
 
-// Body parsing
-app.use(express.json());
+// Body parsing — accept CSP violation report content types alongside JSON
+// so the `/embed/csp-report` endpoint can parse the browser-posted body.
+app.use(
+  express.json({
+    type: [
+      'application/json',
+      'application/csp-report',
+      'application/reports+json',
+    ],
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // CORS for development
@@ -107,6 +116,11 @@ import { TenantOffboardingService } from './services/tenant/TenantOffboardingSer
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import {
+  createEmbedV1Router,
+  createEmbedCspMiddleware,
+  loadAllowedOriginsForTenant,
+} from './routes/embedV1.js';
 import { createBulkPhotosRouter } from './routes/photosBatchV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
@@ -128,6 +142,8 @@ import {
 } from './services/metering/UsageRollupConsumer.js';
 
 // --- Metering / usage rollups (issue #133) ---
+// Initialized early so downstream middleware (e.g. embed CSP) can pick up
+// `app.locals.meteringBus` and emit events into the same bus.
 // In-memory wiring suitable for local mode; Firebase mode will swap in a
 // Pub/Sub bus and a Firestore-backed store in a follow-up issue.
 const meteringBus = new InMemoryUsageMeteringBus();
@@ -137,6 +153,32 @@ usageRollupConsumer.attach(meteringBus);
 app.locals.meteringBus = meteringBus;
 app.locals.usageDailyStore = usageDailyStore;
 
+// --- Embed handshake CSP middleware (issue #163) ---
+// Sets `Content-Security-Policy: frame-ancestors ...` + `X-Frame-Options`
+// on tenant-scoped routes that may be loaded inside a host iframe. Mounted
+// BEFORE the per-tenant routes so the headers are attached to the response
+// before the route handler ends it. Tenant id is parsed from the path
+// pattern `/{prefix}/tenants/:tenantId/...`.
+const embedCspMiddleware = createEmbedCspMiddleware({
+  tenantFromReq: (req): string | null => {
+    // When mounted on /api/v1 or /v1, Express strips that prefix from req.url
+    // before this middleware sees the request. Match against req.path so we
+    // ignore any query string.
+    const match = req.path.match(/^\/tenants\/([a-zA-Z0-9_-]{1,64})(?:\/|$)/);
+    if (match) return match[1] ?? null;
+    const header = req.headers['x-aurapix-tenant-id'];
+    const headerVal = Array.isArray(header) ? header[0] : header;
+    if (typeof headerVal === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(headerVal)) {
+      return headerVal;
+    }
+    return null;
+  },
+  loadOrigins: (tenantId) => loadAllowedOriginsForTenant(dataAdapter, tenantId),
+  reportUriTemplate: '/api/v1/tenants/{tenantId}/embed/csp-report',
+  meteringBus: meteringBus as unknown as { emit?: (e: unknown) => void },
+});
+app.use('/api/v1', embedCspMiddleware);
+app.use('/v1', embedCspMiddleware);
 // --- Per-tenant API rate limiter (issue #154) ---
 // Token-bucket keyed by `tenantId` so a misbehaving tenant cannot saturate
 // the function instance and starve every other host's customers. Mounted
@@ -282,6 +324,7 @@ app.use(
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
+// --- Photos/export metering wiring (issue #133/#173/#174) ---
 // --- Per-user active-day dedupe (issue #153) ---
 // Emits at most one `user.active` metering event per (tenantId, userId, UTC day).
 // Skipped for host-API-key (service-to-service) requests.
@@ -411,7 +454,37 @@ app.use(
   brandingRouter
 );
 
+// --- Embed handshake routes (issue #163) ---
+// GET/PUT allowed-origins is host-API-key gated (or owner user); the CSP
+// report endpoint is unauthenticated so browsers can post violation
+// reports. Mounted on both `/api/v1/tenants` (in-product) and
+// `/v1/tenants` (host-facing spec URL).
+function canWriteEmbedConfig(
+  req: import('express').Request,
+  tenantId: string
+): boolean {
+  // Host API key with tenants.write scope, scoped to the same tenant.
+  if (req.tenant) {
+    if (req.tenant.id !== tenantId) return false;
+    return req.tenant.scopes.includes('tenants.write' as never);
+  }
+  // Otherwise, an authenticated user is treated as tenant owner (legacy
+  // single-tenant-per-user mapping).
+  return Boolean(req.user);
+}
+
+const embedRouter = createEmbedV1Router(dataAdapter, {
+  canWriteEmbedConfig,
+});
+
 // Per-tenant plugin allowlist (issue #166).
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  embedRouter
+);
+
 app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
@@ -423,6 +496,13 @@ app.use(
 const tenantExportPresetsRouter = createTenantExportPresetsRouter({
   dataAdapter,
 });
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  embedRouter
+);
+
 app.use(
   '/v1/tenants',
   hostApiKeyAuth,
