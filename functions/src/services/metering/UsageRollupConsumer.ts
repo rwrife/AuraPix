@@ -21,7 +21,13 @@ export interface UsageDailyDoc {
   imagesProcessed: number;
   signedUrlsIssued: number;
   editsApplied: number;
+  tagsApplied: number;
   apiCalls: number;
+  /**
+   * Bytes egressed via `POST /v1/photos/:id/export` (issue #174). Hosts
+   * use this to bill bandwidth tiers without parsing every event.
+   */
+  exportBytes: number;
   /**
    * Distinct end-users seen for the tenant on this UTC day (seat-based
    * billing signal). Populated from `user.active` metering events; see
@@ -55,7 +61,9 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'imagesProcessed',
   'signedUrlsIssued',
   'editsApplied',
+  'tagsApplied',
   'apiCalls',
+  'exportBytes',
   'activeUsers',
 ];
 
@@ -76,7 +84,9 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     imagesProcessed: 0,
     signedUrlsIssued: 0,
     editsApplied: 0,
+    tagsApplied: 0,
     apiCalls: 0,
+    exportBytes: 0,
     activeUsers: 0,
     storageBytesTotal: null,
     appliedEventIds: [],

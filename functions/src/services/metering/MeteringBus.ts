@@ -14,7 +14,17 @@ export type MeteringEventType =
   | 'edit.applied'
   | 'share.viewed'
   | 'plugin.ran'
-  | 'user.active';
+  | 'user.active'
+  | 'plugin.enabled'
+  | 'plugin.disabled'
+  | 'plugin.blocked'
+  | 'photo.trashed'
+  | 'photo.purged'
+  | 'photo.tagged'
+  | 'photo.exported'
+  | 'smart_album.created'
+  | 'smart_album.deleted'
+  | 'smart_album.materialized';
 
 export interface MeteringEvent {
   /**

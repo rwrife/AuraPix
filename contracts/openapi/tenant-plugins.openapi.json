@@ -1,0 +1,192 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Plugins API",
+    "version": "0.1.0",
+    "description": "Per-tenant plugin allowlist (issue #166). Lets host operators read the manifest of built-in editing plugins and enable/disable them on a per-tenant basis. Default behavior: when no configuration document exists for a tenant, every built-in plugin is enabled.\n\nAuth: host API key only (`Authorization: Bearer ak_live_...`). End-user Firebase tokens are NOT accepted on these endpoints \u2014 plugin configuration is a host-tier concern.\n\nMetering: PUT emits `plugin.enabled` / `plugin.disabled` events on actual state transitions. The runtime executor emits `plugin.blocked` when a user attempts to run a disabled plugin."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/api/v1/tenants/{tenantId}/plugins": {
+      "get": {
+        "operationId": "listTenantPlugins",
+        "summary": "List built-in plugins with the per-tenant enabled state",
+        "description": "Returns one entry per built-in plugin from the global manifest, with the per-tenant `enabled` flag applied. On first read for a tenant a default-on configuration document is lazily persisted so admin tooling sees a stable record.\n\nAuth: host API key with `plugins.read` scope. Cross-tenant requests return 403.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant plugin list",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TenantPluginsResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing host API key",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-tenant request or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/plugins/{pluginId}": {
+      "put": {
+        "operationId": "setTenantPluginEnabled",
+        "summary": "Enable or disable a single plugin for a tenant",
+        "description": "Sets the enabled state for a single built-in plugin under the target tenant. The response indicates whether the call resulted in an actual state change (`changed: true`); only state changes emit a `plugin.enabled` / `plugin.disabled` metering event.\n\nAuth: host API key with `plugins.write` scope.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "description": "Built-in plugin id (e.g., `crop`, `rotate`, `adjust`, `filter`).",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SetPluginEnabledRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plugin state updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SetPluginEnabledResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (missing or non-boolean `enabled`)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing host API key",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-tenant request or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown plugin id",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TenantPluginsResponse": {
+        "type": "object",
+        "required": ["tenantId", "plugins"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "updatedBy": { "type": ["string", "null"] },
+          "plugins": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TenantPluginEntry" }
+          }
+        }
+      },
+      "TenantPluginEntry": {
+        "type": "object",
+        "required": ["id", "name", "version", "enabled", "builtIn"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "builtIn": { "type": "boolean" }
+        }
+      },
+      "SetPluginEnabledRequest": {
+        "type": "object",
+        "required": ["enabled"],
+        "properties": {
+          "enabled": { "type": "boolean" }
+        }
+      },
+      "SetPluginEnabledResponse": {
+        "type": "object",
+        "required": ["tenantId", "pluginId", "enabled", "changed", "updatedAt"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "pluginId": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "changed": {
+            "type": "boolean",
+            "description": "True iff the call transitioned the plugin between enabled/disabled. Idempotent no-ops return `false` and emit no metering event."
+          },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "updatedBy": { "type": ["string", "null"] }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
