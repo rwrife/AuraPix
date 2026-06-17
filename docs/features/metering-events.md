@@ -44,6 +44,8 @@ type MeteringEvent = {
 | `user.active` | `routes/tenantUsersV1.ts` activity tracker — **at most once per `(tenantId, userId)` per UTC day** | `resourceId=userId`. This is the per-seat billing signal hosts asked for in #143. |
 | `user.provisioned` | `routes/tenantUsersV1.ts` on `POST /v1/tenants/:id/users` (newly created membership only; no-op on idempotent re-POST) | `resourceId=userId`, `meta.role`, `meta.email` |
 | `user.revoked` | `routes/tenantUsersV1.ts` on `DELETE /v1/tenants/:id/users/:userId` | `resourceId=userId`, `meta.role` |
+| `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
+| `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
@@ -53,6 +55,16 @@ type MeteringEvent = {
 | `smart_album.created` | `domain/smartAlbums/SmartAlbumsService.create` (`POST /smart-albums`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
 | `smart_album.deleted` | `domain/smartAlbums/SmartAlbumsService.remove` (`DELETE /smart-albums/:id`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
 | `smart_album.materialized` | `domain/smartAlbums/SmartAlbumsService.materialize` (`GET /smart-albums/:id/photos`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`, `meta.resultCount`, `meta.totalCount`. Hosts can use `resultCount` to detect heavy query patterns. |
+
+Reserved for follow-ups (not emitted yet): `user.active`.
+
+### Quota warning thresholds
+
+Thresholds default to `[0.8, 0.95]` (80% and 95%). Override with the
+env var `TENANT_QUOTA_WARNING_THRESHOLDS` as a comma-separated list of
+fractions strictly between 0 and 1 (e.g. `0.5,0.75,0.9`). Each threshold
+fires at most once per tenant per UTC day; the daily rollup doc tracks
+the set of already-emitted thresholds in `quotaWarningsEmitted`.
 
 ## Tenant resolution
 
