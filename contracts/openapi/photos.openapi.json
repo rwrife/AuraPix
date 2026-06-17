@@ -3,7 +3,7 @@
   "info": {
     "title": "AuraPix Photos API",
     "version": "1.2.0",
-    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) + photo export (#174) for photos."
+    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) + photo export (#174) for photos. Mutating endpoints support the `Idempotency-Key` header (issue #162) for safe retries."
   },
   "servers": [
     { "url": "https://api.aurapix.example" }
@@ -48,11 +48,15 @@
         "summary": "Soft-delete (Trash) a photo",
         "description": "Sets `trashedAt = now`; the photo is removed from default list queries but bytes are retained until the TTL purge job runs.",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
         ],
         "responses": {
           "200": {
             "description": "Trashed",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/TrashStateResponse" }
@@ -61,7 +65,8 @@
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/IdempotencyConflict" }
         }
       }
     },
@@ -71,11 +76,15 @@
         "summary": "Restore a trashed photo",
         "description": "Clears `trashedAt` / `trashedBy`. Cross-tenant restore returns 403.",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
         ],
         "responses": {
           "200": {
             "description": "Restored",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/TrashStateResponse" }
@@ -84,7 +93,8 @@
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/IdempotencyConflict" }
         }
       }
     },
@@ -427,6 +437,29 @@
             "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
           }
         }
+      },
+      "IdempotencyConflict": {
+        "description": "Idempotency-Key reused with a different request body (`IDEMPOTENCY_KEY_CONFLICT`).",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Opaque key (\u2264255 chars; UUIDs recommended) that scopes the request to `(tenantId, route, key)`. Retries within 24h with the same key + same body return the cached response without re-invoking the handler or re-emitting metering events. Same key + different body returns `409 IDEMPOTENCY_KEY_CONFLICT`. See `docs/features/idempotency-keys.md`.",
+        "schema": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+    "headers": {
+      "IdempotencyReplayed": {
+        "description": "Present and `true` when this response was served from the idempotency cache.",
+        "schema": { "type": "string", "enum": ["true"] }
       }
     }
   }

@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
+import { createIdempotencyMiddleware } from './middleware/idempotency.js';
 import { createUserActiveMiddleware } from './middleware/userActive.js';
 import { InMemoryUserActiveDailyStore } from './services/metering/UserActiveDailyStore.js';
 import { resolveTenant } from './middleware/resolveTenant.js';
@@ -33,6 +34,10 @@ app.use((req, res, next) => {
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, Idempotency-Key, X-API-Version'
   );
+  // Expose Idempotency-Replayed so browser callers can observe deduped
+  // retries (issue #162). Other custom response headers can be appended
+  // here as the API surface grows.
+  res.header('Access-Control-Expose-Headers', 'Idempotency-Replayed');
   
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -167,6 +172,20 @@ app.use('/edits', authMiddleware, editsRouter);
 // Versioned API surface (desktop/web clients)
 app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
+// `POST /api/v1/albums` is on the host-callable mutating allow-list for
+// Idempotency-Key (issue #162). The middleware is mounted *before* the
+// router so it can short-circuit retries with a cached response without
+// invoking the create handler (and without re-emitting metering events).
+app.use(
+  '/api/v1/albums',
+  authMiddleware,
+  createIdempotencyMiddleware({
+    route: 'POST /api/v1/albums',
+    dataAdapter,
+    resolveTenantId: (req) => req.tenant?.id ?? req.user?.uid ?? null,
+  }),
+  createAlbumsV1Router(domainModules.albums)
+);
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
@@ -176,20 +195,33 @@ app.use('/api/v1/photos\\:batch', authMiddleware, createBulkPhotosRouter(dataAda
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
+// Mounted at both `/v1/photos` (spec) and `/api/v1/photos` (in-product) so
+// hosts can call the documented contract URL while clients keep the
+// `/api` prefix used elsewhere. The bulk-photo mutating endpoints (trash
+// and restore) are on the host-callable Idempotency-Key allow-list per
+// issue #162; retries within the 24h window replay the original response
+// without re-trashing/restoring the photo or re-emitting metering events.
 const photosService = new PhotosService({
   dataAdapter,
   storageAdapter,
+});
+const photosIdempotency = createIdempotencyMiddleware({
+  route: 'photos.bulk-ops',
+  dataAdapter,
+  resolveTenantId: (req) => req.tenant?.id ?? req.user?.uid ?? null,
 });
 app.use(
   '/v1/photos',
   authMiddleware,
   resolveTenant,
+  photosIdempotency,
   createPhotosV1Router(photosService)
 );
 app.use(
   '/api/v1/photos',
   authMiddleware,
   resolveTenant,
+  photosIdempotency,
   createPhotosV1Router(photosService)
 );
 const photoExportHandle = createPhotoExportRouter({
