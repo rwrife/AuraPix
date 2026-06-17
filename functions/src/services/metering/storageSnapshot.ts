@@ -70,6 +70,7 @@ export async function snapshotTenantStorage(
         editsApplied: 0,
         tagsApplied: 0,
         apiCalls: 0,
+        exportBytes: 0,
         storageBytesTotal: null,
         appliedEventIds: [] as string[],
         updatedAt: new Date(0).toISOString(),
