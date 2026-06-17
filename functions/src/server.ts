@@ -98,6 +98,7 @@ import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createBulkPhotosRouter } from './routes/photosBatchV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
 import {
@@ -165,6 +166,9 @@ app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums))
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+// Bulk photo operations (issue #142). Express routes treat `:` as a param
+// separator, so we register the exact literal path.
+app.use('/api/v1/photos\\:batch', authMiddleware, createBulkPhotosRouter(dataAdapter));
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).

@@ -12,6 +12,7 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'bulk.batch'
   | 'user.active'
   | 'user.provisioned'
   | 'user.revoked'
