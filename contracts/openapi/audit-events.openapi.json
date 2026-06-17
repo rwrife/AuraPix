@@ -1,0 +1,197 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Host Audit Events API",
+    "version": "0.1.0",
+    "description": "Read-only paginated access to recent audit entries written server-side by AuraPix for sensitive tenant operations (sharing, bulk delete, role changes, key rotation, etc.). Intended for host applications reselling AuraPix who want to surface an activity log in their own admin UI. Issue #164."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/v1/tenants/{tenantId}/audit-events": {
+      "get": {
+        "operationId": "listTenantAuditEvents",
+        "summary": "List recent audit events for a tenant",
+        "description": "Returns up to 90 days of audit events for the tenant, in `occurredAt desc, id desc` order. Records older than the retention cap are excluded. Strictly filtered by `tenantId`; cross-tenant access returns 403.\n\nAuth: host API key with `audit.read` scope (or a Bearer user that owns the tenant).\n\nEach call emits an `audit.queried` metering event `{ tenantId, pageSize, filterKeys }` and contributes to `api.call` rollups.",
+        "security": [
+          { "hostApiKey": ["audit.read"] }
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "ISO-8601 timestamp; lower bound on `occurredAt`. Clamped to the 90-day retention floor.",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "ISO-8601 timestamp; upper bound on `occurredAt`.",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "actorId",
+            "in": "query",
+            "required": false,
+            "description": "Filter to events emitted by this actor (`actorId`).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Filter to events whose action equals this value (matches `eventType` server-side).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "resourceType",
+            "in": "query",
+            "required": false,
+            "description": "Filter to events touching this resource type (e.g. `branding`, `compliance.export`).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "Maximum events to return per page. Defaults to 50, capped at 100.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor returned in `nextPageToken`. Treat as opaque; do not parse.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit events page",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuditEventsResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not authorized for this tenant or missing scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "hostApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "ak_live_<random>"
+      }
+    },
+    "schemas": {
+      "AuditEvent": {
+        "type": "object",
+        "required": ["id", "occurredAt", "actor", "action"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable, unique identifier (UUID)."
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the event was recorded (UTC)."
+          },
+          "actor": {
+            "type": "string",
+            "description": "Identifier of the principal that performed the action (user uid or service id)."
+          },
+          "action": {
+            "type": "string",
+            "description": "Action name. Mirrors the internal `eventType`; examples: `compliance.export.requested`, `branding.updated`, `signing.key.rotated`."
+          },
+          "resourceType": {
+            "type": ["string", "null"],
+            "description": "Coarse type of resource affected (e.g. `branding`, `compliance.export`). May be null on legacy records."
+          },
+          "resourceId": {
+            "type": ["string", "null"],
+            "description": "Identifier of the specific resource affected, when applicable."
+          },
+          "metadata": {
+            "type": ["object", "null"],
+            "additionalProperties": true,
+            "description": "Free-form fields captured by the underlying audit writer. Hosts MUST treat unknown keys as opaque."
+          }
+        }
+      },
+      "AuditEventsResponse": {
+        "type": "object",
+        "required": ["tenantId", "events", "nextPageToken", "retentionDays"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "events": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AuditEvent" }
+          },
+          "nextPageToken": {
+            "type": ["string", "null"],
+            "description": "Opaque cursor for the next page, or null when no more pages are available."
+          },
+          "retentionDays": {
+            "type": "integer",
+            "description": "Hard retention cap. Records older than this many days are excluded from results.",
+            "minimum": 1
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

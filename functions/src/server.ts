@@ -116,6 +116,7 @@ import { TenantOffboardingService } from './services/tenant/TenantOffboardingSer
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createAuditEventsV1Router } from './routes/auditEventsV1.js';
 import {
   createEmbedV1Router,
   createEmbedCspMiddleware,
@@ -454,6 +455,18 @@ app.use(
   brandingRouter
 );
 
+// Host audit-events API (issue #164).
+// Host-API-key authenticated (audit.read scope) with an optional Bearer
+// user fallback for tenant owners. Mounted at the canonical /v1 path per
+// the issue spec, and also under /api/v1 to match the prefix used by the
+// rest of the host surface.
+const auditEventsRouter = createAuditEventsV1Router({
+  dataAdapter,
+  meteringBus: undefined, // wired by host integrations
+  usageBus: meteringBus,
+  // Until a real tenantId model lands, treat the authenticated user's uid
+  // as their own tenantId (mirrors the tenantUsage convention).
+  ownsTenant: async (userId, tenantId) => userId === tenantId,
 // --- Embed handshake routes (issue #163) ---
 // GET/PUT allowed-origins is host-API-key gated (or owner user); the CSP
 // report endpoint is unauthenticated so browsers can post violation
@@ -510,11 +523,24 @@ app.use(
   tenantExportPresetsRouter
 );
 app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  auditEventsRouter
+);
+app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
   optionalAuthMiddleware,
   tenantExportPresetsRouter
 );
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  auditEventsRouter
+);
+
 // Error handlers (must be last)
 app.use(notFoundHandler);
 app.use(errorHandler);

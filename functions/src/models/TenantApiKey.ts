@@ -19,6 +19,7 @@ export type TenantApiKeyScope =
   | 'tenants.read'
   | 'tenants.write'
   | 'webhooks.write'
+  | 'audit.read'
   | 'tenant.admin'
   | 'plugins.read'
   | 'plugins.write'
@@ -30,6 +31,7 @@ export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'tenants.read',
   'tenants.write',
   'webhooks.write',
+  'audit.read',
   /**
    * `tenant.admin` grants destructive offboarding capabilities:
    * exporting all tenant data and irreversibly deleting it

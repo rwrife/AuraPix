@@ -42,6 +42,15 @@ const REQUIRED_INDEXES = [
       { fieldPath: 'createdAt', order: 'ASCENDING' },
     ],
   },
+  {
+    // Host audit-events API (issue #164): tenant-scoped listing
+    // ordered by occurredAt desc.
+    collectionGroup: 'auditEvents',
+    fields: [
+      { fieldPath: 'tenantId', order: 'ASCENDING' },
+      { fieldPath: 'occurredAt', order: 'DESCENDING' },
+    ],
+  },
 ];
 
 function loadIndexFile() {

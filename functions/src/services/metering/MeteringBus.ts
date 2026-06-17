@@ -32,6 +32,7 @@ export type MeteringEventType =
   | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
+  | 'audit.queried'
   // Embed handshake (issue #163). Emitted from the CSP middleware and
   // the `frame-ancestors` violation report endpoint respectively.
   | 'embed.session_started'
