@@ -1,0 +1,166 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Photos API",
+    "version": "1.0.0",
+    "description": "Contract artifact for photo resource list/read endpoints. Issue #151 introduces a normalized EXIF summary and `?sort=capturedAt`."
+  },
+  "servers": [
+    {
+      "url": "https://api.aurapix.example"
+    }
+  ],
+  "paths": {
+    "/api/v1/photos": {
+      "get": {
+        "operationId": "listPhotos",
+        "summary": "List photos in a library, optionally sorted by EXIF capture date.",
+        "parameters": [
+          {
+            "name": "libraryId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort key. Prefix with `-` for descending. `capturedAt` falls back to upload time (`createdAt`) when the photo has no EXIF capture date.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "capturedAt",
+                "-capturedAt",
+                "createdAt",
+                "-createdAt",
+                "updatedAt",
+                "-updatedAt"
+              ],
+              "default": "-createdAt"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paged photo list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "photos": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Photo" }
+                    },
+                    "pagination": { "$ref": "#/components/schemas/Pagination" }
+                  },
+                  "required": ["photos", "pagination"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "NormalizedExif": {
+        "type": "object",
+        "description": "Compact, stable subset of EXIF persisted at the top level of a photo doc. Issue #151. Full raw EXIF lives under `metadata.exif`.",
+        "properties": {
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 capture timestamp in UTC."
+          },
+          "camera": { "type": "string", "description": "e.g. 'Sony ILCE-7M4'." },
+          "lens": { "type": "string" },
+          "iso": { "type": "integer" },
+          "fNumber": { "type": "number" },
+          "exposureTimeSec": {
+            "type": "number",
+            "description": "Exposure time in seconds (e.g. 0.008 for 1/125)."
+          },
+          "focalLengthMm": { "type": "number" },
+          "widthPx": { "type": "integer" },
+          "heightPx": { "type": "integer" },
+          "orientation": { "type": "integer", "minimum": 1, "maximum": 8 }
+        }
+      },
+      "Photo": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "libraryId": { "type": "string" },
+          "originalName": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["uploading", "processing", "ready", "error"]
+          },
+          "metadata": { "type": "object" },
+          "exif": { "$ref": "#/components/schemas/NormalizedExif" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "libraryId", "originalName", "status", "createdAt"]
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "pageSize": { "type": "integer" },
+          "total": { "type": "integer" },
+          "hasNextPage": { "type": "boolean" },
+          "sort": { "type": "string" }
+        },
+        "required": ["page", "pageSize", "total", "hasNextPage"]
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            },
+            "required": ["code", "message"]
+          }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}
