@@ -19,7 +19,17 @@ export type MeteringEventType =
   // should ever fire — sinks may treat the tenant as terminal.
   | 'tenant.export.requested'
   | 'tenant.export.completed'
-  | 'tenant.deleted';
+  | 'tenant.deleted'
+  | 'plugin.enabled'
+  | 'plugin.disabled'
+  | 'plugin.blocked'
+  | 'photo.trashed'
+  | 'photo.purged'
+  | 'photo.tagged'
+  | 'photo.exported'
+  | 'smart_album.created'
+  | 'smart_album.deleted'
+  | 'smart_album.materialized';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 

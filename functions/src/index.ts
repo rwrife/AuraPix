@@ -97,7 +97,7 @@ app.get('/health', (req, res) => {
 });
 
 // Mount routes
-const domainModules = createDomainModules();
+const domainModules = createDomainModules({ dataAdapter });
 app.use('/images', imagesRouter);
 app.use('/internal', internalRouter);
 app.use('/edits', editsRouter);

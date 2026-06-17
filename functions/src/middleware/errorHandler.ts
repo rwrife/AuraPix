@@ -25,6 +25,7 @@ export function errorHandler(
     logger.warn({ err, path: req.path }, 'Application error');
     res.status(err.statusCode).json({
       error: err.message,
+      code: err.code,
       statusCode: err.statusCode,
     });
     return;

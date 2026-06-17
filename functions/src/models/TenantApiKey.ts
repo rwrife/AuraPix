@@ -18,7 +18,11 @@ export type TenantApiKeyScope =
   | 'usage.read'
   | 'tenants.read'
   | 'webhooks.write'
-  | 'tenant.admin';
+  | 'tenant.admin'
+  | 'plugins.read'
+  | 'plugins.write'
+  | 'export-presets.read'
+  | 'export-presets.write';
 
 export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'usage.read',
@@ -31,6 +35,10 @@ export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
    * auth — these endpoints are host-key-only.
    */
   'tenant.admin',
+  'plugins.read',
+  'plugins.write',
+  'export-presets.read',
+  'export-presets.write',
 ] as const;
 
 export interface TenantApiKeyRecord {
