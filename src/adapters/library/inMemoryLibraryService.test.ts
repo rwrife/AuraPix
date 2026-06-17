@@ -331,4 +331,161 @@ describe('InMemoryLibraryService', () => {
     const updated = await svc.getPhoto(p1.id);
     expect(updated?.albumIds).toContain('album-a');
   });
+
+  describe('triage (rating + flag)', () => {
+    it('defaults new photos to rating=0 and flag=null', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'fresh.jpg',
+        dataUrl: 'data:image/jpeg;base64,fresh',
+      });
+
+      expect(photo.rating).toBe(0);
+      expect(photo.flag).toBeNull();
+    });
+
+    it('updates rating and flag through updatePhoto', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'pickme.jpg',
+        dataUrl: 'data:image/jpeg;base64,pickme',
+      });
+
+      const rated = await svc.updatePhoto(photo.id, { rating: 4 });
+      expect(rated.rating).toBe(4);
+
+      const flagged = await svc.updatePhoto(photo.id, { flag: 'pick' });
+      expect(flagged.flag).toBe('pick');
+
+      const cleared = await svc.updatePhoto(photo.id, { flag: null });
+      expect(cleared.flag).toBeNull();
+    });
+
+    it('rejects out-of-range ratings (domain rule)', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'bad.jpg',
+        dataUrl: 'data:image/jpeg;base64,bad',
+      });
+
+      await expect(
+        svc.updatePhoto(photo.id, { rating: 6 as unknown as 0 })
+      ).rejects.toThrow(/Invalid rating/);
+      await expect(
+        svc.updatePhoto(photo.id, { rating: -1 as unknown as 0 })
+      ).rejects.toThrow(/Invalid rating/);
+      await expect(
+        svc.updatePhoto(photo.id, { rating: 2.5 as unknown as 0 })
+      ).rejects.toThrow(/Invalid rating/);
+    });
+
+    it('rejects invalid flag values', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'bad-flag.jpg',
+        dataUrl: 'data:image/jpeg;base64,badflag',
+      });
+
+      await expect(
+        svc.updatePhoto(photo.id, { flag: 'maybe' as unknown as 'pick' })
+      ).rejects.toThrow(/Invalid flag/);
+    });
+
+    it('filters by minRating with pagination preserved', async () => {
+      const svc = new InMemoryLibraryService();
+      const a = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'a.jpg',
+        dataUrl: 'data:image/jpeg;base64,a',
+      });
+      const b = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'b.jpg',
+        dataUrl: 'data:image/jpeg;base64,b',
+      });
+      const c = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'c.jpg',
+        dataUrl: 'data:image/jpeg;base64,c',
+      });
+
+      await svc.updatePhoto(a.id, { rating: 1 });
+      await svc.updatePhoto(b.id, { rating: 3 });
+      await svc.updatePhoto(c.id, { rating: 5 });
+
+      const threePlus = await svc.listPhotos({ libraryId: LIBRARY_ID, minRating: 3 });
+      expect(new Set(threePlus.photos.map((p) => p.id))).toEqual(new Set([b.id, c.id]));
+
+      // Pagination still works on top of the filter.
+      const paged = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        minRating: 3,
+        pageSize: 1,
+      });
+      expect(paged.photos).toHaveLength(1);
+      expect(paged.nextPageToken).not.toBeNull();
+    });
+
+    it('filters by flag including unflagged', async () => {
+      const svc = new InMemoryLibraryService();
+      const pick = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'pick.jpg',
+        dataUrl: 'data:image/jpeg;base64,pick',
+      });
+      const reject = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'reject.jpg',
+        dataUrl: 'data:image/jpeg;base64,reject',
+      });
+      const none = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'none.jpg',
+        dataUrl: 'data:image/jpeg;base64,none',
+      });
+
+      await svc.updatePhoto(pick.id, { flag: 'pick' });
+      await svc.updatePhoto(reject.id, { flag: 'reject' });
+
+      const picks = await svc.listPhotos({ libraryId: LIBRARY_ID, flag: 'pick' });
+      expect(picks.photos.map((p) => p.id)).toEqual([pick.id]);
+
+      const rejects = await svc.listPhotos({ libraryId: LIBRARY_ID, flag: 'reject' });
+      expect(rejects.photos.map((p) => p.id)).toEqual([reject.id]);
+
+      const unflagged = await svc.listPhotos({ libraryId: LIBRARY_ID, flag: 'unflagged' });
+      expect(unflagged.photos.map((p) => p.id)).toEqual([none.id]);
+    });
+
+    it('scopes triage filters per library (cross-tenant isolation)', async () => {
+      const svc = new InMemoryLibraryService();
+      const otherLibrary = 'library-other-user';
+
+      const mine = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'mine.jpg',
+        dataUrl: 'data:image/jpeg;base64,mine',
+      });
+      const theirs = await svc.addPhoto({
+        libraryId: otherLibrary,
+        originalName: 'theirs.jpg',
+        dataUrl: 'data:image/jpeg;base64,theirs',
+      });
+
+      await svc.updatePhoto(mine.id, { rating: 5, flag: 'pick' });
+      await svc.updatePhoto(theirs.id, { rating: 5, flag: 'pick' });
+
+      const myPicks = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        minRating: 5,
+        flag: 'pick',
+      });
+      expect(myPicks.photos.map((p) => p.id)).toEqual([mine.id]);
+      expect(myPicks.photos.find((p) => p.id === theirs.id)).toBeUndefined();
+    });
+  });
 });

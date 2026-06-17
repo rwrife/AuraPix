@@ -12,24 +12,42 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'bulk.batch'
+  | 'user.active'
+  | 'user.provisioned'
+  | 'user.revoked'
   | 'quota.exceeded'
   | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
+  // Tenant offboarding lifecycle (issue #155). After `tenant.deleted` is
+  // emitted for a given tenantId, no further events for that tenant
+  // should ever fire — sinks may treat the tenant as terminal.
+  | 'tenant.export.requested'
+  | 'tenant.export.completed'
+  | 'tenant.deleted'
+  | 'user.active'
   | 'plugin.enabled'
   | 'plugin.disabled'
   | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
   | 'audit.queried'
+  // Embed handshake (issue #163). Emitted from the CSP middleware and
+  // the `frame-ancestors` violation report endpoint respectively.
+  | 'embed.session_started'
+  | 'embed.origin_blocked'
+  // Reserved, low-volume debug-tier event. Emitted by the Idempotency-Key
+  // middleware on a cached replay so hosts can observe client retry
+  // behavior. NOT billable; consumers should exclude it from rollups.
+  // See `docs/features/idempotency-keys.md` (issue #162).
+  | 'idempotency.replayed'
   | 'webhook.secret_rotated'
   | 'photo.tagged'
   | 'photo.exported'
   | 'smart_album.created'
   | 'smart_album.deleted'
   | 'smart_album.materialized';
-// Future (placeholder; not emitted in this PR):
-//   | 'user.active'
 
 export interface MeteringEvent {
   /**

@@ -20,6 +20,7 @@ export type TenantApiKeyScope =
   | 'tenants.write'
   | 'webhooks.write'
   | 'audit.read'
+  | 'tenant.admin'
   | 'plugins.read'
   | 'plugins.write'
   | 'export-presets.read'
@@ -31,6 +32,13 @@ export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'tenants.write',
   'webhooks.write',
   'audit.read',
+  /**
+   * `tenant.admin` grants destructive offboarding capabilities:
+   * exporting all tenant data and irreversibly deleting it
+   * (issue #155). It MUST NOT be combined with end-user bearer
+   * auth — these endpoints are host-key-only.
+   */
+  'tenant.admin',
   'plugins.read',
   'plugins.write',
   'export-presets.read',

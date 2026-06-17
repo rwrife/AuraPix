@@ -76,6 +76,7 @@ describe('snapshotTenantStorage', () => {
       signedUrlsIssued: 0,
       editsApplied: 0,
       apiCalls: 3,
+      activeUsers: 0,
       storageBytesTotal: null,
       appliedEventIds: [],
       updatedAt: new Date().toISOString(),
