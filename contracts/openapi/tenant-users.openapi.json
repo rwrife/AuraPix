@@ -1,0 +1,140 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Users API",
+    "version": "0.1.0",
+    "description": "Tenant user (membership) management for hosts. Memberships are stored at `tenants/{tenantId}/members/{userId}` and are never global — a user may belong to multiple tenants and the tenant context comes from the request, not the user. Cross-tenant access returns 404 (not 403) to avoid leaking existence. See issue #143."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/api/v1/tenants/{tenantId}/users": {
+      "parameters": [
+        { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "post": {
+        "operationId": "createTenantUser",
+        "summary": "Provision a user into a tenant",
+        "description": "Creates a tenant membership record. Does NOT send an invite email — the host owns the invite UX. Requires host API key with `tenants:write` scope.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUserRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Membership created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "200": { "description": "Membership already existed (idempotent)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Authentication required" },
+          "403": { "description": "Insufficient scope" },
+          "404": { "description": "Cross-tenant request (existence hidden)" }
+        }
+      },
+      "get": {
+        "operationId": "listTenantUsers",
+        "summary": "List active memberships for a tenant",
+        "description": "Returns active (non-revoked) memberships with `role` and `lastActiveAt`. Requires host API key with `tenants.read` scope.",
+        "responses": {
+          "200": { "description": "Paginated list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserListResponse" } } } },
+          "401": { "description": "Authentication required" },
+          "403": { "description": "Insufficient scope" },
+          "404": { "description": "Cross-tenant request (existence hidden)" }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/users/{userId}": {
+      "parameters": [
+        { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+        { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "patch": {
+        "operationId": "updateTenantUser",
+        "summary": "Change a user's role within a tenant",
+        "description": "Requires host API key with `tenants:write` scope.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Authentication required" },
+          "403": { "description": "Insufficient scope" },
+          "404": { "description": "Membership not found (or cross-tenant)" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTenantUser",
+        "summary": "Revoke a user's membership (keeps audit row)",
+        "description": "Soft-revokes the membership; the audit row is retained for billing reconciliation. Requires host API key with `tenants:write` scope.",
+        "responses": {
+          "204": { "description": "Revoked" },
+          "401": { "description": "Authentication required" },
+          "403": { "description": "Insufficient scope" },
+          "404": { "description": "Membership not found (or cross-tenant)" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Role": { "type": "string", "enum": ["owner", "editor", "viewer"] },
+      "Membership": {
+        "type": "object",
+        "required": ["userId", "tenantId", "email", "role", "createdAt", "lastActiveAt"],
+        "properties": {
+          "userId": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "role": { "$ref": "#/components/schemas/Role" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "lastActiveAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": ["email", "role"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "userId": { "type": "string", "description": "Stable host-side id. Defaults to `email` if omitted." },
+          "role": { "$ref": "#/components/schemas/Role" }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "role": { "$ref": "#/components/schemas/Role" }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "required": ["user"],
+        "properties": { "user": { "$ref": "#/components/schemas/Membership" } }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "required": ["users"],
+        "properties": {
+          "users": { "type": "array", "items": { "$ref": "#/components/schemas/Membership" } },
+          "nextPageToken": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "securitySchemes": {
+      "HostApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "ak_live_*"
+      }
+    }
+  },
+  "security": [{ "HostApiKey": [] }]
+}

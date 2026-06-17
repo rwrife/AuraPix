@@ -41,6 +41,9 @@ type MeteringEvent = {
 | `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
 | `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
+| `user.active` | `routes/tenantUsersV1.ts` activity tracker — **at most once per `(tenantId, userId)` per UTC day** | `resourceId=userId`. This is the per-seat billing signal hosts asked for in #143. |
+| `user.provisioned` | `routes/tenantUsersV1.ts` on `POST /v1/tenants/:id/users` (newly created membership only; no-op on idempotent re-POST) | `resourceId=userId`, `meta.role`, `meta.email` |
+| `user.revoked` | `routes/tenantUsersV1.ts` on `DELETE /v1/tenants/:id/users/:userId` | `resourceId=userId`, `meta.role` |
 | `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
 | `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
