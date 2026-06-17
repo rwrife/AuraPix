@@ -1,5 +1,30 @@
 export type PhotoStatus = 'pending' | 'ready' | 'error';
 
+/** Lightroom-style triage rating from 0 (unset) to 5 stars. */
+export type PhotoRating = 0 | 1 | 2 | 3 | 4 | 5;
+
+/** Lightroom-style pick/reject flag; `null` (default) means unflagged. */
+export type PhotoFlag = 'pick' | 'reject' | null;
+
+/** Allowed values for {@link PhotoRating}. Useful for validation. */
+export const PHOTO_RATING_VALUES: readonly PhotoRating[] = [0, 1, 2, 3, 4, 5];
+
+/** Allowed non-null values for {@link PhotoFlag}. Useful for validation. */
+export const PHOTO_FLAG_VALUES: readonly Exclude<PhotoFlag, null>[] = ['pick', 'reject'];
+
+export function isPhotoRating(value: unknown): value is PhotoRating {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    (PHOTO_RATING_VALUES as readonly number[]).includes(value)
+  );
+}
+
+export function isPhotoFlag(value: unknown): value is PhotoFlag {
+  if (value === null) return true;
+  return typeof value === 'string' && (PHOTO_FLAG_VALUES as readonly string[]).includes(value);
+}
+
 export interface PhotoMetadata {
   width: number;
   height: number;
@@ -24,6 +49,14 @@ export interface Photo {
   updatedAt: string;
   isFavorite: boolean;
   tags: string[];
+  /**
+   * Lightroom-style triage rating, 0–5 stars. Defaults to 0 (unset).
+   */
+  rating: PhotoRating;
+  /**
+   * Lightroom-style pick/reject flag. `null` (default) means unflagged.
+   */
+  flag: PhotoFlag;
 }
 
 export interface MetadataFilterInput {
@@ -55,6 +88,14 @@ export interface ListPhotosInput {
    * Stable sort conventions for API/UI parity. Defaults to `created_desc`.
    */
   sort?: LibrarySort;
+  /**
+   * Inclusive minimum rating filter (0–5). Photos with `rating >= minRating` match.
+   */
+  minRating?: PhotoRating;
+  /**
+   * Filter by triage flag. Use `'unflagged'` to request rows with `flag === null`.
+   */
+  flag?: PhotoFlag | 'unflagged';
   pageSize?: number;
   pageToken?: string;
 }
@@ -85,6 +126,10 @@ export interface UpdatePhotoInput {
   isFavorite?: boolean;
   tags?: string[];
   albumIds?: string[];
+  /** Triage rating (0–5). Validated by the service. */
+  rating?: PhotoRating;
+  /** Triage flag (`'pick' | 'reject' | null`). Validated by the service. */
+  flag?: PhotoFlag;
 }
 
 export type BulkAddToAlbumErrorCode = 'not_found' | 'already_in_album';

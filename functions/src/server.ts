@@ -7,6 +7,8 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
 import { createIdempotencyMiddleware } from './middleware/idempotency.js';
+import { createUserActiveMiddleware } from './middleware/userActive.js';
+import { InMemoryUserActiveDailyStore } from './services/metering/UserActiveDailyStore.js';
 import { resolveTenant } from './middleware/resolveTenant.js';
 import { createTenantTokenBucketRateLimiter } from './middleware/rateLimit.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
@@ -97,11 +99,15 @@ import { createPhotosListV1Router } from './routes/photosListV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createTenantUsersRouter } from './routes/tenantUsersV1.js';
 import { createTenantAdminRouter } from './routes/tenantAdmin.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantOffboardingRouter } from './routes/tenantOffboardingV1.js';
+import { TenantOffboardingService } from './services/tenant/TenantOffboardingService.js';
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createBulkPhotosRouter } from './routes/photosBatchV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
 import {
@@ -183,6 +189,9 @@ app.use(
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+// Bulk photo operations (issue #142). Express routes treat `:` as a param
+// separator, so we register the exact literal path.
+app.use('/api/v1/photos\\:batch', authMiddleware, createBulkPhotosRouter(dataAdapter));
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
@@ -273,6 +282,18 @@ app.use(
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
+// --- Per-user active-day dedupe (issue #153) ---
+// Emits at most one `user.active` metering event per (tenantId, userId, UTC day).
+// Skipped for host-API-key (service-to-service) requests.
+const userActiveStore = new InMemoryUserActiveDailyStore();
+app.locals.userActiveStore = userActiveStore;
+const userActive = createUserActiveMiddleware({
+  store: userActiveStore,
+  usageBus: meteringBus,
+});
+
+// Photos service participates in the usage rollup for tag mutations
+// (`tagsApplied` counter, issue #173).
 // Bind metering bus to photo services (must come after meteringBus exists).
 photosService.setUsageBus(meteringBus);
 photoExportHandle.setUsageBus(meteringBus);
@@ -280,6 +301,8 @@ photoExportHandle.setUsageBus(meteringBus);
 app.use(
   '/api/v1/tenants',
   authMiddleware,
+  resolveTenant,
+  userActive,
   createTenantUsageRouter({
     store: usageDailyStore,
     // Until the tenantId model lands, treat the authenticated user's uid as
@@ -287,6 +310,25 @@ app.use(
     ownsTenant: async (userId, tenantId) => userId === tenantId,
   })
 );
+// Tenant user (membership) management. Host API key authenticated.
+// Mount BEFORE branding's GET-public router so the /v1/tenants/:id/users
+// paths are matched here first.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantUsersRouter({
+    dataAdapter,
+    meteringBus: {
+      emit: (event) => {
+        // Bridge into the existing usage rollup bus where applicable.
+        // user.* events are emitted via logger today; a follow-up wires the
+        // shared MeteringBus end-to-end.
+        logger.info({ event: 'metering', ...event }, 'metering event emitted');
+      },
+    },
+  })
+);
+
 
 // Tenant admin (PATCH /api/v1/tenants/:tenantId). Host API key path: a key
 // with the `tenants.write` scope can update quota. Pre-auth runs the
@@ -313,6 +355,20 @@ app.use(
     store: webhookDeliveryStore,
     sink: getHostWebhookSink() ?? undefined,
   })
+);
+
+// Tenant offboarding (issue #155). Host-key-only — even tenant owners
+// cannot trigger an export or hard-delete via a Bearer token. The router
+// itself enforces `tenant.admin` scope and the X-Confirm-Tenant-Id header.
+const offboardingService = new TenantOffboardingService({
+  data: dataAdapter,
+  storage: storageAdapter,
+});
+app.locals.tenantOffboardingService = offboardingService;
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantOffboardingRouter({ service: offboardingService })
 );
 
 // Per-tenant webhook signing-secret rotation (issue #161).

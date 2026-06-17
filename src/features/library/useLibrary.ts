@@ -5,6 +5,8 @@ import type {
   LibrarySort,
   MetadataFilterInput,
   Photo,
+  PhotoFlag,
+  PhotoRating,
 } from '../../domain/library/types';
 import { useServices } from '../../services/useServices';
 
@@ -21,6 +23,8 @@ interface UseLibraryReturn extends UseLibraryState {
   loadMore(): Promise<void>;
   addPhoto(file: File): Promise<Photo>;
   toggleFavorite(photoId: string): Promise<void>;
+  setRating(photoId: string, rating: PhotoRating): Promise<void>;
+  setFlag(photoId: string, flag: PhotoFlag): Promise<void>;
   setTags(photoId: string, tags: string[]): Promise<void>;
   deletePhoto(photoId: string): Promise<void>;
   assignToAlbum(photoId: string, albumId: string, hint?: Photo): Promise<void>;
@@ -45,6 +49,8 @@ export function useLibrary(
     collection?: LibraryQuickCollection;
     tags?: string[];
     sort?: LibrarySort;
+    minRating?: PhotoRating;
+    flag?: PhotoFlag | 'unflagged';
   }
 ): UseLibraryReturn {
   const { library } = useServices();
@@ -69,6 +75,8 @@ export function useLibrary(
         collection: filters?.collection,
         tags: filters?.tags,
         sort: filters?.sort,
+        minRating: filters?.minRating,
+        flag: filters?.flag,
         pageSize: 24,
       })
       .then(({ photos: p, nextPageToken: token }) => {
@@ -97,6 +105,8 @@ export function useLibrary(
     filters?.collection,
     filters?.tags,
     filters?.sort,
+    filters?.minRating,
+    filters?.flag,
   ]);
 
   const addPhoto = useCallback(
@@ -132,6 +142,22 @@ export function useLibrary(
   const setTags = useCallback(
     async (photoId: string, tags: string[]) => {
       const updated = await library.updatePhoto(photoId, { tags });
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
+    },
+    [library]
+  );
+
+  const setRating = useCallback(
+    async (photoId: string, rating: PhotoRating) => {
+      const updated = await library.updatePhoto(photoId, { rating });
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
+    },
+    [library]
+  );
+
+  const setFlag = useCallback(
+    async (photoId: string, flag: PhotoFlag) => {
+      const updated = await library.updatePhoto(photoId, { flag });
       setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
     },
     [library]
@@ -201,6 +227,8 @@ export function useLibrary(
         collection: filters?.collection,
         tags: filters?.tags,
         sort: filters?.sort,
+        minRating: filters?.minRating,
+        flag: filters?.flag,
         pageSize: 24,
         pageToken: nextPageToken,
       });
@@ -221,6 +249,8 @@ export function useLibrary(
     filters?.collection,
     filters?.tags,
     filters?.sort,
+    filters?.minRating,
+    filters?.flag,
   ]);
 
   return {
@@ -233,6 +263,8 @@ export function useLibrary(
     loadMore,
     addPhoto,
     toggleFavorite,
+    setRating,
+    setFlag,
     setTags,
     deletePhoto,
     assignToAlbum,

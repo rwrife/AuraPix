@@ -41,10 +41,15 @@ type MeteringEvent = {
 | `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
 | `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
+| `bulk.batch` | `handlers/photos/batch.ts` after a `POST /api/v1/photos:batch` call completes | exactly one event per call regardless of N; `meta.action`, `meta.requested`, `meta.succeeded`, `meta.failed`. Per-photo events (e.g. delete audits) are still emitted in addition and are NOT collapsed. |
+| `user.active` | `routes/tenantUsersV1.ts` activity tracker — **at most once per `(tenantId, userId)` per UTC day** | `resourceId=userId`. This is the per-seat billing signal hosts asked for in #143. |
+| `user.provisioned` | `routes/tenantUsersV1.ts` on `POST /v1/tenants/:id/users` (newly created membership only; no-op on idempotent re-POST) | `resourceId=userId`, `meta.role`, `meta.email` |
+| `user.revoked` | `routes/tenantUsersV1.ts` on `DELETE /v1/tenants/:id/users/:userId` | `resourceId=userId`, `meta.role` |
 | `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
 | `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
+| `user.active` | `middleware/userActive.ts`, after auth + tenant resolution, on the **first** end-user request of the UTC day for `(tenantId, userId)` | `count=1`, `resourceId=userId`, `meta.firstSeenAt` (ISO-8601), `meta.route=req.path`. Host-API-key (service-to-service) calls do **not** emit this event. Dedupe scope is `(tenantId, userId, utcDay)`, so the same Firebase user active in two tenants emits two seat events. Increments the daily-rollup `activeUsers` counter. |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
 | `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
 | `idempotency.replayed` | `middleware/idempotency.ts` on a cached replay (issue #162) | **NOT billable.** Debug-tier; `count=1`, `meta.route`, `meta.key`. Hosts should exclude this type from billing rollups; it exists so operators can observe client retry behavior. |
@@ -54,8 +59,24 @@ type MeteringEvent = {
 | `smart_album.deleted` | `domain/smartAlbums/SmartAlbumsService.remove` (`DELETE /smart-albums/:id`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
 | `smart_album.materialized` | `domain/smartAlbums/SmartAlbumsService.materialize` (`GET /smart-albums/:id/photos`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`, `meta.resultCount`, `meta.totalCount`. Hosts can use `resultCount` to detect heavy query patterns. |
 
-Reserved for follow-ups (not emitted yet): `user.active`.
+No events currently reserved for follow-ups.
 
+### Non-billable metadata writes (explicit exclusions)
+
+Pure photo-metadata writes — such as the Lightroom-style triage fields
+(`rating`, `flag`), favoriting, and tag edits — are deliberately **not**
+emitted as metering events. In particular:
+
+- `PATCH /v1/photos/:id { rating, flag }` (issue #141) MUST NOT emit
+  `edit.applied`. That event is reserved for non-destructive image edits
+  committed via `handlers/edits/applyEdits.ts` (a new version is written to
+  storage and indexed). Triage updates only touch a small Firestore field set
+  and do not produce a new derivative.
+- The same exclusion applies to `isFavorite` toggles and `tags` updates.
+
+If a host wants to bill culling activity, it can do so today by counting
+photo writes in its own audit log; AuraPix will not double-count it as an
+edit.
 ### Quota warning thresholds
 
 Thresholds default to `[0.8, 0.95]` (80% and 95%). Override with the

@@ -1,15 +1,17 @@
 import type { LibraryService } from '../../domain/library/contract';
-import type {
-  AddPhotoInput,
-  BulkAddToAlbumInput,
-  BulkAddToAlbumResult,
-  LibraryUsageSummary,
-  ListPhotosInput,
-  ListPhotosResult,
-  LibraryQuickCollection,
-  LibrarySort,
-  Photo,
-  UpdatePhotoInput,
+import {
+  isPhotoFlag,
+  isPhotoRating,
+  type AddPhotoInput,
+  type BulkAddToAlbumInput,
+  type BulkAddToAlbumResult,
+  type LibraryUsageSummary,
+  type ListPhotosInput,
+  type ListPhotosResult,
+  type LibraryQuickCollection,
+  type LibrarySort,
+  type Photo,
+  type UpdatePhotoInput,
 } from '../../domain/library/types';
 
 // ---------------------------------------------------------------------------
@@ -22,7 +24,14 @@ const STORAGE_KEY = 'aurapix:local:photos';
 function loadPhotos(): Photo[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Photo[]) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Photo[];
+    // Backfill new optional triage fields for older persisted records.
+    return parsed.map((photo) => ({
+      ...photo,
+      rating: isPhotoRating(photo.rating) ? photo.rating : 0,
+      flag: isPhotoFlag(photo.flag) ? photo.flag : null,
+    }));
   } catch {
     return [];
   }
@@ -112,6 +121,24 @@ export class InMemoryLibraryService implements LibraryService {
     }
     if (input.tags && input.tags.length > 0) {
       results = results.filter((p) => input.tags!.every((t) => p.tags.includes(t)));
+    }
+
+    if (input.minRating !== undefined) {
+      if (!isPhotoRating(input.minRating)) {
+        throw new Error(`Invalid minRating: ${String(input.minRating)} (expected integer 0–5).`);
+      }
+      results = results.filter((p) => (p.rating ?? 0) >= input.minRating!);
+    }
+
+    if (input.flag !== undefined) {
+      if (input.flag === 'unflagged') {
+        results = results.filter((p) => (p.flag ?? null) === null);
+      } else {
+        if (!isPhotoFlag(input.flag)) {
+          throw new Error(`Invalid flag: ${String(input.flag)}.`);
+        }
+        results = results.filter((p) => (p.flag ?? null) === input.flag);
+      }
     }
 
     if (input.metadata?.cameraMake) {
@@ -233,6 +260,8 @@ export class InMemoryLibraryService implements LibraryService {
       updatedAt: now,
       isFavorite: false,
       tags: [],
+      rating: 0,
+      flag: null,
     };
 
     this.photos = [photo, ...this.photos];
@@ -244,11 +273,21 @@ export class InMemoryLibraryService implements LibraryService {
     const idx = this.photos.findIndex((p) => p.id === photoId);
     if (idx === -1) throw new Error(`Photo ${photoId} not found.`);
 
+    if (input.rating !== undefined && !isPhotoRating(input.rating)) {
+      throw new Error(`Invalid rating: ${String(input.rating)} (expected integer 0–5).`);
+    }
+
+    if (input.flag !== undefined && !isPhotoFlag(input.flag)) {
+      throw new Error(`Invalid flag: ${String(input.flag)} (expected 'pick' | 'reject' | null).`);
+    }
+
     const updated: Photo = {
       ...this.photos[idx],
       ...(input.isFavorite !== undefined && { isFavorite: input.isFavorite }),
       ...(input.tags !== undefined && { tags: input.tags }),
       ...(input.albumIds !== undefined && { albumIds: input.albumIds }),
+      ...(input.rating !== undefined && { rating: input.rating }),
+      ...(input.flag !== undefined && { flag: input.flag }),
       updatedAt: new Date().toISOString(),
     };
 
