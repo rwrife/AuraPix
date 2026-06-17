@@ -12,6 +12,8 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'quota.exceeded'
+  | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
   | 'plugin.enabled'
@@ -23,6 +25,7 @@ export type MeteringEventType =
   // the `frame-ancestors` violation report endpoint respectively.
   | 'embed.session_started'
   | 'embed.origin_blocked'
+  | 'webhook.secret_rotated'
   | 'photo.tagged'
   | 'photo.exported'
   | 'smart_album.created'

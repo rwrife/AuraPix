@@ -108,3 +108,12 @@ export const signingConfig = {
     return generated;
   })(),
 } as const;
+
+// Per-tenant API rate limiter (issue #154). Token-bucket with `tenantId`
+// keying, applied after `resolveTenant`. Defaults can be overridden per
+// tenant via `tenants_config/{tenantId}` ({ rateLimit: { rps, burst } }).
+export const tenantRateLimitConfig = {
+  rps: parseInt(process.env.RATE_LIMIT_RPS || '20', 10),
+  burst: parseInt(process.env.RATE_LIMIT_BURST || '60', 10),
+  hostRps: parseInt(process.env.RATE_LIMIT_HOST_RPS || '100', 10),
+} as const;
