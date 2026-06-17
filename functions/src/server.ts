@@ -94,11 +94,13 @@ import { createPhotosListV1Router } from './routes/photosListV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createTenantUsersRouter } from './routes/tenantUsersV1.js';
 import { createTenantAdminRouter } from './routes/tenantAdmin.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createBulkPhotosRouter } from './routes/photosBatchV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
 import {
@@ -166,6 +168,9 @@ app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums))
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
+// Bulk photo operations (issue #142). Express routes treat `:` as a param
+// separator, so we register the exact literal path.
+app.use('/api/v1/photos\\:batch', authMiddleware, createBulkPhotosRouter(dataAdapter));
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
@@ -271,6 +276,25 @@ app.use(
     ownsTenant: async (userId, tenantId) => userId === tenantId,
   })
 );
+// Tenant user (membership) management. Host API key authenticated.
+// Mount BEFORE branding's GET-public router so the /v1/tenants/:id/users
+// paths are matched here first.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantUsersRouter({
+    dataAdapter,
+    meteringBus: {
+      emit: (event) => {
+        // Bridge into the existing usage rollup bus where applicable.
+        // user.* events are emitted via logger today; a follow-up wires the
+        // shared MeteringBus end-to-end.
+        logger.info({ event: 'metering', ...event }, 'metering event emitted');
+      },
+    },
+  })
+);
+
 
 // Tenant admin (PATCH /api/v1/tenants/:tenantId). Host API key path: a key
 // with the `tenants.write` scope can update quota. Pre-auth runs the

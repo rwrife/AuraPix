@@ -192,6 +192,8 @@ export function LibraryPage() {
     assignToAlbum,
     bulkAddToAlbum,
     toggleFavorite,
+    setRating,
+    setFlag,
     setTags,
     deletePhoto,
   } = useLibrary(libraryId, metadataFilters);
@@ -234,6 +236,57 @@ export function LibraryPage() {
     }, 50);
     return () => clearInterval(interval);
   }, [isFilmstrip]);
+
+  // Lightroom-style triage shortcuts: 0–5 rating; P=pick, X=reject; ~=clear flag.
+  // Only fires when the user is not typing into an input/textarea/contentEditable
+  // and exactly one photo is selected (or focused in the filmstrip viewer).
+  useEffect(() => {
+    function isEditableTarget(el: EventTarget | null): boolean {
+      if (!(el instanceof HTMLElement)) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    }
+
+    function targetPhotoId(): string | null {
+      if (selectedPhotoIds.size === 1) {
+        return Array.from(selectedPhotoIds)[0];
+      }
+      const viewerId = viewerStateRef.current?.currentPhoto?.id ?? null;
+      return viewerId;
+    }
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableTarget(event.target)) return;
+
+      const photoId = targetPhotoId();
+      if (!photoId) return;
+
+      const key = event.key;
+      if (key >= '0' && key <= '5') {
+        const rating = Number(key) as 0 | 1 | 2 | 3 | 4 | 5;
+        event.preventDefault();
+        void setRating(photoId, rating);
+        return;
+      }
+
+      const lower = key.toLowerCase();
+      if (lower === 'p') {
+        event.preventDefault();
+        void setFlag(photoId, 'pick');
+      } else if (lower === 'x') {
+        event.preventDefault();
+        void setFlag(photoId, 'reject');
+      } else if (key === '`' || key === '~') {
+        event.preventDefault();
+        void setFlag(photoId, null);
+      }
+    }
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedPhotoIds, setRating, setFlag]);
 
   // Handle upload modal trigger from URL query parameter
   useEffect(() => {
