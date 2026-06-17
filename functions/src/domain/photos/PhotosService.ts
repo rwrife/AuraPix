@@ -29,6 +29,11 @@ import {
 } from '../tenant/Tenant.js';
 import { emitMeteringEvent } from '../../services/metering/index.js';
 import type { UsageMeteringBus } from '../../services/metering/UsageMeteringBus.js';
+import {
+  applyTagMutation,
+  normalizeTagList,
+  type TagMutationResult,
+} from './tagNormalization.js';
 
 const PHOTOS_COLLECTION = 'photos';
 
@@ -53,7 +58,7 @@ export class PhotoNotFoundError extends Error {
 export class PhotosService {
   private readonly data: DataAdapter;
   private readonly storage: StorageAdapter | undefined;
-  private readonly usageBus: UsageMeteringBus | undefined;
+  private usageBus: UsageMeteringBus | undefined;
   private readonly now: () => Date;
 
   constructor(opts: PhotosServiceOptions) {
@@ -61,6 +66,16 @@ export class PhotosService {
     this.storage = opts.storageAdapter;
     this.usageBus = opts.usageBus;
     this.now = opts.now ?? (() => new Date());
+  }
+
+  /**
+   * Late-bind a usage bus after construction. Used by the server wiring,
+   * where the bus is created after the service. No-op if already set.
+   */
+  setUsageBus(bus: UsageMeteringBus): void {
+    if (!this.usageBus) {
+      this.usageBus = bus;
+    }
   }
 
   /** Fetch a photo, asserting tenant scope. Throws if missing or cross-tenant. */
@@ -138,10 +153,13 @@ export class PhotosService {
   /**
    * List photos for a tenant. By default returns only active (non-trashed)
    * photos. When `trashed=true`, returns only the tenant's trash.
+   *
+   * When `tags` is non-empty, results are narrowed to photos that contain
+   * **all** supplied tags (AND semantics, per issue #173).
    */
   async list(
     callerTenantId: TenantId,
-    opts: { trashed?: boolean } = {}
+    opts: { trashed?: boolean; tags?: string[]; libraryId?: string } = {}
   ): Promise<Photo[]> {
     const filterValue = callerTenantId === DEFAULT_TENANT_ID
       ? undefined
@@ -163,7 +181,127 @@ export class PhotosService {
         );
 
     const wantTrashed = opts.trashed === true;
-    return scoped.filter((p) => Boolean(p.trashedAt) === wantTrashed);
+    const visible = scoped.filter((p) => Boolean(p.trashedAt) === wantTrashed);
+
+    const libraryFiltered = opts.libraryId
+      ? visible.filter((p) => p.libraryId === opts.libraryId)
+      : visible;
+
+    if (!opts.tags || opts.tags.length === 0) return libraryFiltered;
+
+    // AND semantics: photo must contain every requested tag.
+    return libraryFiltered.filter((p) => {
+      const have = new Set((p.tags ?? []).filter((t) => typeof t === 'string'));
+      return opts.tags!.every((t) => have.has(t));
+    });
+  }
+
+  /**
+   * Apply a tag add/remove mutation to a photo. Idempotent: re-adding an
+   * already-present tag is a no-op, and removing an absent tag is a no-op.
+   *
+   * Emits a single {@link `photo.tagged`} metering event per mutation
+   * (not per tag) so event volume scales with caller behaviour, not
+   * vocabulary size. The `tagsApplied` usage counter increments by
+   * `added + removed` so hosts can gate on organizational activity.
+   *
+   * @throws {@link CrossTenantAccessError} for cross-tenant writes (403).
+   * @throws {@link TagValidationError} when a tag is malformed or the
+   * cap is exceeded (400).
+   */
+  async updateTags(
+    photoId: string,
+    callerTenantId: TenantId,
+    actor: string | null,
+    mutation: { add?: unknown; remove?: unknown }
+  ): Promise<{ photo: Photo; mutation: TagMutationResult }> {
+    const photo = await this.getOwned(photoId, callerTenantId);
+
+    const result = applyTagMutation(photo.tags, mutation);
+
+    // No-op short-circuit: nothing changed, don't write or emit.
+    if (!result.changed) {
+      return { photo, mutation: result };
+    }
+
+    const updatedAt = this.now().toISOString();
+    const updates = {
+      tags: result.next,
+      updatedAt,
+    };
+    await this.data.updateData<Photo>(PHOTOS_COLLECTION, photoId, updates);
+
+    const updated: Photo = { ...photo, ...updates };
+
+    emitMeteringEvent({
+      tenantId: photo.tenantId ?? DEFAULT_TENANT_ID,
+      type: 'photo.tagged',
+      count: 1,
+      resourceId: photoId,
+      occurredAt: updatedAt,
+      meta: {
+        libraryId: photo.libraryId,
+        actor,
+        added: result.added,
+        removed: result.removed,
+      },
+    });
+
+    if (this.usageBus && result.added + result.removed > 0) {
+      // Fire-and-forget; bus contract is no-throw in practice.
+      void this.usageBus
+        .publish({
+          tenantId: (photo.tenantId ?? DEFAULT_TENANT_ID) as TenantId,
+          counter: 'tagsApplied',
+          value: result.added + result.removed,
+          occurredAt: updatedAt,
+          eventId: `photo.tagged:${photoId}:${updatedAt}`,
+          meta: { libraryId: photo.libraryId },
+        })
+        .catch((err: unknown) => {
+          logger.warn(
+            { err, photoId },
+            'updateTags: usage bus publish failed; continuing'
+          );
+        });
+    }
+
+    return { photo: updated, mutation: result };
+  }
+
+  /**
+   * List distinct tags + counts for a library. Tags are scoped per
+   * library, not per tenant, so two libraries on the same tenant can
+   * have independent vocabularies (acceptance criterion in issue #173).
+   *
+   * Results are sorted by count desc, then tag asc for determinism. Only
+   * non-trashed photos contribute to the counts.
+   */
+  async listLibraryTags(
+    libraryId: string,
+    callerTenantId: TenantId
+  ): Promise<{ tag: string; count: number }[]> {
+    // Reuse the tenant-scoped list path so cross-tenant tag enumeration
+    // is impossible (the issue spells this out: "no cross-tenant tag
+    // enumeration").
+    const visible = await this.list(callerTenantId, {
+      trashed: false,
+      libraryId,
+    });
+
+    const counts = new Map<string, number>();
+    for (const p of visible) {
+      const tags = normalizeTagList(p.tags ?? []);
+      for (const t of tags) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) =>
+        b.count !== a.count ? b.count - a.count : a.tag.localeCompare(b.tag)
+      );
   }
 
   /**

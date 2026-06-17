@@ -94,6 +94,13 @@ export interface Photo {
    * User id (or tenant subject) that initiated the soft-delete.
    */
   trashedBy?: string | null;
+  /**
+   * Freeform keyword tags (Lightroom-style). Normalized lowercase, trimmed,
+   * each entry 1–64 chars. Capped at 50 unique tags per photo. Optional
+   * for backwards compatibility with photos written before issue #173;
+   * treat a missing value as an empty array.
+   */
+  tags?: string[];
 }
 
 export function createPhotoDocument(
@@ -128,5 +135,6 @@ export function createPhotoDocument(
     updatedAt: now,
     trashedAt: null,
     trashedBy: null,
+    tags: [],
   };
 }

@@ -14,13 +14,21 @@ export type MeteringEventType =
   | 'edit.applied'
   | 'share.viewed'
   | 'plugin.ran'
+  | 'plugin.enabled'
+  | 'plugin.disabled'
+  | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
   // Reserved, low-volume debug-tier event. Emitted by the Idempotency-Key
   // middleware on a cached replay so hosts can observe client retry
   // behavior. NOT billable; consumers should exclude it from rollups.
   // See `docs/features/idempotency-keys.md` (issue #162).
-  | 'idempotency.replayed';
+  | 'idempotency.replayed'
+  | 'photo.tagged'
+  | 'photo.exported'
+  | 'smart_album.created'
+  | 'smart_album.deleted'
+  | 'smart_album.materialized';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 
