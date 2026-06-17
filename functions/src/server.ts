@@ -94,6 +94,7 @@ import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createTenantAdminRouter } from './routes/tenantAdmin.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
@@ -106,7 +107,9 @@ import { PhotosService } from './domain/photos/PhotosService.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
+  getMeteringBus,
   getWebhookDeliveryStore,
+  setTenantWebhookSecretsResolver,
 } from './services/metering/index.js';
 import {
   InMemoryDailyDocStore,
@@ -277,6 +280,34 @@ app.use(
   createWebhookDeliveriesRouter({
     store: webhookDeliveryStore,
     sink: getHostWebhookSink() ?? undefined,
+  })
+);
+
+// Per-tenant webhook signing-secret rotation (issue #161).
+// Wires the data-adapter-backed secrets resolver into the sink so that
+// outbound deliveries automatically use the rotated secret (and dual-sign
+// during the grace window).
+import {
+  resolveActiveSigningSecrets,
+} from './services/host/tenantWebhookSecretService.js';
+setTenantWebhookSecretsResolver(async (tenantId: string) => {
+  try {
+    return await resolveActiveSigningSecrets(dataAdapter, tenantId);
+  } catch (err) {
+    logger.warn(
+      { err, tenantId },
+      'Failed to resolve tenant webhook secret; falling back to process-wide secret'
+    );
+    return null;
+  }
+});
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  createTenantWebhookSecretsRouter({
+    dataAdapter,
+    meteringBus: getMeteringBus(),
   })
 );
 

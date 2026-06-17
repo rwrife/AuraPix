@@ -10,11 +10,39 @@ import {
   type WebhookDeliveryStore,
 } from './WebhookDeliveryStore.js';
 
+export interface SigningSecretSet {
+  /** Currently active secret used for HMAC signing. */
+  current: { secret: string; fingerprint?: string };
+  /**
+   * Optional previous secret kept valid during a rotation grace window
+   * (issue #161). When present, the sink emits an additional signature
+   * for this secret so receivers can verify with either value.
+   */
+  previous?: { secret: string; fingerprint?: string };
+}
+
+export type WebhookSigningSecretResolver = (
+  tenantId: string
+) => Promise<SigningSecretSet | null> | SigningSecretSet | null;
+
 export interface HostWebhookSinkOptions {
   /** Endpoint to POST batched events. If unset, sink is a no-op. */
   webhookUrl?: string;
-  /** Secret used for HMAC-SHA256 of the request body. */
+  /**
+   * Process-wide signing secret used when `secretsResolver` is not
+   * configured (or returns null for a tenant). Outbound deliveries
+   * always need at least one secret — this is the fallback.
+   */
   signingSecret: string;
+  /**
+   * Optional per-tenant secret resolver. When set, the sink looks up
+   * the active secret(s) for the batch's tenant on each delivery. Inside
+   * the rotation grace window the resolver returns both `current` and
+   * `previous`, in which case the sink signs the body with each and
+   * sends two comma-separated values in `X-AuraPix-Signature`:
+   *   `v1=<new>,v1=<old>`
+   */
+  secretsResolver?: WebhookSigningSecretResolver;
   /** Request timeout per attempt (ms). Default 5000. */
   timeoutMs?: number;
   /** Maximum delivery attempts (initial + retries). Default 3. */
@@ -106,6 +134,7 @@ function truncateError(err: unknown): string {
 export class HostWebhookSink implements MeteringSink {
   private readonly webhookUrl?: string;
   private readonly signingSecret: string;
+  private readonly secretsResolver?: WebhookSigningSecretResolver;
   private readonly timeoutMs: number;
   private readonly maxAttempts: number;
   private readonly backoffBaseMs: number;
@@ -127,6 +156,7 @@ export class HostWebhookSink implements MeteringSink {
   constructor(opts: HostWebhookSinkOptions) {
     this.webhookUrl = opts.webhookUrl;
     this.signingSecret = opts.signingSecret;
+    this.secretsResolver = opts.secretsResolver;
     this.timeoutMs = opts.timeoutMs ?? 5000;
     this.maxAttempts = opts.maxAttempts ?? 3;
     this.backoffBaseMs = opts.backoffBaseMs ?? 200;
@@ -192,6 +222,25 @@ export class HostWebhookSink implements MeteringSink {
     return this.deliveryStore.get(this.tenantIdResolver(events), batchId);
   }
 
+  private async resolveSecretsForBatch(
+    tenantId: string
+  ): Promise<SigningSecretSet> {
+    if (this.secretsResolver) {
+      try {
+        const resolved = await this.secretsResolver(tenantId);
+        if (resolved && resolved.current && resolved.current.secret) {
+          return resolved;
+        }
+      } catch (err) {
+        logger.warn(
+          { err, tenantId },
+          'secretsResolver threw; falling back to process-wide signing secret'
+        );
+      }
+    }
+    return { current: { secret: this.signingSecret } };
+  }
+
   private async sendBatch(
     events: NormalizedMeteringEvent[],
     batchId: string,
@@ -216,9 +265,24 @@ export class HostWebhookSink implements MeteringSink {
         batchId,
         events,
       });
-      const signature = computeWebhookSignature(body, this.signingSecret);
-      const contentHash = computeContentHash(body);
       const tenantId = this.tenantIdResolver(events);
+      const secrets = await this.resolveSecretsForBatch(tenantId);
+      const signatureParts: string[] = [
+        computeWebhookSignature(body, secrets.current.secret),
+      ];
+      const signedFingerprints: string[] = secrets.current.fingerprint
+        ? [secrets.current.fingerprint]
+        : [];
+      if (secrets.previous && secrets.previous.secret) {
+        signatureParts.push(
+          computeWebhookSignature(body, secrets.previous.secret)
+        );
+        if (secrets.previous.fingerprint) {
+          signedFingerprints.push(secrets.previous.fingerprint);
+        }
+      }
+      const signature = signatureParts.join(',');
+      const contentHash = computeContentHash(body);
 
       // Seed (or refresh) the delivery record up front so failures are visible.
       if (this.deliveryStore) {
@@ -226,6 +290,9 @@ export class HostWebhookSink implements MeteringSink {
           await this.deliveryStore.update(tenantId, batchId, {
             status: 'pending',
             updatedAt: sentAt,
+            ...(signedFingerprints.length > 0
+              ? { signedFingerprints }
+              : {}),
           });
         } else {
           const record: WebhookDeliveryRecord = {
@@ -240,6 +307,9 @@ export class HostWebhookSink implements MeteringSink {
             status: 'pending',
             updatedAt: sentAt,
             expiresAt: computeDeliveryExpiry(sentAt),
+            ...(signedFingerprints.length > 0
+              ? { signedFingerprints }
+              : {}),
           };
           await this.deliveryStore.create(record);
         }

@@ -21,6 +21,7 @@ export type MeteringEventType =
   | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
+  | 'webhook.secret_rotated'
   | 'photo.tagged'
   | 'photo.exported'
   | 'smart_album.created'
