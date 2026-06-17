@@ -41,6 +41,8 @@ type MeteringEvent = {
 | `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
 | `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
 | `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
+| `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
+| `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
 | `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
 | `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
 | `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
@@ -69,6 +71,13 @@ emitted as metering events. In particular:
 If a host wants to bill culling activity, it can do so today by counting
 photo writes in its own audit log; AuraPix will not double-count it as an
 edit.
+### Quota warning thresholds
+
+Thresholds default to `[0.8, 0.95]` (80% and 95%). Override with the
+env var `TENANT_QUOTA_WARNING_THRESHOLDS` as a comma-separated list of
+fractions strictly between 0 and 1 (e.g. `0.5,0.75,0.9`). Each threshold
+fires at most once per tenant per UTC day; the daily rollup doc tracks
+the set of already-emitted thresholds in `quotaWarningsEmitted`.
 
 ## Tenant resolution
 

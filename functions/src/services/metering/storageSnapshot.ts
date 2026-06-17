@@ -10,12 +10,15 @@
  * provided emitter (so hosts can push-trigger billing instead of polling).
  */
 import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
+import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import { buildStorageUsageReport } from '../../handlers/storage/usageReport.js';
 import {
   isoDateUtc,
   type DailyDocStore,
   type UsageDailyDoc,
 } from './UsageRollupConsumer.js';
+import { emitMeteringEvent } from './index.js';
+import { getTenantRecord } from '../tenant/tenantRecordService.js';
 
 export interface RollupCompletedEvent {
   type: 'metering.rollup.completed';
@@ -36,6 +39,21 @@ export type RollupCompletedEmitter = (
  */
 export type TenantLibrariesResolver = (tenantId: string) => Promise<string[]>;
 
+/**
+ * Configurable warning thresholds (fractions of quotaBytes). At most one
+ * `quota.warning` event is emitted per threshold per tenant per day, since
+ * the daily-doc transact is idempotent on the `quotaWarningsEmitted` set.
+ */
+const QUOTA_WARNING_THRESHOLDS: number[] = (() => {
+  const raw = process.env.TENANT_QUOTA_WARNING_THRESHOLDS?.trim();
+  if (!raw) return [0.8, 0.95];
+  const parsed = raw
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0 && n < 1);
+  return parsed.length > 0 ? parsed : [0.8, 0.95];
+})();
+
 export interface SnapshotOptions {
   storageAdapter: StorageAdapter;
   store: DailyDocStore;
@@ -43,6 +61,11 @@ export interface SnapshotOptions {
   emit?: RollupCompletedEmitter;
   /** Override the snapshot date (defaults to today UTC). */
   date?: string;
+  /**
+   * Optional data adapter used to look up tenant quota for warning-event
+   * emission. Omit to disable quota warnings (snapshot still runs).
+   */
+  dataAdapter?: DataAdapter;
 }
 
 export async function snapshotTenantStorage(
@@ -71,6 +94,7 @@ export async function snapshotTenantStorage(
         tagsApplied: 0,
         apiCalls: 0,
         exportBytes: 0,
+        rateLimited: 0,
         storageBytesTotal: null,
         appliedEventIds: [] as string[],
         updatedAt: new Date(0).toISOString(),
@@ -81,6 +105,52 @@ export async function snapshotTenantStorage(
       updatedAt: new Date().toISOString(),
     };
   });
+
+  // Best-effort quota.warning emission. We re-transact the doc to record
+  // which thresholds have already fired today (idempotent per threshold).
+  if (opts.dataAdapter) {
+    try {
+      const tenantRecord = await getTenantRecord(opts.dataAdapter, tenantId);
+      const quota = tenantRecord.quotaBytes;
+      if (quota && quota > 0) {
+        const ratio = totalBytes / quota;
+        const crossed = QUOTA_WARNING_THRESHOLDS.filter((t) => ratio >= t);
+        if (crossed.length > 0) {
+          await opts.store.transact(tenantId, date, (current) => {
+            const base = current ?? updated;
+            const already = new Set<number>(
+              ((base as UsageDailyDoc & { quotaWarningsEmitted?: number[] })
+                .quotaWarningsEmitted ?? []) as number[]
+            );
+            for (const t of crossed) {
+              if (!already.has(t)) {
+                already.add(t);
+                emitMeteringEvent({
+                  tenantId,
+                  type: 'quota.warning',
+                  count: 1,
+                  bytes: totalBytes,
+                  meta: {
+                    threshold: t,
+                    quotaBytes: quota,
+                    usageBytes: totalBytes,
+                    date,
+                  },
+                });
+              }
+            }
+            return {
+              ...base,
+              quotaWarningsEmitted: Array.from(already).sort(),
+              updatedAt: new Date().toISOString(),
+            } as UsageDailyDoc;
+          });
+        }
+      }
+    } catch {
+      // Snapshot job must never fail on quota-warning emission.
+    }
+  }
 
   if (opts.emit) {
     await opts.emit({

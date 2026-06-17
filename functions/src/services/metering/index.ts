@@ -1,5 +1,8 @@
 import { signingConfig } from '../../config/index.js';
-import { HostWebhookSink } from './HostWebhookSink.js';
+import {
+  HostWebhookSink,
+  type WebhookSigningSecretResolver,
+} from './HostWebhookSink.js';
 import {
   InMemoryWebhookDeliveryStore,
   type WebhookDeliveryStore,
@@ -37,6 +40,7 @@ export function resolveTenantId(opts: {
 let busInstance: MeteringBus | null = null;
 let sinkInstance: HostWebhookSink | null = null;
 let deliveryStoreInstance: WebhookDeliveryStore | null = null;
+let secretsResolver: WebhookSigningSecretResolver | null = null;
 
 /**
  * Process-wide delivery store used by the host webhook sink. Records are
@@ -66,8 +70,23 @@ function buildSink(): MeteringSink {
     webhookUrl,
     signingSecret: signingConfig.masterSecret,
     deliveryStore: getWebhookDeliveryStore(),
+    ...(secretsResolver ? { secretsResolver } : {}),
   });
   return sinkInstance;
+}
+
+/**
+ * Install a per-tenant signing-secret resolver. The sink will look up
+ * the active secret(s) for each batch's tenant on every delivery, enabling
+ * dual-sign during the rotation grace window (issue #161). Forces the
+ * sink/bus to be rebuilt so the resolver is picked up.
+ */
+export function setTenantWebhookSecretsResolver(
+  resolver: WebhookSigningSecretResolver | null
+): void {
+  secretsResolver = resolver;
+  sinkInstance = null;
+  busInstance = null;
 }
 
 /**
