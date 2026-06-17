@@ -2,63 +2,241 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Photos API",
-    "version": "1.0.0",
-    "description": "Contract artifact for photos bulk operations endpoint (issue #142)."
+    "version": "1.2.0",
+    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) + photo export (#174) for photos."
   },
   "servers": [
-    {
-      "url": "https://api.aurapix.example"
-    }
+    { "url": "https://api.aurapix.example" }
   ],
   "paths": {
-    "/api/v1/photos:batch": {
+    "/v1/photos": {
+      "get": {
+        "operationId": "listPhotos",
+        "summary": "List photos for the caller's tenant",
+        "parameters": [
+          {
+            "name": "trashed",
+            "in": "query",
+            "description": "When true, returns only photos currently in Trash.",
+            "schema": { "type": "boolean", "default": false }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "description": "Comma-separated list of keyword tags. Photos must contain **all** tags (AND semantics). Tags are normalized (trimmed, lowercased) before matching.",
+            "schema": { "type": "string" },
+            "example": "wedding,print-ready"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Photos page",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ListPhotosResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/photos/{id}": {
+      "delete": {
+        "operationId": "trashPhoto",
+        "summary": "Soft-delete (Trash) a photo",
+        "description": "Sets `trashedAt = now`; the photo is removed from default list queries but bytes are retained until the TTL purge job runs.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trashed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrashStateResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/photos/{id}/restore": {
       "post": {
-        "operationId": "bulkPhotos",
-        "summary": "Bulk photo operations (move / delete / addTag / removeTag)",
-        "description": "Performs a single action against many photo ids in one call. Cap is 200 by default (configurable via BULK_PHOTOS_BATCH_MAX). Partial failures are reported per-id; the batch is not aborted on a single failure. Any id belonging to a different tenant rejects the entire batch with cross_tenant_reference.",
+        "operationId": "restorePhoto",
+        "summary": "Restore a trashed photo",
+        "description": "Clears `trashedAt` / `trashedBy`. Cross-tenant restore returns 403.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restored",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrashStateResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/photos/{id}/tags": {
+      "post": {
+        "operationId": "updatePhotoTags",
+        "summary": "Add and/or remove keyword tags on a photo",
+        "description": "Idempotent: re-adding a present tag (or removing an absent one) is a no-op. Tags are normalized to lowercase and trimmed; each tag is 1\u201364 chars and a photo can hold at most 50.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkPhotosRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/TagMutationRequest" }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Per-id result array",
+            "description": "Updated tag list",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BulkPhotosResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/TagMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/libraries/{id}/tags": {
+      "get": {
+        "operationId": "listLibraryTags",
+        "summary": "List distinct tags + counts for a library",
+        "description": "Tags are scoped per-library, not per-tenant: different libraries on the same tenant have independent vocabularies. Results are sorted by count desc, then tag asc.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tag vocabulary for the library",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LibraryTagsResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/v1/photos/{id}/export": {
+      "post": {
+        "operationId": "exportPhoto",
+        "summary": "Render a photo at a named export preset and return a signed download URL",
+        "description": "Renders the photo to the requested preset (size + JPEG quality), caches the result keyed by `(photoId, recipeHash, preset)`, and returns a short-lived signed URL pointing at `GET /v1/photos/{id}/export/{token}`. Re-using an unchanged recipe + preset returns the cached render with `cacheHit: true`; the metering event is emitted on both cache hits and misses so hosts may audit downloads.\n\nMetering: emits `photo.exported` with `outputBytes` measured from the rendered buffer, and rolls the bytes into the daily `exportBytes` counter exposed at `/v1/tenants/{id}/usage`.\n\nAuth: end-user Firebase token OR host API key. Tenancy is enforced against the photo's owning tenant.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ExportPhotoRequest" },
+              "example": { "preset": "web-large" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Render succeeded; signed URL returned",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExportPhotoResponse" }
               }
             }
           },
           "400": {
-            "description": "Invalid request, including cross_tenant_reference when any id belongs to another tenant",
+            "description": "Missing or invalid `preset` field",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
               }
             }
           },
-          "401": { "description": "Authentication required" },
-          "413": {
-            "description": "Batch exceeds the configured cap",
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "description": "Photo or preset not found for the caller's tenant",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
               }
             }
           },
-          "429": {
-            "description": "Per-tenant batch rate limit exceeded",
-            "headers": {
-              "Retry-After": {
-                "schema": { "type": "integer", "minimum": 1 }
+          "409": {
+            "description": "Photo is in the Trash (refuse to export)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/photos/{id}/export/{token}": {
+      "get": {
+        "operationId": "downloadExportedPhoto",
+        "summary": "Stream a previously-issued export render",
+        "description": "Verifies the HMAC-signed token from `POST /v1/photos/{id}/export` and streams the cached JPEG bytes. No additional auth header is required \u2014 the token IS the bearer (same model as the existing signed-URL image serve). Tokens are bound to `(photoId, tenantId, preset, recipeHash)` and expire in 5 minutes; a recipe change after the URL was issued returns 409 so the host can request a fresh render.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Exported JPEG bytes",
+            "content": {
+              "image/jpeg": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is invalid or expired",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "404": {
+            "description": "Photo or preset no longer exists",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "409": {
+            "description": "Edit recipe changed after URL was issued",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
               }
             }
           }
@@ -68,55 +246,139 @@
   },
   "components": {
     "schemas": {
-      "BulkAction": {
-        "type": "string",
-        "enum": ["move", "delete", "addTag", "removeTag"]
-      },
-      "BulkPhotosRequest": {
+      "PhotoSummary": {
         "type": "object",
-        "required": ["action", "photoIds"],
-        "properties": {
-          "action": { "$ref": "#/components/schemas/BulkAction" },
-          "photoIds": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 },
-            "minItems": 1,
-            "maxItems": 200
-          },
-          "params": {
-            "type": "object",
-            "properties": {
-              "albumId": { "type": "string" },
-              "tag": { "type": "string" },
-              "libraryId": { "type": "string" }
-            }
-          }
-        }
-      },
-      "BulkPhotosResultItem": {
-        "type": "object",
-        "required": ["id", "ok"],
+        "required": ["id", "libraryId", "originalName", "status", "createdAt", "updatedAt"],
         "properties": {
           "id": { "type": "string" },
-          "ok": { "type": "boolean" },
-          "error": { "type": "string" }
+          "libraryId": { "type": "string" },
+          "originalName": { "type": "string" },
+          "status": { "type": "string" },
+          "trashedAt": { "type": ["string", "null"], "format": "date-time" },
+          "trashedBy": { "type": ["string", "null"] },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Normalized keyword tags. May be empty.",
+            "default": []
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
         }
       },
-      "BulkPhotosResponse": {
+      "ListPhotosResponse": {
         "type": "object",
-        "required": ["action", "requested", "succeeded", "failed", "results"],
+        "required": ["photos"],
         "properties": {
-          "action": { "$ref": "#/components/schemas/BulkAction" },
-          "requested": { "type": "integer", "minimum": 0 },
-          "succeeded": { "type": "integer", "minimum": 0 },
-          "failed": { "type": "integer", "minimum": 0 },
-          "results": {
+          "photos": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/BulkPhotosResultItem" }
+            "items": { "$ref": "#/components/schemas/PhotoSummary" }
           }
         }
       },
-      "Error": {
+      "TrashStateResponse": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "trashedAt": { "type": ["string", "null"], "format": "date-time" },
+          "trashedBy": { "type": ["string", "null"] }
+        }
+      },
+      "TagMutationRequest": {
+        "type": "object",
+        "description": "At least one of `add` or `remove` should be supplied; both empty is a no-op.",
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "maxItems": 50
+          },
+          "remove": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "maxItems": 50
+          }
+        }
+      },
+      "TagMutationResponse": {
+        "type": "object",
+        "required": ["id", "tags", "added", "removed"],
+        "properties": {
+          "id": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "added": { "type": "integer", "minimum": 0 },
+          "removed": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "LibraryTagCount": {
+        "type": "object",
+        "required": ["tag", "count"],
+        "properties": {
+          "tag": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "LibraryTagsResponse": {
+        "type": "object",
+        "required": ["tags"],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/LibraryTagCount" }
+          }
+        }
+      },
+      "ExportPhotoRequest": {
+        "type": "object",
+        "required": ["preset"],
+        "properties": {
+          "preset": {
+            "type": "string",
+            "description": "Name of a preset configured for the caller's tenant (see `GET /v1/tenants/{id}/export-presets`)."
+          }
+        }
+      },
+      "ExportPhotoResponse": {
+        "type": "object",
+        "required": [
+          "photoId",
+          "preset",
+          "url",
+          "expiresAt",
+          "ttlSeconds",
+          "outputBytes",
+          "outputWidth",
+          "outputHeight",
+          "cacheHit"
+        ],
+        "properties": {
+          "photoId": { "type": "string" },
+          "preset": { "type": "string" },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Short-lived signed download URL pointing at `GET /v1/photos/{id}/export/{token}`."
+          },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "ttlSeconds": { "type": "integer", "minimum": 1 },
+          "outputBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Size of the rendered (or cached) JPEG buffer. Also published on the `photo.exported` metering event."
+          },
+          "outputWidth": { "type": "integer", "minimum": 0 },
+          "outputHeight": { "type": "integer", "minimum": 0 },
+          "cacheHit": {
+            "type": "boolean",
+            "description": "True when the response came from the `(photoId, recipeHash, preset)` cache. The metering event is still emitted; hosts may choose to discount cache hits at billing time."
+          }
+        }
+      },
+      "ErrorEnvelope": {
         "type": "object",
         "required": ["error"],
         "properties": {
@@ -132,6 +394,41 @@
           }
         }
       }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request (e.g. malformed tag list, tag too long, cap exceeded)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid authentication",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Cross-tenant access denied",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Photo not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
     }
   }
 }
+

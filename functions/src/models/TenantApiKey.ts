@@ -14,11 +14,23 @@
  * cross-referenced against a tenants collection.
  */
 
-export type TenantApiKeyScope = 'usage.read' | 'tenants.read';
+export type TenantApiKeyScope =
+  | 'usage.read'
+  | 'tenants.read'
+  | 'webhooks.write'
+  | 'plugins.read'
+  | 'plugins.write'
+  | 'export-presets.read'
+  | 'export-presets.write';
 
 export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'usage.read',
   'tenants.read',
+  'webhooks.write',
+  'plugins.read',
+  'plugins.write',
+  'export-presets.read',
+  'export-presets.write',
 ] as const;
 
 export interface TenantApiKeyRecord {

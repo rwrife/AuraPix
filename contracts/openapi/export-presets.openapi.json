@@ -1,0 +1,282 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Export Presets API",
+    "version": "0.1.0",
+    "description": "Per-tenant photo export presets (issue #174). Hosts reselling AuraPix can offer end users a 'Lightroom-style' export at a named preset (e.g. `web-small`, `web-large`, `original`). Presets are tenant-scoped so a host can gate which sizes a given plan tier may render.\n\nAuth: GET accepts either an end-user Firebase token OR a host API key with the `export-presets.read` scope. PUT and DELETE are host API key only (`export-presets.write`).\n\nDefaults: tenants without an explicit document inherit a seeded list — `web-small` (1280px q80), `web-large` (2048px q85), and `original` (passthrough, no transcode). The first PUT/DELETE creates the persisted document.\n\nSee also `POST /v1/photos/{id}/export` in `photos.openapi.json` for the render endpoint that consumes these presets."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/v1/tenants/{tenantId}/export-presets": {
+      "get": {
+        "operationId": "listTenantExportPresets",
+        "summary": "List the export presets available to a tenant",
+        "description": "Returns the effective preset list — either the persisted document or the seeded defaults when no document exists. Available to end users (so the in-product export menu can render) and to host API keys with the `export-presets.read` scope. Cross-tenant requests with a host API key return 403.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant export-preset list",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TenantExportPresetsResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-tenant request or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenantId}/export-presets/{name}": {
+      "put": {
+        "operationId": "putTenantExportPreset",
+        "summary": "Create or replace a single named export preset",
+        "description": "Upserts the named preset for a tenant. If no per-tenant document exists yet it is created from the seeded defaults and then mutated, so a host that only overrides one preset (e.g. lowers `web-large` quality) keeps the other defaults intact. Returns `changed: false` when the persisted value already matches the request.\n\nAuth: host API key with `export-presets.write` scope.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "URL-safe preset name; also used as the cache partition key.",
+            "schema": { "$ref": "#/components/schemas/ExportPresetName" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ExportPresetInput" },
+              "examples": {
+                "web-large": {
+                  "value": { "maxEdge": 2048, "quality": 85, "format": "jpeg", "label": "Web (large)" }
+                },
+                "original": {
+                  "value": { "maxEdge": 8192, "quality": 100, "format": "original" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upserted preset",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PutExportPresetResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing host API key",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-tenant request or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTenantExportPreset",
+        "summary": "Remove a single named export preset",
+        "description": "Idempotent delete — returns `removed: false` if the preset did not exist. Removing every preset is allowed; subsequent GETs will fall back to the seeded defaults only if no document exists, otherwise the persisted (empty) list wins.\n\nAuth: host API key with `export-presets.write` scope.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "name", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/ExportPresetName" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delete result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeleteExportPresetResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing host API key",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-tenant request or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ExportPresetName": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+        "description": "URL-safe preset identifier; also used as the cache partition key."
+      },
+      "ExportPreset": {
+        "type": "object",
+        "required": ["name", "maxEdge", "quality", "format"],
+        "properties": {
+          "name": { "$ref": "#/components/schemas/ExportPresetName" },
+          "maxEdge": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8192,
+            "description": "Maximum edge in pixels; the resize uses `fit: inside` so smaller inputs are not upscaled. Ignored when `format` is `original`."
+          },
+          "quality": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "JPEG quality 1-100. Ignored when `format` is `original`."
+          },
+          "format": {
+            "type": "string",
+            "enum": ["jpeg", "original"],
+            "description": "`jpeg` — apply edits and re-encode at the requested size/quality. `original` — stream the stored bytes unchanged."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional human-readable label for host admin UI."
+          }
+        }
+      },
+      "ExportPresetInput": {
+        "type": "object",
+        "required": ["format"],
+        "properties": {
+          "maxEdge": { "type": "integer", "minimum": 1, "maximum": 8192 },
+          "quality": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "format": { "type": "string", "enum": ["jpeg", "original"] },
+          "label": { "type": "string", "maxLength": 128 }
+        },
+        "description": "Body of `PUT /export-presets/{name}`. The URL `name` is authoritative; any `name` field in the body is ignored. `maxEdge` / `quality` are optional when `format` is `original`."
+      },
+      "TenantExportPresetsResponse": {
+        "type": "object",
+        "required": ["tenantId", "presets", "updatedAt", "updatedBy"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "presets": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ExportPreset" }
+          },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "updatedBy": {
+            "type": ["string", "null"],
+            "description": "Host API key id that performed the last mutation; null when the response reflects seeded defaults."
+          }
+        }
+      },
+      "PutExportPresetResponse": {
+        "type": "object",
+        "required": ["tenantId", "preset", "changed", "updatedAt", "updatedBy"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "preset": { "$ref": "#/components/schemas/ExportPreset" },
+          "changed": {
+            "type": "boolean",
+            "description": "True when the persisted preset differed from the request body. Hosts may use this to suppress audit log noise."
+          },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "updatedBy": { "type": ["string", "null"] }
+        }
+      },
+      "DeleteExportPresetResponse": {
+        "type": "object",
+        "required": ["tenantId", "name", "removed", "updatedAt", "updatedBy"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "name": { "$ref": "#/components/schemas/ExportPresetName" },
+          "removed": {
+            "type": "boolean",
+            "description": "True when a preset was actually removed; false when no preset by that name existed (idempotent delete)."
+          },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "updatedBy": { "type": ["string", "null"] }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string", "format": "uuid" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "HostApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "ak_live_*",
+        "description": "Host API key issued via `POST /v1/tenants/{id}/api-keys`. Required for PUT/DELETE; optional for GET (end-user Firebase tokens are also accepted)."
+      },
+      "FirebaseIdToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    { "HostApiKey": [] },
+    { "FirebaseIdToken": [] }
+  ]
+}

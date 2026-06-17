@@ -3,6 +3,7 @@ import type { AlbumsService } from '../domain/albums/contract';
 import type { AuthService } from '../domain/auth/contract';
 import type { LibraryService } from '../domain/library/contract';
 import type { SharingService } from '../domain/sharing/contract';
+import type { SmartAlbumsService } from '../domain/smartAlbums/contract';
 import type { UploadSessionsService } from '../domain/uploads/contract';
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,7 @@ export interface Services {
   albums: AlbumsService;
   library: LibraryService;
   sharing: SharingService;
+  smartAlbums: SmartAlbumsService;
   uploads: UploadSessionsService;
 }
 
