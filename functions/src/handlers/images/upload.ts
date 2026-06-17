@@ -6,7 +6,7 @@ import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
 import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { logger } from '../../utils/logger.js';
-import { extractExifData } from '../../utils/exif.js';
+import { extractExifData, buildNormalizedExif } from '../../utils/exif.js';
 import {
   createUploadFingerprint,
   getNormalizedIdempotencyKey,
@@ -24,6 +24,10 @@ import {
   emitMeteringEvent,
   resolveTenantId,
 } from '../../services/metering/index.js';
+import { readCurrentUsageBytes } from '../../services/metering/currentUsage.js';
+import { getTenantRecord } from '../../services/tenant/tenantRecordService.js';
+import { wouldExceedQuota } from '../../models/TenantRecord.js';
+import type { DailyDocStore } from '../../services/metering/UsageRollupConsumer.js';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -50,7 +54,7 @@ async function extractMetadata(
   imageBuffer: Buffer,
   originalName: string,
   mimeType: string
-): Promise<PhotoMetadata & { extension: string }> {
+): Promise<PhotoMetadata & { extension: string; exifExtracted: boolean }> {
   let metadata: sharp.Metadata | null = null;
 
   try {
@@ -59,9 +63,17 @@ async function extractMetadata(
     metadata = null;
   }
 
-  // Extract comprehensive EXIF data using exifr
+  // Extract comprehensive EXIF data using exifr. Best-effort: never fail the
+  // upload because EXIF parsing went wrong (see issue #151).
   logger.info('Extracting EXIF data from image');
-  const exifData = await extractExifData(imageBuffer);
+  let exifData: Awaited<ReturnType<typeof extractExifData>> = null;
+  try {
+    exifData = await extractExifData(imageBuffer);
+  } catch (err) {
+    logger.warn({ err }, 'EXIF extraction threw; continuing without EXIF');
+    exifData = null;
+  }
+  const exifExtracted = !!exifData;
 
   // Use EXIF data to populate metadata fields
   // Prefer EXIF data over Sharp metadata when available
@@ -98,6 +110,7 @@ async function extractMetadata(
     cameraModel,
     exif: exifData || undefined, // Store complete EXIF data
     extension,
+    exifExtracted,
   };
 }
 
@@ -148,6 +161,60 @@ export async function handleUpload(
     );
   }
 
+  // Defense-in-depth: enforce the tenant's storage quota in-process, even
+  // when the host policy webhook is misconfigured / down. See issue #139.
+  const tenantId = resolveTenantId({
+    tenantId: req.tenantId,
+    libraryId,
+  });
+  const tenantRecord = await getTenantRecord(dataAdapter, tenantId);
+  const usageDailyStore = req.app.locals.usageDailyStore as
+    | DailyDocStore
+    | undefined;
+  if (usageDailyStore && tenantRecord.quotaBytes !== null) {
+    const currentUsageBytes = await readCurrentUsageBytes(
+      usageDailyStore,
+      tenantId
+    );
+    if (
+      wouldExceedQuota(currentUsageBytes, file.size, tenantRecord.quotaBytes)
+    ) {
+      emitMeteringEvent({
+        tenantId,
+        type: 'quota.exceeded',
+        count: 1,
+        bytes: file.size,
+        resourceId: userId,
+        meta: {
+          libraryId,
+          usageBytes: currentUsageBytes,
+          quotaBytes: tenantRecord.quotaBytes,
+          attemptedBytes: file.size,
+        },
+      });
+      logger.warn(
+        {
+          tenantId,
+          libraryId,
+          usageBytes: currentUsageBytes,
+          quotaBytes: tenantRecord.quotaBytes,
+          attemptedBytes: file.size,
+        },
+        'Upload rejected: tenant storage quota exceeded'
+      );
+      throw new AppError(
+        413,
+        'quota_exceeded',
+        'Upload would exceed tenant storage quota',
+        {
+          usageBytes: currentUsageBytes,
+          quotaBytes: tenantRecord.quotaBytes,
+          attemptedBytes: file.size,
+        }
+      );
+    }
+  }
+
   let idempotencyKey: string | null;
   try {
     idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
@@ -195,11 +262,18 @@ export async function handleUpload(
 
     // Extract metadata from image
     logger.info({ photoId, libraryId }, 'Extracting image metadata');
-    const { extension, ...metadata } = await extractMetadata(
+    const { extension, exifExtracted, ...metadata } = await extractMetadata(
       file.buffer,
       file.originalname,
       file.mimetype
     );
+
+    // Build the normalized EXIF summary (small, stable subset) the way
+    // issue #151 specifies.
+    const normalizedExif = buildNormalizedExif(metadata.exif ?? null, {
+      widthPx: metadata.width,
+      heightPx: metadata.height,
+    });
 
     // Generate storage paths
     const storagePaths = generatePhotoPaths(libraryId, photoId, extension);
@@ -232,7 +306,9 @@ export async function handleUpload(
               mimeType: file.mimetype || metadata.mimeType,
             },
           }
-        : { sourceType: 'raster' }
+        : { sourceType: 'raster' },
+      undefined,
+      normalizedExif
     );
 
     // Update status to processing (thumbnails will be generated next)
@@ -253,6 +329,7 @@ export async function handleUpload(
         originalName: photo.originalName,
         status: photo.status,
         metadata: photo.metadata,
+        exif: photo.exif,
         createdAt: photo.createdAt,
       },
     };
@@ -270,7 +347,7 @@ export async function handleUpload(
 
     // Metering: record the accepted upload (count + bytes).
     emitMeteringEvent({
-      tenantId: resolveTenantId({ libraryId }),
+      tenantId,
       type: 'upload.accepted',
       count: 1,
       bytes: metadata.sizeBytes,
@@ -280,6 +357,11 @@ export async function handleUpload(
         libraryId,
         mimeType: metadata.mimeType,
         sourceType: uploadIsRaw ? 'raw' : 'raster',
+        // Issue #151: surface EXIF + pixel dimensions so hosts can meter by
+        // megapixel without a follow-up release.
+        exifExtracted,
+        ...(metadata.width ? { widthPx: metadata.width } : {}),
+        ...(metadata.height ? { heightPx: metadata.height } : {}),
       },
     });
 

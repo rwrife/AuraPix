@@ -12,6 +12,8 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'quota.exceeded'
+  | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
   | 'plugin.enabled'
@@ -24,6 +26,7 @@ export type MeteringEventType =
   // behavior. NOT billable; consumers should exclude it from rollups.
   // See `docs/features/idempotency-keys.md` (issue #162).
   | 'idempotency.replayed'
+  | 'webhook.secret_rotated'
   | 'photo.tagged'
   | 'photo.exported'
   | 'smart_album.created'
