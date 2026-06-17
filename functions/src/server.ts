@@ -69,7 +69,7 @@ if (storageConfig.mode === 'firebase') {
 app.locals.storageAdapter = storageAdapter;
 app.locals.dataAdapter = dataAdapter;
 
-const domainModules = createDomainModules();
+const domainModules = createDomainModules({ dataAdapter });
 
 // Health check
 app.get('/health', (req, res) => {
@@ -92,6 +92,15 @@ import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
+import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
+import { createPhotoExportRouter } from './routes/photoExportV1.js';
+import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
+import {
+  createSmartAlbumsLibraryRouter,
+  createSmartAlbumsResourceRouter,
+} from './routes/smartAlbumsV1.js';
+import { PhotosService } from './domain/photos/PhotosService.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
@@ -150,6 +159,86 @@ app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums))
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 
+// Photos: soft-delete (Trash) + restore + trashed list (issue #152),
+// plus keyword tags add/remove + per-library tag enumeration (issue #173).
+const photosService = new PhotosService({
+  dataAdapter,
+  storageAdapter,
+});
+app.use(
+  '/v1/photos',
+  authMiddleware,
+  resolveTenant,
+  createPhotosV1Router(photosService)
+);
+app.use(
+  '/api/v1/photos',
+  authMiddleware,
+  resolveTenant,
+  createPhotosV1Router(photosService)
+);
+const photoExportHandle = createPhotoExportRouter({
+  dataAdapter,
+  storageAdapter,
+});
+app.use(
+  '/v1/photos',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  resolveTenant,
+  photoExportHandle.router
+);
+app.use(
+  '/api/v1/photos',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  resolveTenant,
+  photoExportHandle.router
+);
+app.use(
+  '/v1/libraries/:libraryId/tags',
+  authMiddleware,
+  resolveTenant,
+  createLibraryTagsRouter(photosService)
+);
+app.use(
+  '/api/v1/libraries/:libraryId/tags',
+  authMiddleware,
+  resolveTenant,
+  createLibraryTagsRouter(photosService)
+);
+
+// Smart Albums (issue #165).
+const smartAlbumsService = domainModules.smartAlbums;
+app.use(
+  '/v1/libraries/:libraryId/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsLibraryRouter(smartAlbumsService)
+);
+app.use(
+  '/api/v1/libraries/:libraryId/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsLibraryRouter(smartAlbumsService)
+);
+app.use(
+  '/v1/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsResourceRouter(smartAlbumsService)
+);
+app.use(
+  '/api/v1/smart-albums',
+  authMiddleware,
+  resolveTenant,
+  createSmartAlbumsResourceRouter(smartAlbumsService)
+);
+
+// Bind metering bus to photo services (must come after meteringBus exists).
+photosService.setUsageBus(meteringBus);
+photoExportHandle.setUsageBus(meteringBus);
+
 app.use(
   '/api/v1/tenants',
   authMiddleware,
@@ -190,6 +279,30 @@ app.use(
   brandingRouter
 );
 
+// Per-tenant plugin allowlist (issue #166).
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  createTenantPluginsRouter({ dataAdapter })
+);
+
+// Per-tenant export presets (issue #174).
+const tenantExportPresetsRouter = createTenantExportPresetsRouter({
+  dataAdapter,
+});
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantExportPresetsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantExportPresetsRouter
+);
 // Error handlers (must be last)
 app.use(notFoundHandler);
 app.use(errorHandler);

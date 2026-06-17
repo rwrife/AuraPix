@@ -19,7 +19,9 @@ export type UsageMeteringCounter =
   | 'imagesProcessed'
   | 'signedUrlsIssued'
   | 'editsApplied'
+  | 'tagsApplied'
   | 'apiCalls'
+  | 'exportBytes'
   | 'rateLimited';
 
 export interface UsageMeteringEvent {
