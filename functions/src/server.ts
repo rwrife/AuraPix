@@ -1,11 +1,13 @@
 import express from 'express';
 import pinoHttp from 'pino-http';
-import { serverConfig, storageConfig } from './config/index.js';
+import { serverConfig, storageConfig, tenantRateLimitConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { createHostApiKeyAuth } from './middleware/hostApiKeyAuth.js';
 import { apiVersionMiddleware } from './middleware/apiVersion.js';
+import { resolveTenant } from './middleware/resolveTenant.js';
+import { createTenantTokenBucketRateLimiter } from './middleware/rateLimit.js';
 import { LocalDiskStorage } from './adapters/storage/LocalDiskStorage.js';
 import { LocalJsonData } from './adapters/data/LocalJsonData.js';
 import { FirebaseStorageAdapter } from './adapters/storage/FirebaseStorageAdapter.js';
@@ -86,13 +88,16 @@ import editsRouter from './routes/edits.js';
 import { createSigningRouter } from './routes/signing.js';
 import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
+import { createPhotosListV1Router } from './routes/photosListV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createTenantAdminRouter } from './routes/tenantAdmin.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
+import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
+import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
 import { createAuditEventsV1Router } from './routes/auditEventsV1.js';
-import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
 import {
@@ -100,16 +105,45 @@ import {
   createSmartAlbumsResourceRouter,
 } from './routes/smartAlbumsV1.js';
 import { PhotosService } from './domain/photos/PhotosService.js';
-import { resolveTenant } from './middleware/resolveTenant.js';
 import { InMemoryUsageMeteringBus } from './services/metering/UsageMeteringBus.js';
 import {
   getHostWebhookSink,
+  getMeteringBus,
   getWebhookDeliveryStore,
+  setTenantWebhookSecretsResolver,
 } from './services/metering/index.js';
 import {
   InMemoryDailyDocStore,
   UsageRollupConsumer,
 } from './services/metering/UsageRollupConsumer.js';
+
+// --- Metering / usage rollups (issue #133) ---
+// In-memory wiring suitable for local mode; Firebase mode will swap in a
+// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
+const meteringBus = new InMemoryUsageMeteringBus();
+const usageDailyStore = new InMemoryDailyDocStore();
+const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
+usageRollupConsumer.attach(meteringBus);
+app.locals.meteringBus = meteringBus;
+app.locals.usageDailyStore = usageDailyStore;
+
+// --- Per-tenant API rate limiter (issue #154) ---
+// Token-bucket keyed by `tenantId` so a misbehaving tenant cannot saturate
+// the function instance and starve every other host's customers. Mounted
+// globally BEFORE route handlers and AFTER `resolveTenant` populates
+// `req.tenantId`. Per-tenant overrides come from
+// `tenants_config/{tenantId}` and take effect on the next request (no
+// restart) thanks to a short in-memory TTL cache. The /health endpoint is
+// registered above and remains unaffected.
+const tenantRateLimiter = createTenantTokenBucketRateLimiter({
+  rps: tenantRateLimitConfig.rps,
+  burst: tenantRateLimitConfig.burst,
+  hostRps: tenantRateLimitConfig.hostRps,
+  dataAdapter,
+  meteringBus,
+});
+app.use(resolveTenant);
+app.use(tenantRateLimiter);
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
@@ -129,13 +163,11 @@ app.use('/edits', authMiddleware, editsRouter);
 app.use('/api', apiVersionMiddleware);
 app.use('/api/albums', authMiddleware, createAlbumsRouter(domainModules.albums));
 app.use('/api/v1/albums', authMiddleware, createAlbumsV1Router(domainModules.albums));
+app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter));
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
-// Mounted at both `/v1/photos` (spec) and `/api/v1/photos` (in-product) so
-// hosts can call the documented contract URL while clients keep the
-// `/api` prefix used elsewhere.
 const photosService = new PhotosService({
   dataAdapter,
   storageAdapter,
@@ -152,10 +184,6 @@ app.use(
   resolveTenant,
   createPhotosV1Router(photosService)
 );
-// Photo export (issue #174). The GET handler verifies its own HMAC token,
-// the POST handler accepts either a Firebase user token OR a host API
-// key — so the router is composed with optional + host-key auth. The
-// usage bus is bound below (after the metering wiring is created).
 const photoExportHandle = createPhotoExportRouter({
   dataAdapter,
   storageAdapter,
@@ -187,10 +215,7 @@ app.use(
   createLibraryTagsRouter(photosService)
 );
 
-// Smart Albums (issue #165). Two mount points:
-//   - /v1/libraries/:libraryId/smart-albums (list/create)
-//   - /v1/smart-albums/:id (get/update/delete/materialize)
-// Mirrored under /api/v1/* for in-product clients.
+// Smart Albums (issue #165).
 const smartAlbumsService = domainModules.smartAlbums;
 app.use(
   '/v1/libraries/:libraryId/smart-albums',
@@ -217,20 +242,10 @@ app.use(
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
-// --- Metering / usage rollups (issue #133) ---
-// In-memory wiring suitable for local mode; Firebase mode will swap in a
-// Pub/Sub bus and a Firestore-backed store in a follow-up issue.
-const meteringBus = new InMemoryUsageMeteringBus();
-const usageDailyStore = new InMemoryDailyDocStore();
-const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
-usageRollupConsumer.attach(meteringBus);
-app.locals.meteringBus = meteringBus;
-app.locals.usageDailyStore = usageDailyStore;
-// Photos service participates in the usage rollup for tag mutations
-// (`tagsApplied` counter, issue #173).
+// Bind metering bus to photo services (must come after meteringBus exists).
 photosService.setUsageBus(meteringBus);
-// Photo export endpoint emits the `exportBytes` rollup counter (#174).
 photoExportHandle.setUsageBus(meteringBus);
+
 app.use(
   '/api/v1/tenants',
   authMiddleware,
@@ -240,6 +255,16 @@ app.use(
     // their own tenantId (legacy single-tenant-per-user mapping).
     ownsTenant: async (userId, tenantId) => userId === tenantId,
   })
+);
+
+// Tenant admin (PATCH /api/v1/tenants/:tenantId). Host API key path: a key
+// with the `tenants.write` scope can update quota. Pre-auth runs the
+// hostApiKeyAuth middleware so Bearer ak_live_... tokens populate
+// req.tenant; the route guard inside the router enforces the scope+match.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantAdminRouter(dataAdapter)
 );
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
 
@@ -256,6 +281,34 @@ app.use(
   createWebhookDeliveriesRouter({
     store: webhookDeliveryStore,
     sink: getHostWebhookSink() ?? undefined,
+  })
+);
+
+// Per-tenant webhook signing-secret rotation (issue #161).
+// Wires the data-adapter-backed secrets resolver into the sink so that
+// outbound deliveries automatically use the rotated secret (and dual-sign
+// during the grace window).
+import {
+  resolveActiveSigningSecrets,
+} from './services/host/tenantWebhookSecretService.js';
+setTenantWebhookSecretsResolver(async (tenantId: string) => {
+  try {
+    return await resolveActiveSigningSecrets(dataAdapter, tenantId);
+  } catch (err) {
+    logger.warn(
+      { err, tenantId },
+      'Failed to resolve tenant webhook secret; falling back to process-wide secret'
+    );
+    return null;
+  }
+});
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  createTenantWebhookSecretsRouter({
+    dataAdapter,
+    meteringBus: getMeteringBus(),
   })
 );
 
@@ -286,9 +339,6 @@ const auditEventsRouter = createAuditEventsV1Router({
 });
 
 // Per-tenant plugin allowlist (issue #166).
-// Host-API-key only — mounted under `/api/v1/tenants/:tenantId/plugins...`.
-// The `tenantPluginsV1` router enforces auth/scope itself; we still chain
-// the host-key middleware so `req.tenant` is populated when present.
 app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
@@ -296,10 +346,7 @@ app.use(
   createTenantPluginsRouter({ dataAdapter })
 );
 
-// Per-tenant export presets (issue #174). GET is user-callable so the
-// in-product export menu can render; PUT/DELETE require a host API key
-// with the `export-presets.write` scope. Mounted at both `/v1` (spec
-// path used by hosts) and `/api/v1` (in-product clients).
+// Per-tenant export presets (issue #174).
 const tenantExportPresetsRouter = createTenantExportPresetsRouter({
   dataAdapter,
 });

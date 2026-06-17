@@ -21,7 +21,8 @@ export type UsageMeteringCounter =
   | 'editsApplied'
   | 'tagsApplied'
   | 'apiCalls'
-  | 'exportBytes';
+  | 'exportBytes'
+  | 'rateLimited';
 
 export interface UsageMeteringEvent {
   /** Tenant the event applies to. */
