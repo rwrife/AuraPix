@@ -283,6 +283,183 @@ describe('PhotosService', () => {
   });
 });
 
+describe('PhotosService tag mutation (issue #173)', () => {
+  let data: InMemoryData;
+  let sink: CapturingSink;
+  let usageBus: InMemoryUsageMeteringBus;
+  let usageEvents: Array<{
+    tenantId: string;
+    counter: string;
+    value: number;
+  }>;
+
+  beforeEach(() => {
+    data = new InMemoryData();
+    sink = new CapturingSink();
+    usageBus = new InMemoryUsageMeteringBus();
+    usageEvents = [];
+    usageBus.subscribe(async (e) => {
+      usageEvents.push({
+        tenantId: e.tenantId,
+        counter: e.counter,
+        value: e.value,
+      });
+    });
+    setWebhookDeliveryStore(null);
+    setMeteringBus(new MeteringBus({ sink, flushIntervalMs: 10, maxBatchSize: 50 }));
+  });
+
+  afterEach(() => {
+    setMeteringBus(null);
+  });
+
+  it('adds new tags, emits one photo.tagged event, increments tagsApplied', async () => {
+    const svc = new PhotosService({ dataAdapter: data, usageBus });
+    const p = makePhoto({ id: 't1', tags: ['wedding'] });
+    await data.storeData('photos', p.id, p);
+
+    const { photo, mutation } = await svc.updateTags(
+      't1',
+      'acme',
+      'user-1',
+      { add: ['Wedding', 'print-ready', 'client:smith'] }
+    );
+
+    expect(photo.tags).toEqual(['wedding', 'print-ready', 'client:smith']);
+    expect(mutation.added).toBe(2); // 'wedding' was already present
+    expect(mutation.removed).toBe(0);
+    expect(mutation.changed).toBe(true);
+
+    // Flush the metering bus to deliver events to the sink.
+    await new Promise((r) => setTimeout(r, 20));
+    const events = sink.all().filter((e) => e.type === 'photo.tagged');
+    expect(events).toHaveLength(1); // one per mutation, not per tag
+    expect(events[0]!.meta).toMatchObject({
+      libraryId: 'lib1',
+      actor: 'user-1',
+      added: 2,
+      removed: 0,
+    });
+
+    // tagsApplied counter increments by added+removed = 2.
+    await new Promise((r) => setTimeout(r, 5));
+    expect(usageEvents).toHaveLength(1);
+    expect(usageEvents[0]).toMatchObject({
+      tenantId: 'acme',
+      counter: 'tagsApplied',
+      value: 2,
+    });
+  });
+
+  it('is a no-op when add/remove yields no change (no write, no event)', async () => {
+    const svc = new PhotosService({ dataAdapter: data, usageBus });
+    const p = makePhoto({ id: 't2', tags: ['wedding'] });
+    await data.storeData('photos', p.id, p);
+    const before = await data.fetchData<Photo>('photos', 't2');
+
+    const { mutation } = await svc.updateTags('t2', 'acme', null, {
+      add: ['wedding'], // already present
+      remove: ['nope'], // absent
+    });
+
+    expect(mutation.changed).toBe(false);
+    expect(mutation.added).toBe(0);
+    expect(mutation.removed).toBe(0);
+
+    const after = await data.fetchData<Photo>('photos', 't2');
+    expect(after).toEqual(before); // no write occurred
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sink.all().filter((e) => e.type === 'photo.tagged')).toHaveLength(0);
+    expect(usageEvents).toHaveLength(0);
+  });
+
+  it('removes tags and reports removed count', async () => {
+    const svc = new PhotosService({ dataAdapter: data, usageBus });
+    const p = makePhoto({ id: 't3', tags: ['wedding', 'draft', 'print-ready'] });
+    await data.storeData('photos', p.id, p);
+
+    const { photo, mutation } = await svc.updateTags(
+      't3',
+      'acme',
+      'user-2',
+      { remove: ['draft', 'Print-Ready'] }
+    );
+
+    expect(photo.tags).toEqual(['wedding']);
+    expect(mutation.removed).toBe(2);
+    expect(mutation.added).toBe(0);
+  });
+
+  it('rejects cross-tenant tag mutation with CrossTenantAccessError', async () => {
+    const svc = new PhotosService({ dataAdapter: data });
+    const p = makePhoto({ id: 't4', tenantId: 'acme' });
+    await data.storeData('photos', p.id, p);
+
+    await expect(
+      svc.updateTags('t4', 'other-tenant', null, { add: ['x'] })
+    ).rejects.toBeInstanceOf(CrossTenantAccessError);
+  });
+
+  it('throws PhotoNotFoundError for unknown ids', async () => {
+    const svc = new PhotosService({ dataAdapter: data });
+    await expect(
+      svc.updateTags('missing', 'acme', null, { add: ['x'] })
+    ).rejects.toBeInstanceOf(PhotoNotFoundError);
+  });
+
+  it('list filters by tags with AND semantics', async () => {
+    const svc = new PhotosService({ dataAdapter: data });
+    await data.storeData('photos', 'a', makePhoto({ id: 'a', tags: ['wedding', 'print-ready'] }));
+    await data.storeData('photos', 'b', makePhoto({ id: 'b', tags: ['wedding'] }));
+    await data.storeData('photos', 'c', makePhoto({ id: 'c', tags: ['print-ready'] }));
+    await data.storeData('photos', 'd', makePhoto({ id: 'd', tags: [] }));
+
+    const both = await svc.list('acme', { tags: ['wedding', 'print-ready'] });
+    expect(both.map((p) => p.id).sort()).toEqual(['a']);
+
+    const wedding = await svc.list('acme', { tags: ['wedding'] });
+    expect(wedding.map((p) => p.id).sort()).toEqual(['a', 'b']);
+
+    const none = await svc.list('acme', { tags: [] });
+    expect(none).toHaveLength(4); // empty filter → no narrowing
+  });
+
+  it('listLibraryTags returns counts scoped to the library, sorted by count desc', async () => {
+    const svc = new PhotosService({ dataAdapter: data });
+    await data.storeData('photos', 'a', makePhoto({ id: 'a', libraryId: 'lib1', tags: ['wedding', 'print-ready'] }));
+    await data.storeData('photos', 'b', makePhoto({ id: 'b', libraryId: 'lib1', tags: ['wedding'] }));
+    await data.storeData('photos', 'c', makePhoto({ id: 'c', libraryId: 'lib2', tags: ['wedding', 'foo'] }));
+    // Trashed photo should not contribute to counts.
+    await data.storeData('photos', 'd', makePhoto({
+      id: 'd',
+      libraryId: 'lib1',
+      tags: ['wedding'],
+      trashedAt: new Date().toISOString(),
+    }));
+
+    const lib1Tags = await svc.listLibraryTags('lib1', 'acme');
+    expect(lib1Tags).toEqual([
+      { tag: 'wedding', count: 2 },
+      { tag: 'print-ready', count: 1 },
+    ]);
+
+    const lib2Tags = await svc.listLibraryTags('lib2', 'acme');
+    expect(lib2Tags).toEqual([
+      { tag: 'foo', count: 1 },
+      { tag: 'wedding', count: 1 },
+    ]);
+  });
+
+  it('cross-tenant listLibraryTags returns empty (tenant scoping prevents leakage)', async () => {
+    const svc = new PhotosService({ dataAdapter: data });
+    await data.storeData('photos', 'a', makePhoto({ id: 'a', tenantId: 'acme', libraryId: 'lib1', tags: ['wedding'] }));
+
+    const result = await svc.listLibraryTags('lib1', 'other-tenant');
+    expect(result).toEqual([]);
+  });
+});
+
 describe('collectStoragePaths', () => {
   it('includes original + every derivative', () => {
     const p = makePhoto();

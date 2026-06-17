@@ -68,3 +68,71 @@ env-configurable per deployment). The job:
 - The purge job's per-tenant iteration is a soft fairness guarantee
   driven by `perTenantLimit`; production wiring should run the job on a
   cadence short enough that the limit drains backlogs within SLA.
+
+## Keyword tags (Lightroom-style)
+
+_Tracking issue: [#173](https://github.com/rwrife/AuraPix/issues/173)._
+
+Photos accept freeform keyword tags (e.g. `wedding`, `client:smith`,
+`print-ready`) for triage and downstream filtering by Smart Albums (#165).
+
+### Data model
+
+```ts
+interface Photo {
+  // ...existing fields...
+  tags?: string[]; // normalized lowercase, 1–64 chars each, ≤ 50 per photo
+}
+```
+
+Tags are normalized before storage:
+
+- trimmed and lowercased,
+- internal whitespace runs collapsed to a single space,
+- duplicates removed (first occurrence wins),
+- empty strings dropped silently.
+
+### Endpoints
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/v1/photos/:id/tags` | Body `{ add?: string[], remove?: string[] }`. Idempotent: re-adding a present tag (or removing an absent one) is a no-op. |
+| `GET`  | `/v1/libraries/:id/tags` | Returns `{ tags: [{ tag, count }] }` sorted by count desc, then tag asc. Only non-trashed photos contribute to counts. |
+| `GET`  | `/v1/photos?tags=a,b` | Filters photos with **AND** semantics across the supplied tag list. |
+
+All routes pass through the existing tenant-id middleware; cross-tenant
+reads and writes return `403 FORBIDDEN`.
+
+### Multi-tenant considerations
+
+- Tag vocabulary is scoped **per library**, not per tenant. Two libraries
+  on the same tenant therefore maintain independent vocabularies, which
+  matches how photographers separate work (e.g. `client-a` vs
+  `personal`).
+- The `/v1/libraries/:id/tags` endpoint reuses the tenant-scoped photo
+  list path, so it cannot enumerate tags from libraries the caller does
+  not own.
+
+### Smart Albums interaction
+
+The Smart Albums filter DSL already accepts a `tags` clause (issue #165).
+That clause uses **ANY-of** semantics inside a saved filter so a
+"wedding work" album can match either `wedding` *or* `engagement`. The
+photos list endpoint (`/v1/photos?tags=`) uses **AND** semantics so the
+UI's quick filter narrows progressively. The two are intentionally
+distinct because they serve different surfaces.
+
+### Metering
+
+Each mutation emits a single `photo.tagged` event (not one per tag) with
+`meta.added` and `meta.removed` counts. The `tagsApplied` daily counter
+sums `added + removed` so hosts can show "organizational activity" or
+gate on it for higher tiers. See
+[Metering Events](./metering-events.md) and
+[Usage & Billing](./usage-and-billing.md).
+
+### Firestore index
+
+A composite index on `(tenantId, libraryId, tags array-contains,
+updatedAt desc)` supports the tag-narrowed photo query without
+collection-scan amplification.

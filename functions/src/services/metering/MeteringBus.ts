@@ -14,9 +14,17 @@ export type MeteringEventType =
   | 'edit.applied'
   | 'share.viewed'
   | 'plugin.ran'
+  | 'plugin.enabled'
+  | 'plugin.disabled'
+  | 'plugin.blocked'
   | 'photo.trashed'
   | 'photo.purged'
-  | 'audit.queried';
+  | 'audit.queried'
+  | 'photo.tagged'
+  | 'photo.exported'
+  | 'smart_album.created'
+  | 'smart_album.deleted'
+  | 'smart_album.materialized';
 // Future (placeholder; not emitted in this PR):
 //   | 'user.active'
 

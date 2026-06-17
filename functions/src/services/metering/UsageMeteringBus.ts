@@ -19,7 +19,9 @@ export type UsageMeteringCounter =
   | 'imagesProcessed'
   | 'signedUrlsIssued'
   | 'editsApplied'
-  | 'apiCalls';
+  | 'tagsApplied'
+  | 'apiCalls'
+  | 'exportBytes';
 
 export interface UsageMeteringEvent {
   /** Tenant the event applies to. */
