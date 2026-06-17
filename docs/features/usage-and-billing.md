@@ -33,6 +33,7 @@ Stored at `tenants/{tenantId}/usageDaily/{YYYY-MM-DD}` in Firestore.
 | `imagesProcessed`   | integer ≥ 0     | Derivative jobs completed.                                   |
 | `signedUrlsIssued`  | integer ≥ 0     | Read/write signed URLs minted.                               |
 | `editsApplied`      | integer ≥ 0     | Edit operations committed.                                   |
+| `tagsApplied`       | integer ≥ 0     | Keyword tag mutations (`added + removed` per `photo.tagged`).|
 | `apiCalls`          | integer ≥ 0     | Billable API requests.                                       |
 | `storageBytesTotal` | integer \| null | Absolute storage at end-of-day; written by the snapshot job. |
 | `updatedAt`         | string (date-time) | Last write timestamp.                                     |
@@ -51,6 +52,7 @@ the daily doc in a transaction (idempotent on `eventId`).
 | `derivatives.job.completed`                       | `storageBytesDelta` | +bytes              |
 | `signing.url.issued`                              | `signedUrlsIssued`  | +1                  |
 | `edits.operation.committed`                       | `editsApplied`      | +1                  |
+| `photo.tagged`                                    | `tagsApplied`       | +(`added` + `removed`) |
 | Any authenticated `/api/*` request                | `apiCalls`          | +1                  |
 
 > The MeteringBus interface ships ahead of its dedicated infrastructure

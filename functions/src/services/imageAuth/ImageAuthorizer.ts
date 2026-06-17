@@ -3,6 +3,10 @@ import type { Photo } from '../../models/Photo.js';
 import type { Library } from '../../models/Library.js';
 import type { ImageSignature, ImageAuthResult } from '../../models/ImageAuth.js';
 import { logger } from '../../utils/logger.js';
+import {
+  emitMeteringEvent,
+  resolveTenantId,
+} from '../metering/index.js';
 
 // Share link types (subset needed for authorization)
 interface ShareLink {
@@ -187,6 +191,21 @@ export class ImageAuthorizer {
       if (hasAccess) {
         // Log successful access for compliance/analytics
         await this.logShareAccess(shareLink.id, shareToken, 'granted');
+
+        // Emit metering event for billable share view. We only emit here
+        // (after auth/expiry/maxUses/scope checks pass) so failed accesses
+        // are NOT counted.
+        emitMeteringEvent({
+          tenantId: resolveTenantId({ libraryId: photo.libraryId }),
+          type: 'share.viewed',
+          count: 1,
+          resourceId: shareLink.id,
+          meta: {
+            photoId: photo.id,
+            libraryId: photo.libraryId,
+            grantType: shareLink.resourceType,
+          },
+        });
       }
 
       return hasAccess;
