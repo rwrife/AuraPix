@@ -1,0 +1,137 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Photos API",
+    "version": "1.0.0",
+    "description": "Contract artifact for photos bulk operations endpoint (issue #142)."
+  },
+  "servers": [
+    {
+      "url": "https://api.aurapix.example"
+    }
+  ],
+  "paths": {
+    "/api/v1/photos:batch": {
+      "post": {
+        "operationId": "bulkPhotos",
+        "summary": "Bulk photo operations (move / delete / addTag / removeTag)",
+        "description": "Performs a single action against many photo ids in one call. Cap is 200 by default (configurable via BULK_PHOTOS_BATCH_MAX). Partial failures are reported per-id; the batch is not aborted on a single failure. Any id belonging to a different tenant rejects the entire batch with cross_tenant_reference.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkPhotosRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-id result array",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkPhotosResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, including cross_tenant_reference when any id belongs to another tenant",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": { "description": "Authentication required" },
+          "413": {
+            "description": "Batch exceeds the configured cap",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-tenant batch rate limit exceeded",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BulkAction": {
+        "type": "string",
+        "enum": ["move", "delete", "addTag", "removeTag"]
+      },
+      "BulkPhotosRequest": {
+        "type": "object",
+        "required": ["action", "photoIds"],
+        "properties": {
+          "action": { "$ref": "#/components/schemas/BulkAction" },
+          "photoIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1,
+            "maxItems": 200
+          },
+          "params": {
+            "type": "object",
+            "properties": {
+              "albumId": { "type": "string" },
+              "tag": { "type": "string" },
+              "libraryId": { "type": "string" }
+            }
+          }
+        }
+      },
+      "BulkPhotosResultItem": {
+        "type": "object",
+        "required": ["id", "ok"],
+        "properties": {
+          "id": { "type": "string" },
+          "ok": { "type": "boolean" },
+          "error": { "type": "string" }
+        }
+      },
+      "BulkPhotosResponse": {
+        "type": "object",
+        "required": ["action", "requested", "succeeded", "failed", "results"],
+        "properties": {
+          "action": { "$ref": "#/components/schemas/BulkAction" },
+          "requested": { "type": "integer", "minimum": 0 },
+          "succeeded": { "type": "integer", "minimum": 0 },
+          "failed": { "type": "integer", "minimum": 0 },
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BulkPhotosResultItem" }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

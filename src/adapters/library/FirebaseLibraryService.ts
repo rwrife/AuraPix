@@ -22,16 +22,18 @@ import {
   type FirebaseStorage,
 } from 'firebase/storage';
 import type { LibraryService } from '../../domain/library/contract';
-import type {
-  AddPhotoInput,
-  BulkAddToAlbumInput,
-  BulkAddToAlbumResult,
-  LibraryUsageSummary,
-  ListPhotosInput,
-  ListPhotosResult,
-  LibrarySort,
-  Photo,
-  UpdatePhotoInput,
+import {
+  isPhotoFlag,
+  isPhotoRating,
+  type AddPhotoInput,
+  type BulkAddToAlbumInput,
+  type BulkAddToAlbumResult,
+  type LibraryUsageSummary,
+  type ListPhotosInput,
+  type ListPhotosResult,
+  type LibrarySort,
+  type Photo,
+  type UpdatePhotoInput,
 } from '../../domain/library/types';
 import { COLLECTIONS } from '../../config/collections';
 import { generatePhotoStoragePath, getThumbnailPath } from '../../utils/storage-paths';
@@ -92,6 +94,26 @@ export class FirebaseLibraryService implements LibraryService {
     // Filter by tags
     if (input.tags && input.tags.length > 0) {
       constraints.push(where('tags', 'array-contains-any', input.tags));
+    }
+
+    // Filter by minimum rating (composite index: tenantId/libraryId, rating)
+    if (input.minRating !== undefined) {
+      if (!isPhotoRating(input.minRating)) {
+        throw new Error(`Invalid minRating: ${String(input.minRating)} (expected integer 0–5).`);
+      }
+      constraints.push(where('rating', '>=', input.minRating));
+    }
+
+    // Filter by triage flag (composite index: tenantId/libraryId, flag)
+    if (input.flag !== undefined) {
+      if (input.flag === 'unflagged') {
+        constraints.push(where('flag', '==', null));
+      } else {
+        if (!isPhotoFlag(input.flag)) {
+          throw new Error(`Invalid flag: ${String(input.flag)}.`);
+        }
+        constraints.push(where('flag', '==', input.flag));
+      }
     }
 
     // Apply pagination
@@ -202,6 +224,8 @@ export class FirebaseLibraryService implements LibraryService {
       updatedAt: new Date().toISOString(),
       isFavorite: false,
       tags: [],
+      rating: 0,
+      flag: null,
     };
 
     const docRef = await addDoc(collection(this.db, COLLECTIONS.PHOTOS), photoData);
@@ -253,6 +277,20 @@ export class FirebaseLibraryService implements LibraryService {
 
     if (input.albumIds !== undefined) {
       updates.albumIds = input.albumIds;
+    }
+
+    if (input.rating !== undefined) {
+      if (!isPhotoRating(input.rating)) {
+        throw new Error(`Invalid rating: ${String(input.rating)} (expected integer 0–5).`);
+      }
+      updates.rating = input.rating;
+    }
+
+    if (input.flag !== undefined) {
+      if (!isPhotoFlag(input.flag)) {
+        throw new Error(`Invalid flag: ${String(input.flag)} (expected 'pick' | 'reject' | null).`);
+      }
+      updates.flag = input.flag;
     }
 
     await updateDoc(docRef, updates);
@@ -404,6 +442,8 @@ export class FirebaseLibraryService implements LibraryService {
       updatedAt: data.updatedAt,
       isFavorite: data.isFavorite || false,
       tags: data.tags || [],
+      rating: isPhotoRating(data.rating) ? data.rating : 0,
+      flag: isPhotoFlag(data.flag) ? data.flag : null,
     };
   }
 }
