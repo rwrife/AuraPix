@@ -89,6 +89,7 @@ import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
 import { createBrandingV1Router } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
+import { createTenantAdminRouter } from './routes/tenantAdmin.js';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveriesV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
@@ -239,6 +240,16 @@ app.use(
     // their own tenantId (legacy single-tenant-per-user mapping).
     ownsTenant: async (userId, tenantId) => userId === tenantId,
   })
+);
+
+// Tenant admin (PATCH /api/v1/tenants/:tenantId). Host API key path: a key
+// with the `tenants.write` scope can update quota. Pre-auth runs the
+// hostApiKeyAuth middleware so Bearer ak_live_... tokens populate
+// req.tenant; the route guard inside the router enforces the scope+match.
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  createTenantAdminRouter(dataAdapter)
 );
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
 

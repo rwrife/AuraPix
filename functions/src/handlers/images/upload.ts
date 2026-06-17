@@ -24,6 +24,10 @@ import {
   emitMeteringEvent,
   resolveTenantId,
 } from '../../services/metering/index.js';
+import { readCurrentUsageBytes } from '../../services/metering/currentUsage.js';
+import { getTenantRecord } from '../../services/tenant/tenantRecordService.js';
+import { wouldExceedQuota } from '../../models/TenantRecord.js';
+import type { DailyDocStore } from '../../services/metering/UsageRollupConsumer.js';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -148,6 +152,60 @@ export async function handleUpload(
     );
   }
 
+  // Defense-in-depth: enforce the tenant's storage quota in-process, even
+  // when the host policy webhook is misconfigured / down. See issue #139.
+  const tenantId = resolveTenantId({
+    tenantId: req.tenantId,
+    libraryId,
+  });
+  const tenantRecord = await getTenantRecord(dataAdapter, tenantId);
+  const usageDailyStore = req.app.locals.usageDailyStore as
+    | DailyDocStore
+    | undefined;
+  if (usageDailyStore && tenantRecord.quotaBytes !== null) {
+    const currentUsageBytes = await readCurrentUsageBytes(
+      usageDailyStore,
+      tenantId
+    );
+    if (
+      wouldExceedQuota(currentUsageBytes, file.size, tenantRecord.quotaBytes)
+    ) {
+      emitMeteringEvent({
+        tenantId,
+        type: 'quota.exceeded',
+        count: 1,
+        bytes: file.size,
+        resourceId: userId,
+        meta: {
+          libraryId,
+          usageBytes: currentUsageBytes,
+          quotaBytes: tenantRecord.quotaBytes,
+          attemptedBytes: file.size,
+        },
+      });
+      logger.warn(
+        {
+          tenantId,
+          libraryId,
+          usageBytes: currentUsageBytes,
+          quotaBytes: tenantRecord.quotaBytes,
+          attemptedBytes: file.size,
+        },
+        'Upload rejected: tenant storage quota exceeded'
+      );
+      throw new AppError(
+        413,
+        'quota_exceeded',
+        'Upload would exceed tenant storage quota',
+        {
+          usageBytes: currentUsageBytes,
+          quotaBytes: tenantRecord.quotaBytes,
+          attemptedBytes: file.size,
+        }
+      );
+    }
+  }
+
   let idempotencyKey: string | null;
   try {
     idempotencyKey = getNormalizedIdempotencyKey(req.header('Idempotency-Key'));
@@ -270,7 +328,7 @@ export async function handleUpload(
 
     // Metering: record the accepted upload (count + bytes).
     emitMeteringEvent({
-      tenantId: resolveTenantId({ libraryId }),
+      tenantId,
       type: 'upload.accepted',
       count: 1,
       bytes: metadata.sizeBytes,

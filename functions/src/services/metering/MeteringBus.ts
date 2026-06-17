@@ -12,6 +12,8 @@ export type MeteringEventType =
   | 'image.processed'
   | 'signed_url.issued'
   | 'edit.applied'
+  | 'quota.exceeded'
+  | 'quota.warning'
   | 'share.viewed'
   | 'plugin.ran'
   | 'plugin.enabled'
