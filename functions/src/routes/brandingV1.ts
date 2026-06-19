@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import { recordAuditEvent } from '../services/audit/AuditService.js';
+import { getEffectiveFeatureFlags } from '../services/host/tenantFeaturesConfigService.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -129,9 +130,28 @@ export function createBrandingV1Router(
       const stored = await dataAdapter.fetchData<BrandingRecord>(BRANDING_COLLECTION, tenantId);
       const branding = brandingWithDefaults(tenantId, stored);
 
-      // Cacheable: branding rarely changes and is public.
+      // Per-tenant feature flags (issue #175) are surfaced in the same
+      // bootstrap payload so the embedded UI can hide disabled affordances
+      // (avoids dead buttons) without a second request. Defaults all-on so
+      // tenants with no doc behave as before.
+      let features;
+      try {
+        features = await getEffectiveFeatureFlags(dataAdapter, tenantId);
+      } catch (err) {
+        logger.warn(
+          { err, tenantId },
+          'Failed to resolve feature flags for branding bootstrap; falling back to defaults'
+        );
+        // Don't fail the branding response on a feature lookup miss — the
+        // UI degrades gracefully to all-on, matching the server-side default.
+        features = undefined;
+      }
+
+      // Cacheable: branding rarely changes and is public. Features change
+      // more often, but the 60s freshness window is acceptable and bounded
+      // by the service-layer TTL anyway.
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-      res.status(200).json({ branding });
+      res.status(200).json(features ? { branding, features } : { branding });
     } catch (error) {
       next(error);
     }
