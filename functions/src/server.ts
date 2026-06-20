@@ -115,6 +115,8 @@ import { createTenantOffboardingRouter } from './routes/tenantOffboardingV1.js';
 import { TenantOffboardingService } from './services/tenant/TenantOffboardingService.js';
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
+import { createTenantFeaturesRouter } from './routes/tenantFeaturesV1.js';
+import { createRequireFeature } from './middleware/requireFeature.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
 import { createAuditEventsV1Router } from './routes/auditEventsV1.js';
 import {
@@ -209,8 +211,13 @@ app.use('/images', createImageRoutes(dataAdapter));
 // require. Individual routes inside internalRouter enforce admin or scope
 // requirements via requireUserOrTenantScopes / requireAdmin.
 const hostApiKeyAuth = createHostApiKeyAuth(dataAdapter);
+// Per-tenant feature flag gate factory (issue #175). Curried so callers
+// pass just the flag name at mount time: `requireFeature('export')`.
+// Default-on when no doc exists, fail-open on adapter errors — see
+// `middleware/requireFeature.ts` for details.
+const requireFeature = createRequireFeature(dataAdapter);
 app.use('/internal', hostApiKeyAuth, optionalAuthMiddleware, internalRouter);
-app.use('/edits', authMiddleware, editsRouter);
+app.use('/edits', authMiddleware, requireFeature('plugins'), editsRouter);
 
 // Versioned API surface (desktop/web clients)
 app.use('/api', apiVersionMiddleware);
@@ -234,7 +241,8 @@ app.use('/api/v1/photos', authMiddleware, createPhotosListV1Router(dataAdapter))
 app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapter));
 // Bulk photo operations (issue #142). Express routes treat `:` as a param
 // separator, so we register the exact literal path.
-app.use('/api/v1/photos\\:batch', authMiddleware, createBulkPhotosRouter(dataAdapter));
+// Gated by per-tenant `bulkOps` feature flag (issue #175).
+app.use('/api/v1/photos\\:batch', authMiddleware, requireFeature('bulkOps'), createBulkPhotosRouter(dataAdapter));
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
@@ -271,11 +279,14 @@ const photoExportHandle = createPhotoExportRouter({
   dataAdapter,
   storageAdapter,
 });
+// Photo export endpoints — gated by per-tenant `export` feature flag
+// (issue #175). Hosts on Free/Basic plans can turn this off entirely.
 app.use(
   '/v1/photos',
   hostApiKeyAuth,
   optionalAuthMiddleware,
   resolveTenant,
+  requireFeature('export'),
   photoExportHandle.router
 );
 app.use(
@@ -283,6 +294,7 @@ app.use(
   hostApiKeyAuth,
   optionalAuthMiddleware,
   resolveTenant,
+  requireFeature('export'),
   photoExportHandle.router
 );
 app.use(
@@ -298,30 +310,35 @@ app.use(
   createLibraryTagsRouter(photosService)
 );
 
-// Smart Albums (issue #165).
+// Smart Albums (issue #165). Gated by per-tenant `smartAlbums` feature
+// flag (issue #175).
 const smartAlbumsService = domainModules.smartAlbums;
 app.use(
   '/v1/libraries/:libraryId/smart-albums',
   authMiddleware,
   resolveTenant,
+  requireFeature('smartAlbums'),
   createSmartAlbumsLibraryRouter(smartAlbumsService)
 );
 app.use(
   '/api/v1/libraries/:libraryId/smart-albums',
   authMiddleware,
   resolveTenant,
+  requireFeature('smartAlbums'),
   createSmartAlbumsLibraryRouter(smartAlbumsService)
 );
 app.use(
   '/v1/smart-albums',
   authMiddleware,
   resolveTenant,
+  requireFeature('smartAlbums'),
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 app.use(
   '/api/v1/smart-albums',
   authMiddleware,
   resolveTenant,
+  requireFeature('smartAlbums'),
   createSmartAlbumsResourceRouter(smartAlbumsService)
 );
 
@@ -382,6 +399,16 @@ app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
   createTenantAdminRouter(dataAdapter)
+);
+// Sharing surface (issue #175): the `POST /api/signing/key/share/:token`
+// path is the host's entry point for issuing share-token signing keys.
+// Gate it on the per-tenant `sharing` feature flag *before* the full
+// signing router so a disabled tenant cannot mint share-grant keys.
+app.post(
+  '/api/signing/key/share/:token',
+  authMiddleware,
+  requireFeature('sharing'),
+  (_req, _res, next) => next()
 );
 app.use('/api/signing', authMiddleware, createSigningRouter(dataAdapter));
 
@@ -467,6 +494,8 @@ const auditEventsRouter = createAuditEventsV1Router({
   // Until a real tenantId model lands, treat the authenticated user's uid
   // as their own tenantId (mirrors the tenantUsage convention).
   ownsTenant: async (userId, tenantId) => userId === tenantId,
+});
+
 // --- Embed handshake routes (issue #163) ---
 // GET/PUT allowed-origins is host-API-key gated (or owner user); the CSP
 // report endpoint is unauthenticated so browsers can post violation
@@ -503,6 +532,22 @@ app.use(
   hostApiKeyAuth,
   optionalAuthMiddleware,
   createTenantPluginsRouter({ dataAdapter })
+);
+
+// Per-tenant feature flag config (issue #175). Host-API-key-only with
+// the `tenant.config` scope. Mounted on both `/v1/tenants` (canonical
+// spec URL) and `/api/v1/tenants` (legacy in-product prefix) so hosts
+// can call either path.
+const tenantFeaturesRouter = createTenantFeaturesRouter({ dataAdapter });
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  tenantFeaturesRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  tenantFeaturesRouter
 );
 
 // Per-tenant export presets (issue #174).

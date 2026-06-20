@@ -1,0 +1,183 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Feature Flags API",
+    "version": "0.1.0",
+    "description": "Per-tenant feature flag configuration (issue #175). Host applications use these endpoints to map pricing tiers (Free / Pro / Business) to capability \u2014 toggling features like sharing, plugins, smart albums, export, and bulk ops on or off per tenant.\n\nBoth endpoints are host-API-key only with the `tenant.config` scope; feature flags are NOT end-user-tunable.\n\nTenants with no configuration document read every feature as `true` (back-compat). Unknown flag keys submitted to PATCH are silently ignored."
+  },
+  "paths": {
+    "/v1/tenants/{tenantId}/features": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "get": {
+        "summary": "Fetch effective per-tenant feature flags",
+        "description": "Returns the merged flag map (defaults applied for any feature without an explicit override). Use this when bootstrapping host-side admin UI.",
+        "security": [{ "hostApiKey": ["tenant.config"] }],
+        "responses": {
+          "200": {
+            "description": "Effective feature flags",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeaturesEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Host API key required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing `tenant.config` scope or cross-tenant request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Partially update per-tenant feature flags",
+        "description": "Send only the flags you want to change. Returns the new effective state plus a `changes` array enumerating transitioning flags. Emits a `feature.flag_changed` metering event per transition.",
+        "security": [{ "hostApiKey": ["tenant.config"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FeaturesPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated feature flags",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeaturesEnvelope" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Host API key required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing `tenant.config` scope or cross-tenant request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "hostApiKey": { "type": "apiKey", "in": "header", "name": "X-Host-API-Key" }
+    },
+    "schemas": {
+      "FeatureFlags": {
+        "type": "object",
+        "description": "Effective state for every gateable feature. All keys are required in responses; defaults are `true`.",
+        "required": ["sharing", "plugins", "smartAlbums", "export", "bulkOps"],
+        "additionalProperties": false,
+        "properties": {
+          "sharing": { "type": "boolean", "description": "Share-token signing-key issuance." },
+          "plugins": { "type": "boolean", "description": "Edits/plugin execution." },
+          "smartAlbums": { "type": "boolean", "description": "Smart Albums CRUD + materialization." },
+          "export": { "type": "boolean", "description": "Photo export API." },
+          "bulkOps": { "type": "boolean", "description": "Bulk photo operations (`POST /v1/photos:batch`)." }
+        }
+      },
+      "FeaturesPatch": {
+        "type": "object",
+        "description": "Partial update. Omit a key to leave it unchanged. Unknown keys are rejected (`INVALID_BODY`).",
+        "additionalProperties": false,
+        "properties": {
+          "sharing": { "type": "boolean" },
+          "plugins": { "type": "boolean" },
+          "smartAlbums": { "type": "boolean" },
+          "export": { "type": "boolean" },
+          "bulkOps": { "type": "boolean" }
+        }
+      },
+      "FeatureFlagChange": {
+        "type": "object",
+        "required": ["feature", "oldValue", "newValue"],
+        "properties": {
+          "feature": { "type": "string" },
+          "oldValue": { "type": "boolean" },
+          "newValue": { "type": "boolean" }
+        }
+      },
+      "FeaturesEnvelope": {
+        "type": "object",
+        "required": ["tenantId", "flags"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "flags": { "$ref": "#/components/schemas/FeatureFlags" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedBy": { "type": ["string", "null"] },
+          "changes": {
+            "type": "array",
+            "description": "Present on PATCH responses. Enumerates feature flags whose effective value transitioned.",
+            "items": { "$ref": "#/components/schemas/FeatureFlagChange" }
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["code", "message", "requestId"],
+                "properties": {
+                  "code": { "type": "string" },
+                  "message": { "type": "string" },
+                  "requestId": { "type": "string" },
+                  "details": { "type": ["object", "null"] }
+                }
+              },
+              {
+                "type": "string",
+                "description": "Gated requests return a flat shape: `{ \"error\": \"feature_disabled\", \"feature\": \"<name>\" }`."
+              }
+            ]
+          },
+          "feature": {
+            "type": "string",
+            "description": "Present on 403 responses from `requireFeature` middleware. Identifies which feature was disabled."
+          }
+        }
+      }
+    }
+  }
+}

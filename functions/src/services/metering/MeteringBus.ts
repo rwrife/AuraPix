@@ -51,7 +51,16 @@ export type MeteringEventType =
   | 'photo.exported'
   | 'smart_album.created'
   | 'smart_album.deleted'
-  | 'smart_album.materialized';
+  | 'smart_album.materialized'
+  // Per-tenant feature flag gating (issue #175). Emitted by the
+  // `requireFeature(name)` middleware when a request is rejected because
+  // the feature is disabled for the tenant, and by the PATCH endpoint
+  // when the host toggles a flag. `feature.gated` is intentionally
+  // low-volume (only on a 403) and is NOT billable — hosts use it to
+  // surface upsell opportunities. `feature.flag_changed` is for audit /
+  // host-side change history.
+  | 'feature.gated'
+  | 'feature.flag_changed';
 
 export interface MeteringEvent {
   /**

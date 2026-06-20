@@ -21,6 +21,7 @@ export type TenantApiKeyScope =
   | 'webhooks.write'
   | 'audit.read'
   | 'tenant.admin'
+  | 'tenant.config'
   | 'plugins.read'
   | 'plugins.write'
   | 'export-presets.read'
@@ -39,6 +40,14 @@ export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
    * auth — these endpoints are host-key-only.
    */
   'tenant.admin',
+  /**
+   * `tenant.config` grants read/write access to per-tenant feature flag
+   * configuration (issue #175). The host application uses this scope to
+   * map pricing tiers to capability — Free/Pro/Business plans toggle
+   * features (sharing, plugins, export, etc.) on or off per tenant.
+   * Host-key-only — feature flags are NOT end-user-tunable.
+   */
+  'tenant.config',
   'plugins.read',
   'plugins.write',
   'export-presets.read',
