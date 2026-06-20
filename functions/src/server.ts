@@ -116,6 +116,7 @@ import { TenantOffboardingService } from './services/tenant/TenantOffboardingSer
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createTenantFeaturesRouter } from './routes/tenantFeaturesV1.js';
+import { createHostWebhookEventsRouter } from './routes/hostWebhookEventsV1.js';
 import { createRequireFeature } from './middleware/requireFeature.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
 import { createAuditEventsV1Router } from './routes/auditEventsV1.js';
@@ -548,6 +549,22 @@ app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
   tenantFeaturesRouter
+);
+
+// Public webhook event catalog (issue #176). Global — not per-tenant —
+// so it lives under `/v1/host/...` rather than `/v1/tenants/...`. Host
+// API key required (any scope, scoped to any tenant); response is
+// identical for every caller and safely cacheable at the edge.
+const hostWebhookEventsRouter = createHostWebhookEventsRouter();
+app.use(
+  '/v1/host',
+  hostApiKeyAuth,
+  hostWebhookEventsRouter
+);
+app.use(
+  '/api/v1/host',
+  hostApiKeyAuth,
+  hostWebhookEventsRouter
 );
 
 // Per-tenant export presets (issue #174).
