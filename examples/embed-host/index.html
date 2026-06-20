@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AuraPix Embed — Example Host</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 16px;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      header h1 {
+        font-size: 18px;
+        margin: 0;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .controls input,
+      .controls button,
+      .controls select {
+        font: inherit;
+        padding: 6px 10px;
+        border: 1px solid #888;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+      }
+      #aurapix-host {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 480px;
+        border: 1px dashed #888;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      #log {
+        margin-top: 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        background: rgba(127, 127, 127, 0.1);
+        padding: 8px;
+        border-radius: 6px;
+        max-height: 200px;
+        overflow: auto;
+      }
+      .log-row {
+        white-space: pre-wrap;
+      }
+      .log-row.error {
+        color: #c83;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🖼 AuraPix Embed — Example Host</h1>
+      <div class="controls">
+        <input id="tenant" placeholder="tenantId" value="dev-tenant" />
+        <input id="library" placeholder="libraryId (optional)" />
+        <select id="theme">
+          <option value="auto">theme: auto</option>
+          <option value="light">theme: light</option>
+          <option value="dark">theme: dark</option>
+        </select>
+        <button id="mount">Mount</button>
+        <button id="openPhoto">openPhoto('demo')</button>
+        <button id="openAlbum">openAlbum('demo')</button>
+        <button id="destroy">Destroy</button>
+      </div>
+    </header>
+
+    <div id="aurapix-host" aria-label="AuraPix embed"></div>
+    <div id="log" role="log"></div>
+
+    <!--
+      In a real host you would import the published package:
+
+          import { mountAuraPix } from '@aurapix/embed';
+
+      For this local example we point at the package source so the demo
+      works without a build step.
+    -->
+    <script type="module">
+      import { mountAuraPix } from '../../packages/embed-sdk/src/index.ts';
+
+      const log = document.getElementById('log');
+      function logLine(msg, kind) {
+        const row = document.createElement('div');
+        row.className = 'log-row' + (kind === 'error' ? ' error' : '');
+        row.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        log.prepend(row);
+      }
+
+      // In production the host backend mints a per-user JWT signed with
+      // the host API key. For the local dev demo we just fetch one from
+      // the AuraPix dev backend's example endpoint; if your backend
+      // doesn't expose this, paste a token here directly.
+      async function getDevUserJwt() {
+        try {
+          const res = await fetch('/api/aurapix/dev-jwt', {
+            credentials: 'include',
+          });
+          if (res.ok) return (await res.text()).trim();
+        } catch (_) {
+          /* fall through */
+        }
+        // Fallback: an obviously-bogus token; the AuraPix backend will
+        // reject it but the SDK will still mount the iframe so you can
+        // exercise the handshake / error paths.
+        return 'dev.dev.dev';
+      }
+
+      let handle = null;
+
+      document.getElementById('mount').addEventListener('click', async () => {
+        if (handle) handle.destroy();
+        const tenantId = document.getElementById('tenant').value.trim();
+        const libraryId = document.getElementById('library').value.trim() || undefined;
+        const theme = document.getElementById('theme').value;
+        const userJwt = await getDevUserJwt();
+        try {
+          handle = mountAuraPix(document.getElementById('aurapix-host'), {
+            tenantId,
+            userJwt,
+            libraryId,
+            theme,
+            // Local dev backend; override for staging / prod.
+            aurapixOrigin: 'http://localhost:5173',
+            handshakeTimeoutMs: 5_000,
+            onReady: ({ tenantId, version, origin }) => {
+              logLine(`ready: tenant=${tenantId} version=${version} origin=${origin}`);
+            },
+            onError: (err) => {
+              logLine(`error: ${err.code} — ${err.message}`, 'error');
+            },
+            onEvent: (evt) => {
+              logLine(`event: ${evt.name} ${JSON.stringify(evt.payload ?? null)}`);
+            },
+          });
+          handle.on('resize', ({ height }) => {
+            logLine(`resize: height=${height}`);
+          });
+          logLine('mounted');
+        } catch (err) {
+          logLine(`mount failed: ${err.message}`, 'error');
+        }
+      });
+
+      document.getElementById('openPhoto').addEventListener('click', () => {
+        if (!handle) return logLine('no handle — click Mount first', 'error');
+        handle.openPhoto('demo');
+        logLine('called openPhoto("demo")');
+      });
+
+      document.getElementById('openAlbum').addEventListener('click', () => {
+        if (!handle) return logLine('no handle — click Mount first', 'error');
+        handle.openAlbum('demo');
+        logLine('called openAlbum("demo")');
+      });
+
+      document.getElementById('destroy').addEventListener('click', () => {
+        if (!handle) return;
+        handle.destroy();
+        handle = null;
+        logLine('destroyed');
+      });
+
+      // Auto-mount on load.
+      document.getElementById('mount').click();
+    </script>
+  </body>
+</html>

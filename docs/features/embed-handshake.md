@@ -14,7 +14,10 @@ specifies the contract host pages can rely on:
    `addEventListener('message', ...)` plumbing.
 
 Issue: [#163](https://github.com/rwrife/AuraPix/issues/163). Depends on the
-per-tenant host API keys (#131) and the branding/tenant model (#149).
+per-tenant host API keys (#131) and the branding/tenant model (#149). The
+higher-level drop-in `@aurapix/embed` SDK (`packages/embed-sdk/`) is
+tracked in [#177](https://github.com/rwrife/AuraPix/issues/177) and wraps
+this contract for the common case.
 
 ## Allowed-origins configuration
 
@@ -179,13 +182,15 @@ configuration mistakes (`'*'`, missing or malformed `targetOrigin`).
 
 ## Metering hooks
 
-The CSP middleware and the violation report endpoint emit two reserved
-metering event types onto the existing `MeteringBus`:
+The CSP middleware, the violation report endpoint, and the embed-SDK
+session-end beacon emit three reserved metering event types onto the
+existing `MeteringBus`:
 
-| Event                      | When                                                  | Debounce            |
-| -------------------------- | ----------------------------------------------------- | ------------------- |
-| `embed.session_started`    | An allowed parent frames an embed-eligible response   | 1 / min / tenant+origin |
-| `embed.origin_blocked`     | Browser posts a `frame-ancestors` violation report    | None (report-driven) |
+| Event                      | When                                                                                       | Debounce            |
+| -------------------------- | ------------------------------------------------------------------------------------------ | ------------------- |
+| `embed.session_started`    | An allowed parent frames an embed-eligible response                                        | 1 / min / tenant+origin |
+| `embed.session_ended`      | The `@aurapix/embed` SDK posts to `POST /v1/tenants/:id/embed/session-end` on `destroy()` or `pagehide` (issue #177) | None (client-driven) |
+| `embed.origin_blocked`     | Browser posts a `frame-ancestors` violation report                                         | None (report-driven) |
 
 Hosts can correlate these with their active-user billing by subscribing
 through the standard host webhook fanout (see `metering-events.md`).

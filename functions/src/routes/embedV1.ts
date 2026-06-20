@@ -309,6 +309,60 @@ export function createEmbedV1Router(
     }
   });
 
+  // Embed SDK lifecycle beacon — issue #177. Browsers POST here from
+  // `@aurapix/embed`'s `handle.destroy()` and `pagehide` heartbeat so the
+  // backend can emit a paired `embed.session_ended` event for billing.
+  //
+  // Auth: NONE. The endpoint is intentionally unauthenticated because
+  // `navigator.sendBeacon` can't carry credentials. We treat the body as
+  // untrusted, validate strictly, and cap payload influence (no resource
+  // mutation, no DB writes, just a debounced metering emit).
+  router.post('/:tenantId/embed/session-end', (req, res, next) => {
+    try {
+      const tenantId = req.params.tenantId;
+      // Always 204 — browsers fire-and-forget; don't waste bytes on errors.
+      if (!isValidTenantId(tenantId)) {
+        res.status(204).end();
+        return;
+      }
+
+      const body: any = req.body ?? {};
+      // Best-effort numeric coercion — keep > 0 and cap at 24h to bound
+      // metering payload influence.
+      let durationMs = Number(body.durationMs);
+      if (!Number.isFinite(durationMs) || durationMs < 0) durationMs = 0;
+      if (durationMs > 24 * 60 * 60 * 1000) durationMs = 24 * 60 * 60 * 1000;
+
+      const sessionId = typeof body.sessionId === 'string' && body.sessionId.length <= 128
+        ? body.sessionId
+        : null;
+      const sdkVersion = typeof body.sdkVersion === 'string' && body.sdkVersion.length <= 32
+        ? body.sdkVersion
+        : null;
+
+      const meteringBus = (req.app.locals.meteringBus as
+        | { emit?: (e: unknown) => void }
+        | undefined);
+      try {
+        meteringBus?.emit?.({
+          tenantId,
+          type: 'embed.session_ended',
+          meta: {
+            sessionId,
+            sdkVersion,
+            durationMs,
+          },
+        });
+      } catch (err) {
+        logger.debug({ err, tenantId }, 'Failed to emit embed.session_ended');
+      }
+      res.status(204).end();
+    } catch (error) {
+      logger.debug({ err: error }, 'Failed to process embed session-end');
+      next(error);
+    }
+  });
+
   return router;
 }
 

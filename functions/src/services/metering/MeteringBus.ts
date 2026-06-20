@@ -36,6 +36,10 @@ export type MeteringEventType =
   // Embed handshake (issue #163). Emitted from the CSP middleware and
   // the `frame-ancestors` violation report endpoint respectively.
   | 'embed.session_started'
+  // Embed lifecycle (issue #177). Emitted from the embed-SDK beacon
+  // endpoint (`POST /v1/tenants/:tenantId/embed/session-end`) when the
+  // SDK calls `handle.destroy()` or the iframe unloads.
+  | 'embed.session_ended'
   | 'embed.origin_blocked'
   // Reserved, low-volume debug-tier event. Emitted by the Idempotency-Key
   // middleware on a cached replay so hosts can observe client retry

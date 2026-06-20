@@ -305,6 +305,115 @@ describe('POST /:tenantId/embed/csp-report', () => {
   });
 });
 
+describe('POST /:tenantId/embed/session-end', () => {
+  function appFor(emit: ReturnType<typeof vi.fn>) {
+    const adapter = makeAdapter();
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      (req.app.locals as any).meteringBus = { emit };
+      next();
+    });
+    app.use(
+      '/api/v1/tenants',
+      createEmbedV1Router(adapter, { canWriteEmbedConfig: () => true })
+    );
+    return app;
+  }
+
+  it('emits embed.session_ended with sanitized metadata and returns 204', async () => {
+    const emit = vi.fn();
+    const res = await request(
+      appFor(emit),
+      'POST',
+      '/api/v1/tenants/acme/embed/session-end',
+      { sessionId: 'sess_abc', sdkVersion: '0.1.0', durationMs: 12345 }
+    );
+    expect(res.status).toBe(204);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith({
+      tenantId: 'acme',
+      type: 'embed.session_ended',
+      meta: {
+        sessionId: 'sess_abc',
+        sdkVersion: '0.1.0',
+        durationMs: 12345,
+      },
+    });
+  });
+
+  it('clamps durationMs to [0, 24h] and tolerates a missing body', async () => {
+    const emit = vi.fn();
+    const res = await request(
+      appFor(emit),
+      'POST',
+      '/api/v1/tenants/acme/embed/session-end',
+      { durationMs: -99 }
+    );
+    expect(res.status).toBe(204);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit.mock.calls[0][0]).toMatchObject({
+      type: 'embed.session_ended',
+      meta: { durationMs: 0, sessionId: null, sdkVersion: null },
+    });
+
+    const emit2 = vi.fn();
+    const res2 = await request(
+      appFor(emit2),
+      'POST',
+      '/api/v1/tenants/acme/embed/session-end',
+      { durationMs: 99 * 60 * 60 * 1000 } // 99 hours
+    );
+    expect(res2.status).toBe(204);
+    expect(emit2.mock.calls[0][0].meta.durationMs).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('drops invalid tenantIds with 204 (no metering noise from spam)', async () => {
+    const emit = vi.fn();
+    const res = await request(
+      appFor(emit),
+      'POST',
+      '/api/v1/tenants/!!!/embed/session-end',
+      { durationMs: 1000 }
+    );
+    expect(res.status).toBe(204);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects an over-long sessionId / sdkVersion by replacing with null', async () => {
+    const emit = vi.fn();
+    const longId = 'x'.repeat(200);
+    const longVer = 'v'.repeat(100);
+    const res = await request(
+      appFor(emit),
+      'POST',
+      '/api/v1/tenants/acme/embed/session-end',
+      { sessionId: longId, sdkVersion: longVer, durationMs: 1 }
+    );
+    expect(res.status).toBe(204);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit.mock.calls[0][0].meta).toMatchObject({
+      sessionId: null,
+      sdkVersion: null,
+      durationMs: 1,
+    });
+  });
+
+  it('survives metering bus throws (best-effort, never breaks the beacon)', async () => {
+    const emit = vi.fn(() => {
+      throw new Error('bus down');
+    });
+    const res = await request(
+      appFor(emit),
+      'POST',
+      '/api/v1/tenants/acme/embed/session-end',
+      { durationMs: 5 }
+    );
+    expect(res.status).toBe(204);
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('createEmbedCspMiddleware', () => {
   it('emits frame-ancestors=none + X-Frame-Options=DENY when no origins are allowed', async () => {
     const middleware = createEmbedCspMiddleware({
