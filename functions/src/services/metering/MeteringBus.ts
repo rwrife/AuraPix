@@ -1,66 +1,18 @@
 import { logger } from '../../utils/logger.js';
+import type { RegisteredEventName } from './eventCatalog.js';
 
 /**
  * Catalogue of billable event types emitted by AuraPix.
  *
- * Hosts that resell AuraPix can use these to drive metered billing.
- * Keep this list narrow; new entries should be added intentionally
- * and documented in `docs/features/metering-events.md`.
+ * Derived from the single source of truth in `eventCatalog.ts` (issue
+ * #176). Adding a new event name here directly is impossible — you must
+ * register the event in `EVENT_CATALOG` first, which gives compile-time
+ * guarantees that every emitted name has an associated payload schema
+ * and appears in the `GET /v1/host/webhook-events` response.
+ *
+ * Hosts that resell AuraPix use these to drive metered billing.
  */
-export type MeteringEventType =
-  | 'upload.accepted'
-  | 'image.processed'
-  | 'signed_url.issued'
-  | 'edit.applied'
-  | 'bulk.batch'
-  | 'user.active'
-  | 'user.provisioned'
-  | 'user.revoked'
-  | 'quota.exceeded'
-  | 'quota.warning'
-  | 'share.viewed'
-  | 'plugin.ran'
-  // Tenant offboarding lifecycle (issue #155). After `tenant.deleted` is
-  // emitted for a given tenantId, no further events for that tenant
-  // should ever fire — sinks may treat the tenant as terminal.
-  | 'tenant.export.requested'
-  | 'tenant.export.completed'
-  | 'tenant.deleted'
-  | 'user.active'
-  | 'plugin.enabled'
-  | 'plugin.disabled'
-  | 'plugin.blocked'
-  | 'photo.trashed'
-  | 'photo.purged'
-  | 'audit.queried'
-  // Embed handshake (issue #163). Emitted from the CSP middleware and
-  // the `frame-ancestors` violation report endpoint respectively.
-  | 'embed.session_started'
-  // Embed lifecycle (issue #177). Emitted from the embed-SDK beacon
-  // endpoint (`POST /v1/tenants/:tenantId/embed/session-end`) when the
-  // SDK calls `handle.destroy()` or the iframe unloads.
-  | 'embed.session_ended'
-  | 'embed.origin_blocked'
-  // Reserved, low-volume debug-tier event. Emitted by the Idempotency-Key
-  // middleware on a cached replay so hosts can observe client retry
-  // behavior. NOT billable; consumers should exclude it from rollups.
-  // See `docs/features/idempotency-keys.md` (issue #162).
-  | 'idempotency.replayed'
-  | 'webhook.secret_rotated'
-  | 'photo.tagged'
-  | 'photo.exported'
-  | 'smart_album.created'
-  | 'smart_album.deleted'
-  | 'smart_album.materialized'
-  // Per-tenant feature flag gating (issue #175). Emitted by the
-  // `requireFeature(name)` middleware when a request is rejected because
-  // the feature is disabled for the tenant, and by the PATCH endpoint
-  // when the host toggles a flag. `feature.gated` is intentionally
-  // low-volume (only on a 403) and is NOT billable — hosts use it to
-  // surface upsell opportunities. `feature.flag_changed` is for audit /
-  // host-side change history.
-  | 'feature.gated'
-  | 'feature.flag_changed';
+export type MeteringEventType = RegisteredEventName;
 
 export interface MeteringEvent {
   /**

@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomUUID } from 'crypto';
 import { logger } from '../../utils/logger.js';
+import { CATALOG_VERSION } from './eventCatalog.js';
 import type {
   MeteringSink,
   NormalizedMeteringEvent,
@@ -261,6 +262,11 @@ export class HostWebhookSink implements MeteringSink {
       const sentAt = new Date().toISOString();
       const body = JSON.stringify({
         version: SIGNATURE_VERSION,
+        // Catalog version of the event registry this delivery was built
+        // from (issue #176). Hosts can compare against their cached
+        // catalog and refetch `GET /v1/host/webhook-events` when it
+        // drifts.
+        catalogVersion: CATALOG_VERSION,
         sentAt,
         batchId,
         events,

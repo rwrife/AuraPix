@@ -19,74 +19,56 @@ HMAC-signed webhook), and the **payload shape**.
 When `HOST_METERING_WEBHOOK_URL` is unset, emit calls are queued and
 discarded; there is no outbound traffic.
 
-## Event catalog (initial set)
+## Event catalog
 
-All events share the shape:
+<!-- EVENT_CATALOG:BEGIN -->
 
-```ts
-type MeteringEvent = {
-  tenantId: string;              // host-side routing key
-  type: MeteringEventType;       // see table below
-  count?: number;                // defaults to 1
-  bytes?: number;                // when meaningful
-  resourceId?: string;           // e.g. photoId / keyId
-  occurredAt?: string;           // ISO-8601; server-stamped if missing
-  meta?: Record<string, unknown>;// small, free-form
-}
-```
+> ⚠️ This table is auto-generated from `functions/src/services/metering/eventCatalog.ts`.
+> Do not hand-edit; run `node scripts/generate-event-catalog-docs.mjs` after changing the registry.
+>
+> **Catalog version:** `2026-06-20` — the same string is stamped on every outbound webhook envelope and returned by `GET /v1/host/webhook-events`.
 
-| `type` | Emitted from | Notable fields |
-| --- | --- | --- |
-| `upload.accepted` | `handlers/images/upload.ts` after the original image is stored | `count=1`, `bytes=metadata.sizeBytes`, `resourceId=photoId`, `meta.userId`, `meta.sourceType` |
-| `image.processed` | `handlers/thumbnails/generate.ts` after derivatives are written | one event per derivative variant (7 today: small/medium/large × webp+jpeg + preview_jpeg), `resourceId=photoId`, `meta.stage='thumbnail'` |
-| `signed_url.issued` | `routes/signing.ts` user and share grants | `resourceId=signingKey.keyId`, `meta.grantType='user'\|'share'` |
-| `edit.applied` | `handlers/edits/applyEdits.ts` after a non-destructive edit version is committed | `resourceId=photoId`, `meta.version`, `meta.operationCount` |
-| `bulk.batch` | `handlers/photos/batch.ts` after a `POST /api/v1/photos:batch` call completes | exactly one event per call regardless of N; `meta.action`, `meta.requested`, `meta.succeeded`, `meta.failed`. Per-photo events (e.g. delete audits) are still emitted in addition and are NOT collapsed. |
-| `user.active` | `routes/tenantUsersV1.ts` activity tracker — **at most once per `(tenantId, userId)` per UTC day** | `resourceId=userId`. This is the per-seat billing signal hosts asked for in #143. |
-| `user.provisioned` | `routes/tenantUsersV1.ts` on `POST /v1/tenants/:id/users` (newly created membership only; no-op on idempotent re-POST) | `resourceId=userId`, `meta.role`, `meta.email` |
-| `user.revoked` | `routes/tenantUsersV1.ts` on `DELETE /v1/tenants/:id/users/:userId` | `resourceId=userId`, `meta.role` |
-| `quota.exceeded` | `handlers/images/upload.ts` when the in-process quota check rejects with HTTP 413 | `count=1`, `bytes=attemptedBytes`, `resourceId=userId`, `meta.libraryId`, `meta.usageBytes`, `meta.quotaBytes`, `meta.attemptedBytes` |
-| `quota.warning` | `services/metering/storageSnapshot.ts` once per threshold per tenant per UTC day when usage crosses the configured fractions of quota | `bytes=usageBytes`, `meta.threshold` (e.g. `0.8`, `0.95`), `meta.quotaBytes`, `meta.usageBytes`, `meta.date` |
-| `share.viewed` | `services/imageAuth/ImageAuthorizer.ts` after a share token passes auth, expiry, max-uses, and resource-scope checks (i.e. an access is actually granted; failed accesses are not counted) | `count=1`, `resourceId=shareLink.id`, `meta.photoId`, `meta.libraryId`, `meta.grantType='album'\|'photo'\|'library'` |
-| `plugin.ran` | `handlers/edits/applyEdits.ts` once per edit operation in the recipe, on both success and failure | `count=1`, `resourceId=photoId`, `meta.pluginId`, `meta.durationMs`, `meta.success` |
-| `user.active` | `middleware/userActive.ts`, after auth + tenant resolution, on the **first** end-user request of the UTC day for `(tenantId, userId)` | `count=1`, `resourceId=userId`, `meta.firstSeenAt` (ISO-8601), `meta.route=req.path`. Host-API-key (service-to-service) calls do **not** emit this event. Dedupe scope is `(tenantId, userId, utcDay)`, so the same Firebase user active in two tenants emits two seat events. Increments the daily-rollup `activeUsers` counter. |
-| `photo.trashed` | `domain/photos/PhotosService.softDelete` (`DELETE /v1/photos/:id`) | `count=1`, `bytes=original.sizeBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`. Hosts that bill on "active storage" can decrement immediately; hosts that bill on "stored bytes" can ignore. |
-| `photo.purged` | `jobs/purgeTrash.ts` after bytes are freed | `count=1`, **`bytes=-original.sizeBytes`** (negative), `resourceId=photoId`, `meta.libraryId`, `meta.trashedAt`. The daily `storageBytesDelta` rollup decrements on this event, not on `photo.trashed`. Emitted **exactly once** per photo. |
-| `embed.session_started` | `routes/embedV1.ts` CSP middleware, when an allowed parent origin frames an embed-eligible response | `count=1`, `meta.origin`, `meta.userAgent`. Debounced to **max 1 per minute per (tenantId, origin)** so high-traffic embeds don't flood the bus. See `docs/features/embed-handshake.md`. |
-| `embed.session_ended` | `routes/embedV1.ts` `POST /v1/tenants/:tenantId/embed/session-end` beacon, fired by the `@aurapix/embed` SDK on `handle.destroy()` and on the page's `pagehide` event (iframe unload heartbeat). See issue #177. | `count=1`, `meta.sessionId`, `meta.sdkVersion`, `meta.durationMs`. The endpoint is unauthenticated (so `navigator.sendBeacon` works) and treats the body as untrusted — `durationMs` is clamped to `[0, 24h]` and `sessionId`/`sdkVersion` length-capped before emit. |
-| `embed.origin_blocked` | `routes/embedV1.ts` CSP `report-uri` endpoint, on a browser-posted `frame-ancestors` violation | `count=1`, `meta.blockedUri`, `meta.documentUri`, `meta.violatedDirective`. Helps hosts find misconfigured deployments. |
-| `idempotency.replayed` | `middleware/idempotency.ts` on a cached replay (issue #162) | **NOT billable.** Debug-tier; `count=1`, `meta.route`, `meta.key`. Hosts should exclude this type from billing rollups; it exists so operators can observe client retry behavior. |
-| `photo.tagged` | `domain/photos/PhotosService.updateTags` (`POST /v1/photos/:id/tags`) | `count=1`, `resourceId=photoId`, `meta.libraryId`, `meta.actor`, `meta.added`, `meta.removed`. Emitted **once per mutation**, not once per tag, so a photographer tagging 30 photos with 5 keywords each produces 30 events rather than 150. Drives the `tagsApplied` daily counter (sum of `added + removed`). |
-| `photo.exported` | `routes/photoExportV1.ts` after a successful `POST /v1/photos/:id/export` (issue #174) | `count=1`, `bytes=outputBytes`, `resourceId=photoId`, `meta.libraryId`, `meta.preset`, `meta.outputWidth`, `meta.outputHeight`, `meta.cacheHit`, `meta.actor`. Emitted on both cache hits and misses (hosts may choose to discount `cacheHit:true` events at billing time). Drives the daily `exportBytes` counter (rendered bandwidth, billable). |
-| `smart_album.created` | `domain/smartAlbums/SmartAlbumsService.create` (`POST /smart-albums`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
-| `smart_album.deleted` | `domain/smartAlbums/SmartAlbumsService.remove` (`DELETE /smart-albums/:id`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`. |
-| `smart_album.materialized` | `domain/smartAlbums/SmartAlbumsService.materialize` (`GET /smart-albums/:id/photos`) | `count=1`, `resourceId=smartAlbumId`, `meta.libraryId`, `meta.resultCount`, `meta.totalCount`. Hosts can use `resultCount` to detect heavy query patterns. |
+| `type` | Version | Billable | Description |
+| --- | --- | --- | --- |
+| `upload.accepted` | 1 | ✅ | Original image stored after a successful upload. One event per photo. |
+| `image.processed` | 1 | ✅ | A derivative variant (thumbnail / preview) was written. One event per variant. |
+| `signed_url.issued` | 1 | ✅ | A signed URL was minted for a user or share grant. |
+| `edit.applied` | 1 | ✅ | A non-destructive edit version was committed for a photo. |
+| `bulk.batch` | 1 | ✅ | A `POST /v1/photos:batch` call completed. One event per call regardless of N. |
+| `user.active` | 1 | ✅ | First end-user request of the UTC day for `(tenantId, userId)`. The per-seat billing signal. |
+| `user.provisioned` | 1 | — | A new tenant membership was created. |
+| `user.revoked` | 1 | — | A tenant membership was removed. |
+| `quota.exceeded` | 1 | — | In-process storage quota check rejected an upload with HTTP 413. |
+| `quota.warning` | 1 | — | Tenant storage usage crossed a configured threshold (e.g. 80%, 95%). Once per threshold per UTC day. |
+| `share.viewed` | 1 | ✅ | A share token passed auth and a resource was actually delivered. |
+| `plugin.ran` | 1 | ✅ | A plugin/edit operation executed (success or failure). One event per operation. |
+| `plugin.enabled` | 1 | — | A tenant toggled a plugin to enabled. |
+| `plugin.disabled` | 1 | — | A tenant toggled a plugin to disabled. |
+| `plugin.blocked` | 1 | — | An edit operation referenced a plugin not in the tenant allowlist. |
+| `photo.trashed` | 1 | — | A photo was soft-deleted (moved to trash). |
+| `photo.purged` | 1 | — | A trashed photo was permanently purged and its bytes freed. `bytes` is negative. |
+| `photo.tagged` | 1 | — | A photo had tags added or removed. One event per mutation, not per tag. |
+| `photo.exported` | 1 | ✅ | A photo was successfully exported (cache hit or miss). Drives the `exportBytes` rollup. |
+| `audit.queried` | 1 | — | The host audit-events API was queried. |
+| `tenant.export.requested` | 1 | — | A tenant data export was initiated via the offboarding API. |
+| `tenant.export.completed` | 1 | — | A tenant data export finished and the bundle is available. |
+| `tenant.deleted` | 1 | — | A tenant was hard-deleted. After this event, no further events for the tenant should fire. |
+| `embed.session_started` | 1 | — | An allowed parent origin framed an embed-eligible response. Debounced per `(tenantId, origin)`. |
+| `embed.session_ended` | 1 | — | The embed SDK reported a session end via the beacon endpoint or page unload. |
+| `embed.origin_blocked` | 1 | — | A browser-reported `frame-ancestors` CSP violation. Helps hosts find misconfigured deployments. |
+| `idempotency.replayed` | 1 | — | Idempotency-Key middleware served a cached response. Debug-tier; NOT billable. |
+| `webhook.secret_rotated` | 1 | — | A tenant rotated its webhook signing secret. |
+| `smart_album.created` | 1 | — | A smart album definition was created. |
+| `smart_album.deleted` | 1 | — | A smart album definition was deleted. |
+| `smart_album.materialized` | 1 | ✅ | A smart album was materialized via `GET /smart-albums/:id/photos`. |
+| `feature.gated` | 1 | — | A request was rejected because a per-tenant feature flag is disabled. Hosts surface upsell. |
+| `feature.flag_changed` | 1 | — | A host toggled a per-tenant feature flag. Audit / change-history signal. |
 
-No events currently reserved for follow-ups.
+For the full JSON Schema of each event's `meta` payload, call
+`GET /v1/host/webhook-events` with a host API key (see
+`contracts/openapi/host-webhook-events.openapi.json`).
 
-### Non-billable metadata writes (explicit exclusions)
-
-Pure photo-metadata writes — such as the Lightroom-style triage fields
-(`rating`, `flag`), favoriting, and tag edits — are deliberately **not**
-emitted as metering events. In particular:
-
-- `PATCH /v1/photos/:id { rating, flag }` (issue #141) MUST NOT emit
-  `edit.applied`. That event is reserved for non-destructive image edits
-  committed via `handlers/edits/applyEdits.ts` (a new version is written to
-  storage and indexed). Triage updates only touch a small Firestore field set
-  and do not produce a new derivative.
-- The same exclusion applies to `isFavorite` toggles and `tags` updates.
-
-If a host wants to bill culling activity, it can do so today by counting
-photo writes in its own audit log; AuraPix will not double-count it as an
-edit.
-### Quota warning thresholds
-
-Thresholds default to `[0.8, 0.95]` (80% and 95%). Override with the
-env var `TENANT_QUOTA_WARNING_THRESHOLDS` as a comma-separated list of
-fractions strictly between 0 and 1 (e.g. `0.5,0.75,0.9`). Each threshold
-fires at most once per tenant per UTC day; the daily rollup doc tracks
-the set of already-emitted thresholds in `quotaWarningsEmitted`.
+<!-- EVENT_CATALOG:END -->
 
 ## Tenant resolution
 

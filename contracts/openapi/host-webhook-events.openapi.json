@@ -1,0 +1,131 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Host Webhook Event Catalog API",
+    "version": "0.1.0",
+    "description": "Machine-readable catalog of every metering / webhook event AuraPix can emit. Hosts integrating AuraPix for billing fetch this once at boot, cache it via `ETag`, and use the per-event JSON Schema to validate incoming webhook payloads. The same `catalogVersion` is stamped on every outbound webhook envelope (`HostWebhookSink`) so hosts can detect drift without polling. Issue #176."
+  },
+  "servers": [
+    { "url": "https://api.aurapix.example" }
+  ],
+  "paths": {
+    "/v1/host/webhook-events": {
+      "get": {
+        "operationId": "listHostWebhookEvents",
+        "summary": "Return the global catalog of metering / webhook event types",
+        "description": "Returns every event type AuraPix can emit, with JSON Schema for the `meta` payload and a `catalogVersion` cache key.\n\nThe catalog is **global** \u2014 identical for every host \u2014 and is safely cacheable at the edge. Hosts SHOULD send `If-None-Match` with the previously received `ETag` to get a `304` when nothing has changed.\n\nAuth: any valid host API key (`Authorization: Bearer ak_live_...`). No specific scope is required because the body contains no per-tenant data; the auth gate exists only to keep the roadmap out of fully-anonymous hands.",
+        "parameters": [
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Previously received ETag. A match returns 304 with no body."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalog body. The `ETag` header is a weak validator derived from `catalogVersion` and a hash of the body.",
+            "headers": {
+              "ETag": {
+                "schema": { "type": "string" },
+                "description": "Weak validator, e.g. `W/\"2026-06-20-abcdef0123456789\"`."
+              },
+              "Cache-Control": {
+                "schema": { "type": "string" },
+                "description": "Aggressive caching is enabled by default (`public, max-age=300, stale-while-revalidate=600`)."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EventCatalogResponse" }
+              }
+            }
+          },
+          "304": {
+            "description": "Catalog unchanged since the supplied `If-None-Match`. No body."
+          },
+          "401": {
+            "description": "Missing or invalid host API key",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EventCatalogResponse": {
+        "type": "object",
+        "required": ["catalogVersion", "events"],
+        "properties": {
+          "catalogVersion": {
+            "type": "string",
+            "description": "Bumped whenever the set of event types changes (new event, removed event, or non-additive schema change). Hosts compare against the cached snapshot and the per-envelope `catalogVersion` field.",
+            "example": "2026-06-20"
+          },
+          "events": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RegisteredEvent" }
+          }
+        }
+      },
+      "RegisteredEvent": {
+        "type": "object",
+        "required": ["name", "version", "billable", "description", "schema"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Stable event name, e.g. `photo.exported`.",
+            "example": "photo.exported"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Per-event schema version. Bumped on non-additive meta changes."
+          },
+          "billable": {
+            "type": "boolean",
+            "description": "Hint that this event maps to a unit of resold work. Not a contract; hosts decide their own billing rules."
+          },
+          "description": {
+            "type": "string",
+            "description": "One-line summary."
+          },
+          "schema": {
+            "type": "object",
+            "description": "JSON Schema (Draft 2020-12) describing the `meta` payload for this event. Additional properties are always allowed for forward compatibility."
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["code", "message", "requestId"],
+                "properties": {
+                  "code": { "type": "string" },
+                  "message": { "type": "string" },
+                  "requestId": { "type": "string" },
+                  "details": { "type": ["object", "null"] }
+                }
+              },
+              {
+                "type": "string",
+                "description": "Legacy shorthand error string from upstream auth middleware."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
