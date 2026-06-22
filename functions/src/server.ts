@@ -116,6 +116,7 @@ import { TenantOffboardingService } from './services/tenant/TenantOffboardingSer
 import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV1.js';
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createTenantFeaturesRouter } from './routes/tenantFeaturesV1.js';
+import { createTenantTrashConfigRouter } from './routes/tenantTrashConfigV1.js';
 import { createHostWebhookEventsRouter } from './routes/hostWebhookEventsV1.js';
 import { createRequireFeature } from './middleware/requireFeature.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
@@ -549,6 +550,21 @@ app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
   tenantFeaturesRouter
+);
+
+// Per-tenant Trash retention config (issue #183). Host-API-key-only
+// with the `tenant.config` scope, mounted next to the feature flag
+// router so hosts can manage both knobs through the same key/scope.
+const tenantTrashConfigRouter = createTenantTrashConfigRouter({ dataAdapter });
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  tenantTrashConfigRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  tenantTrashConfigRouter
 );
 
 // Public webhook event catalog (issue #176). Global — not per-tenant —

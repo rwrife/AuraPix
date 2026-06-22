@@ -4,16 +4,21 @@ import {
   DEFAULT_FEATURE_FLAGS,
   FEATURE_FLAG_NAMES,
   TENANT_FEATURES_CONFIG_COLLECTION,
+  TRASH_RETENTION_MAX_DAYS,
+  TRASH_RETENTION_MIN_DAYS,
   type TenantFeaturesConfigRecord,
 } from '../../models/TenantFeaturesConfig.js';
 import {
   __resetTenantFeaturesCacheForTests,
+  clampTrashRetentionDays,
   fetchTenantFeaturesConfig,
   getEffectiveFeatureFlags,
   invalidateTenantFeaturesCache,
   isFeatureEnabled,
   mergeWithDefaults,
   patchTenantFeatures,
+  patchTrashRetention,
+  resolveTenantTrashRetentionDays,
 } from './tenantFeaturesConfigService.js';
 
 /**
@@ -230,6 +235,205 @@ describe('tenantFeaturesConfigService', () => {
       });
       await fetchTenantFeaturesConfig(data, 'tenant-c');
       expect(fetchSpy.mock.calls.length).toBeGreaterThan(coldCalls);
+    });
+  });
+
+  describe('Trash retention override (issue #183)', () => {
+    describe('clampTrashRetentionDays', () => {
+      it('accepts integers within [MIN, MAX]', () => {
+        expect(clampTrashRetentionDays(TRASH_RETENTION_MIN_DAYS)).toBe(
+          TRASH_RETENTION_MIN_DAYS
+        );
+        expect(clampTrashRetentionDays(30)).toBe(30);
+        expect(clampTrashRetentionDays(TRASH_RETENTION_MAX_DAYS)).toBe(
+          TRASH_RETENTION_MAX_DAYS
+        );
+      });
+
+      it('rejects out-of-range, non-integer, and non-number values', () => {
+        expect(clampTrashRetentionDays(0)).toBeNull();
+        expect(clampTrashRetentionDays(-1)).toBeNull();
+        expect(clampTrashRetentionDays(TRASH_RETENTION_MAX_DAYS + 1)).toBeNull();
+        expect(clampTrashRetentionDays(3.5)).toBeNull();
+        expect(clampTrashRetentionDays(NaN)).toBeNull();
+        expect(clampTrashRetentionDays(Infinity)).toBeNull();
+        expect(clampTrashRetentionDays('30' as unknown)).toBeNull();
+        expect(clampTrashRetentionDays(null)).toBeNull();
+        expect(clampTrashRetentionDays(undefined)).toBeNull();
+      });
+    });
+
+    describe('resolveTenantTrashRetentionDays', () => {
+      it('returns the deployment default when no doc exists', async () => {
+        const { data } = makeMemoryAdapter();
+        await expect(
+          resolveTenantTrashRetentionDays(data, 'tenant-a', 30)
+        ).resolves.toBe(30);
+      });
+
+      it('returns the deployment default when tenantId is empty', async () => {
+        const { data } = makeMemoryAdapter();
+        await expect(
+          resolveTenantTrashRetentionDays(data, '', 14)
+        ).resolves.toBe(14);
+      });
+
+      it('returns the override when present and valid', async () => {
+        const { data, store } = makeMemoryAdapter();
+        const rec: TenantFeaturesConfigRecord = {
+          tenantId: 'tenant-b',
+          flags: {},
+          trashRetentionDays: 7,
+          updatedAt: '2024-01-01T00:00:00Z',
+          updatedBy: null,
+        };
+        store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION) ??
+          store.set(TENANT_FEATURES_CONFIG_COLLECTION, new Map());
+        store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)!
+          .set('tenant-b', rec);
+        await expect(
+          resolveTenantTrashRetentionDays(data, 'tenant-b', 30)
+        ).resolves.toBe(7);
+      });
+
+      it('falls back to deployment default on invalid override', async () => {
+        const { data, store } = makeMemoryAdapter();
+        const rec: TenantFeaturesConfigRecord = {
+          tenantId: 'tenant-c',
+          flags: {},
+          trashRetentionDays: 9999,
+          updatedAt: '2024-01-01T00:00:00Z',
+          updatedBy: null,
+        };
+        store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION) ??
+          store.set(TENANT_FEATURES_CONFIG_COLLECTION, new Map());
+        store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)!
+          .set('tenant-c', rec);
+        await expect(
+          resolveTenantTrashRetentionDays(data, 'tenant-c', 30)
+        ).resolves.toBe(30);
+      });
+
+      it('treats undefined / null override as no override', async () => {
+        const { data, store } = makeMemoryAdapter();
+        const rec: TenantFeaturesConfigRecord = {
+          tenantId: 'tenant-d',
+          flags: { plugins: false },
+          updatedAt: '2024-01-01T00:00:00Z',
+          updatedBy: null,
+        };
+        store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION) ??
+          store.set(TENANT_FEATURES_CONFIG_COLLECTION, new Map());
+        store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)!
+          .set('tenant-d', rec);
+        await expect(
+          resolveTenantTrashRetentionDays(data, 'tenant-d', 30)
+        ).resolves.toBe(30);
+      });
+    });
+
+    describe('patchTrashRetention', () => {
+      it('writes a new doc and reports the transition from null to 7', async () => {
+        const { data, store } = makeMemoryAdapter();
+        const result = await patchTrashRetention(data, {
+          tenantId: 'pro',
+          retentionDays: 7,
+          actor: 'tak_pro123',
+        });
+        expect(result.previous).toBeNull();
+        expect(result.next).toBe(7);
+        expect(result.changed).toBe(true);
+
+        const stored = store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)
+          ?.get('pro') as TenantFeaturesConfigRecord;
+        expect(stored.trashRetentionDays).toBe(7);
+        expect(stored.updatedBy).toBe('tak_pro123');
+      });
+
+      it('reports changed=false when the value is unchanged', async () => {
+        const { data } = makeMemoryAdapter();
+        await patchTrashRetention(data, { tenantId: 't', retentionDays: 14 });
+        invalidateTenantFeaturesCache('t');
+        const result = await patchTrashRetention(data, {
+          tenantId: 't',
+          retentionDays: 14,
+        });
+        expect(result.changed).toBe(false);
+        expect(result.previous).toBe(14);
+        expect(result.next).toBe(14);
+      });
+
+      it('clears the override on null and reports the transition', async () => {
+        const { data, store } = makeMemoryAdapter();
+        await patchTrashRetention(data, { tenantId: 't', retentionDays: 60 });
+        const result = await patchTrashRetention(data, {
+          tenantId: 't',
+          retentionDays: null,
+        });
+        expect(result.previous).toBe(60);
+        expect(result.next).toBeNull();
+        expect(result.changed).toBe(true);
+        const stored = store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)
+          ?.get('t') as TenantFeaturesConfigRecord;
+        expect(stored.trashRetentionDays).toBeNull();
+      });
+
+      it('rejects out-of-range values with RangeError', async () => {
+        const { data } = makeMemoryAdapter();
+        await expect(
+          patchTrashRetention(data, { tenantId: 't', retentionDays: 0 })
+        ).rejects.toBeInstanceOf(RangeError);
+        await expect(
+          patchTrashRetention(data, { tenantId: 't', retentionDays: 999 })
+        ).rejects.toBeInstanceOf(RangeError);
+        await expect(
+          patchTrashRetention(data, { tenantId: 't', retentionDays: 1.5 })
+        ).rejects.toBeInstanceOf(RangeError);
+      });
+
+      it('rejects missing tenantId', async () => {
+        const { data } = makeMemoryAdapter();
+        await expect(
+          patchTrashRetention(data, { tenantId: '', retentionDays: 7 })
+        ).rejects.toThrow(/tenantId/);
+      });
+
+      it('preserves existing flags when patching retention only', async () => {
+        const { data, store } = makeMemoryAdapter();
+        await patchTenantFeatures(data, {
+          tenantId: 't',
+          patch: { sharing: false },
+        });
+        await patchTrashRetention(data, { tenantId: 't', retentionDays: 14 });
+        const stored = store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)
+          ?.get('t') as TenantFeaturesConfigRecord;
+        expect(stored.flags.sharing).toBe(false);
+        expect(stored.trashRetentionDays).toBe(14);
+      });
+
+      it('preserves the retention override when patching flags only', async () => {
+        const { data, store } = makeMemoryAdapter();
+        await patchTrashRetention(data, { tenantId: 't', retentionDays: 21 });
+        await patchTenantFeatures(data, {
+          tenantId: 't',
+          patch: { plugins: false },
+        });
+        const stored = store
+          .get(TENANT_FEATURES_CONFIG_COLLECTION)
+          ?.get('t') as TenantFeaturesConfigRecord;
+        // Critical: a flag PATCH must NOT silently drop the retention value.
+        expect(stored.trashRetentionDays).toBe(21);
+        expect(stored.flags.plugins).toBe(false);
+      });
     });
   });
 });

@@ -1,9 +1,16 @@
 /**
  * purgeTrash — scheduled job that hard-deletes photos whose `trashedAt`
- * timestamp is older than `TRASH_RETENTION_DAYS` (default 30).
+ * timestamp is older than the effective retention window.
  *
  * Wired via the scheduler in production; runnable on demand in tests by
  * calling {@link runPurgeTrashJob} with a fake clock.
+ *
+ * Retention resolution (issue #183):
+ *   - Per-tenant override on the features-config doc wins when present
+ *     and within `[1, 365]`.
+ *   - Otherwise the deployment-wide default from
+ *     `TRASH_RETENTION_DAYS` (or `DEFAULT_TRASH_RETENTION_DAYS`) is used.
+ *   - Invalid per-tenant values log WARN and fall back to the default.
  *
  * Behavior (issue #152):
  *   - Iterates per-tenant so one noisy tenant cannot starve others.
@@ -16,6 +23,7 @@ import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
 import { PhotosService } from '../domain/photos/PhotosService.js';
 import type { UsageMeteringBus } from '../services/metering/UsageMeteringBus.js';
+import { resolveTenantTrashRetentionDays } from '../services/host/tenantFeaturesConfigService.js';
 import { logger } from '../utils/logger.js';
 
 export const DEFAULT_TRASH_RETENTION_DAYS = 30;
@@ -40,11 +48,21 @@ export interface PurgeTrashJobOptions {
   dataAdapter: DataAdapter;
   storageAdapter?: StorageAdapter;
   usageBus?: UsageMeteringBus;
+  /**
+   * Deployment-wide default retention. Per-tenant overrides on the
+   * features-config doc take precedence; pass this when you want to
+   * pin the default instead of reading `TRASH_RETENTION_DAYS` from env.
+   */
   retentionDays?: number;
   /** Cap per-tenant work per run (default 1000). */
   perTenantLimit?: number;
   /** Test hook. */
   now?: () => Date;
+  /**
+   * Disable per-tenant resolution (test/diagnostic hook). When `true`,
+   * every tenant uses the deployment default. Defaults to `false`.
+   */
+  disablePerTenantOverride?: boolean;
 }
 
 export interface PurgeTrashJobResult {
@@ -69,6 +87,17 @@ export async function runPurgeTrashJob(
   const results = await service.purgeExpired({
     retentionDays,
     perTenantLimit: opts.perTenantLimit,
+    // Resolve per-tenant Trash retention from the features-config doc
+    // (issue #183). The resolver is closure-captured so the data adapter
+    // does not have to leak into PhotosService.
+    resolveRetentionDays: opts.disablePerTenantOverride
+      ? undefined
+      : (tenantId) =>
+          resolveTenantTrashRetentionDays(
+            opts.dataAdapter,
+            String(tenantId),
+            retentionDays
+          ),
   });
 
   const totalPurged = results.reduce((acc, r) => acc + r.photoIds.length, 0);

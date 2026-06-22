@@ -309,45 +309,80 @@ export class PhotosService {
    * `retentionDays`. Iterates per-tenant so one noisy tenant cannot
    * starve others. Emits exactly one `photo.purged` event per photo.
    *
+   * `retentionDays` is the deployment default. Callers can pass
+   * `resolveRetentionDays(tenantId)` to support per-tenant overrides
+   * (issue #183); when omitted, every tenant uses the global default.
+   *
    * Returns the list of purged photo ids (per tenant) for observability.
    */
   async purgeExpired(opts: {
     retentionDays: number;
     /** Limit work per tenant per run; default 1000. */
     perTenantLimit?: number;
+    /**
+     * Optional per-tenant override resolver. Called once per tenant
+     * that has trashed photos this run; the returned value is clamped
+     * to a sane positive finite number, otherwise the global
+     * `retentionDays` default is used.
+     */
+    resolveRetentionDays?: (tenantId: TenantId) => Promise<number> | number;
   }): Promise<{ tenantId: TenantId; photoIds: string[] }[]> {
     const { retentionDays } = opts;
     if (!Number.isFinite(retentionDays) || retentionDays < 0) {
       throw new Error('retentionDays must be a non-negative finite number');
     }
     const perTenantLimit = opts.perTenantLimit ?? 1000;
-    const cutoff = new Date(this.now().getTime() - retentionDays * 24 * 60 * 60 * 1000);
 
-    // Pull every trashed photo once, then bucket by tenant so we can iterate
-    // tenant-by-tenant. This keeps the operation fair across tenants while
-    // remaining usable on top of the existing queryData filter surface.
+    // Pull every trashed photo once, then bucket by tenant. Cutoff is
+    // computed per-tenant below so a tenant override can take effect.
     const all = await this.data.queryData<Photo>(PHOTOS_COLLECTION, []);
     const byTenant = new Map<TenantId, Photo[]>();
     for (const photo of all) {
       if (!photo.trashedAt) continue;
       const trashedAt = new Date(photo.trashedAt);
       if (Number.isNaN(trashedAt.getTime())) continue;
-      if (trashedAt >= cutoff) continue;
       const tenantId = (photo.tenantId ?? DEFAULT_TENANT_ID) as TenantId;
       const bucket = byTenant.get(tenantId) ?? [];
       bucket.push(photo);
       byTenant.set(tenantId, bucket);
     }
 
+    const nowMs = this.now().getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
     const results: { tenantId: TenantId; photoIds: string[] }[] = [];
     for (const [tenantId, bucket] of byTenant) {
+      // Per-tenant retention (issue #183): resolver wins when it returns
+      // a sane finite non-negative number; otherwise fall back to the
+      // global deployment default. We intentionally swallow resolver
+      // errors so one bad tenant config cannot starve the whole job.
+      let tenantRetentionDays = retentionDays;
+      if (opts.resolveRetentionDays) {
+        try {
+          const resolved = await opts.resolveRetentionDays(tenantId);
+          if (Number.isFinite(resolved) && resolved >= 0) {
+            tenantRetentionDays = resolved;
+          }
+        } catch (err) {
+          logger.warn(
+            { err, tenantId },
+            'purgeTrash: resolveRetentionDays threw; using deployment default'
+          );
+        }
+      }
+      const tenantCutoff = new Date(nowMs - tenantRetentionDays * dayMs);
+
+      const eligible = bucket.filter((photo) => {
+        const trashedAt = new Date(photo.trashedAt as string);
+        return trashedAt < tenantCutoff;
+      });
+
       const purged: string[] = [];
       // Process up to perTenantLimit; oldest-trashedAt first so retention
       // pressure releases evenly.
-      bucket.sort((a, b) =>
+      eligible.sort((a, b) =>
         String(a.trashedAt).localeCompare(String(b.trashedAt))
       );
-      const slice = bucket.slice(0, perTenantLimit);
+      const slice = eligible.slice(0, perTenantLimit);
 
       for (const photo of slice) {
         try {

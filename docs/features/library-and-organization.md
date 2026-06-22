@@ -50,21 +50,67 @@ middleware and enforce `assertSameTenant` in the service layer.
 ### TTL purge job
 
 A scheduled job (`functions/src/jobs/purgeTrash.ts`) hard-deletes photos
-whose `trashedAt` is older than `TRASH_RETENTION_DAYS` (default **30**,
-env-configurable per deployment). The job:
+whose `trashedAt` is older than the effective retention window
+(deployment default **30** days, set via `TRASH_RETENTION_DAYS` env var,
+optionally overridden per tenant — see [Per-tenant Trash retention](#per-tenant-trash-retention-issue-183) below). The job:
 
 - Iterates **per-tenant** so one noisy tenant cannot starve others.
+- Resolves retention per tenant (override > deployment default) so
+  tiered plans can offer different retention windows.
 - Reuses the storage-cleanup path on the existing `StorageAdapter`
   (no new storage code).
 - Caps work per tenant per run via `perTenantLimit` (default 1000).
 - Emits `photo.purged` exactly once per photo (see
   [Metering Events](./metering-events.md)).
 
+### Per-tenant Trash retention (issue #183)
+
+Hosts that resell AuraPix on tiered plans (e.g. Free / Pro / Business)
+can override Trash retention per tenant. The override lives on the
+shared per-tenant config doc (`tenantFeaturesConfig`, the same
+collection used by feature flags from #175):
+
+```ts
+interface TenantFeaturesConfigRecord {
+  tenantId: string;
+  flags: Partial<TenantFeatureFlags>;
+  /** Issue #183: per-tenant Trash retention, integer in [1, 365] days. */
+  trashRetentionDays?: number | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+```
+
+Resolution order on the purge hot path:
+
+1. `trashRetentionDays` on the tenant config doc, when set and within
+   `[1, 365]`. Out-of-range / non-integer values log a warning and are
+   ignored.
+2. Deployment default (`TRASH_RETENTION_DAYS` env, or `30`).
+
+#### Endpoints
+
+Both endpoints require a host API key with the `tenant.config` scope.
+Cross-tenant requests return `403`.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `GET` | `/v1/tenants/:tenantId/config/trash` | Returns the effective retention window, the override (or `null`), the deployment default, and the source (`"tenant"` or `"deployment"`). |
+| `PATCH` | `/v1/tenants/:tenantId/config/trash` | Body: `{ "retentionDays": <int 1..365> | null }`. Sets the per-tenant override, or pass `null` to clear and revert to the deployment default. |
+
+`PATCH` emits a `feature.flag_changed` metering event with
+`flag="trash.retentionDays"` and the old / new values when the override
+transitions, and writes a `tenant.config.trash.updated` audit event for
+compliance trails. The `photo.purged` event keeps firing on the actual
+purge — longer retention naturally lengthens the storage-GB billable
+window via the existing `usageDaily` rollups, so no new event types are
+required.
+
 ### Multi-tenant considerations
 
-- `TRASH_RETENTION_DAYS` is a deployment-wide default; a follow-up may
-  move it onto the tenant config doc when a host requests per-tenant
-  retention.
+- Trash retention is strictly per-tenant; cross-tenant reads return
+  `403`. The deployment-wide `TRASH_RETENTION_DAYS` env value is the
+  fallback when no override is set.
 - The purge job's per-tenant iteration is a soft fairness guarantee
   driven by `perTenantLimit`; production wiring should run the job on a
   cadence short enough that the limit drains backlogs within SLA.

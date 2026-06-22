@@ -51,6 +51,20 @@ export interface TenantFeaturesConfigRecord {
    */
   flags: Partial<TenantFeatureFlags>;
 
+  /**
+   * Optional per-tenant Trash retention window in days (issue #183).
+   * When set (and within `TRASH_RETENTION_MIN_DAYS..TRASH_RETENTION_MAX_DAYS`),
+   * the `purgeTrash` job uses this value instead of the deployment-wide
+   * `TRASH_RETENTION_DAYS` env default. Hosts use this to map plan tiers
+   * (e.g. Free=7, Pro=30, Business=90) to retention windows.
+   *
+   * Unset / null / invalid → deployment default. Storing this on the
+   * same per-tenant config doc as `flags` keeps a single source of
+   * truth for host configuration and avoids a second Firestore read on
+   * the purge hot path.
+   */
+  trashRetentionDays?: number | null;
+
   /** ISO-8601 timestamp of the last mutation. */
   updatedAt: string;
 
@@ -61,6 +75,24 @@ export interface TenantFeaturesConfigRecord {
    */
   updatedBy: string | null;
 }
+
+/**
+ * Inclusive lower bound on per-tenant Trash retention (issue #183).
+ *
+ * A value below `1` makes no operational sense (the next purge run
+ * would always reap the photo) and is rejected by validation so hosts
+ * cannot accidentally configure "instant purge" via a misplaced zero.
+ */
+export const TRASH_RETENTION_MIN_DAYS = 1;
+
+/**
+ * Inclusive upper bound on per-tenant Trash retention (issue #183).
+ *
+ * 365 days is a year of cold-storage exposure — a sensible cap that
+ * keeps billable storage windows bounded and matches the limit called
+ * out in the issue.
+ */
+export const TRASH_RETENTION_MAX_DAYS = 365;
 
 /** Default feature state when no doc exists \u2014 every feature is enabled. */
 export const DEFAULT_FEATURE_FLAGS: TenantFeatureFlags = {
