@@ -5,6 +5,7 @@ import type {
   LibrarySort,
   MetadataFilterInput,
   Photo,
+  PhotoColorLabel,
   PhotoFlag,
   PhotoRating,
 } from '../../domain/library/types';
@@ -25,6 +26,7 @@ interface UseLibraryReturn extends UseLibraryState {
   toggleFavorite(photoId: string): Promise<void>;
   setRating(photoId: string, rating: PhotoRating): Promise<void>;
   setFlag(photoId: string, flag: PhotoFlag): Promise<void>;
+  setColorLabel(photoId: string, colorLabel: PhotoColorLabel): Promise<void>;
   setTags(photoId: string, tags: string[]): Promise<void>;
   deletePhoto(photoId: string): Promise<void>;
   assignToAlbum(photoId: string, albumId: string, hint?: Photo): Promise<void>;
@@ -51,6 +53,7 @@ export function useLibrary(
     sort?: LibrarySort;
     minRating?: PhotoRating;
     flag?: PhotoFlag | 'unflagged';
+    colorLabel?: PhotoColorLabel | 'uncolored' | readonly Exclude<PhotoColorLabel, null>[];
   }
 ): UseLibraryReturn {
   const { library } = useServices();
@@ -77,6 +80,7 @@ export function useLibrary(
         sort: filters?.sort,
         minRating: filters?.minRating,
         flag: filters?.flag,
+        colorLabel: filters?.colorLabel,
         pageSize: 24,
       })
       .then(({ photos: p, nextPageToken: token }) => {
@@ -107,6 +111,7 @@ export function useLibrary(
     filters?.sort,
     filters?.minRating,
     filters?.flag,
+    filters?.colorLabel,
   ]);
 
   const addPhoto = useCallback(
@@ -158,6 +163,14 @@ export function useLibrary(
   const setFlag = useCallback(
     async (photoId: string, flag: PhotoFlag) => {
       const updated = await library.updatePhoto(photoId, { flag });
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
+    },
+    [library]
+  );
+
+  const setColorLabel = useCallback(
+    async (photoId: string, colorLabel: PhotoColorLabel) => {
+      const updated = await library.updatePhoto(photoId, { colorLabel });
       setPhotos((prev) => prev.map((p) => (p.id === photoId ? updated : p)));
     },
     [library]
@@ -229,6 +242,7 @@ export function useLibrary(
         sort: filters?.sort,
         minRating: filters?.minRating,
         flag: filters?.flag,
+        colorLabel: filters?.colorLabel,
         pageSize: 24,
         pageToken: nextPageToken,
       });
@@ -251,6 +265,7 @@ export function useLibrary(
     filters?.sort,
     filters?.minRating,
     filters?.flag,
+    filters?.colorLabel,
   ]);
 
   return {
@@ -265,6 +280,7 @@ export function useLibrary(
     toggleFavorite,
     setRating,
     setFlag,
+    setColorLabel,
     setTags,
     deletePhoto,
     assignToAlbum,

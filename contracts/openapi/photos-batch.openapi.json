@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Photos API",
-    "version": "1.0.0",
-    "description": "Contract artifact for photos bulk operations endpoint (issue #142)."
+    "version": "1.1.0",
+    "description": "Contract artifact for photos bulk operations endpoint (issue #142). Issue #184 adds `setColorLabel` for Lightroom-style triage."
   },
   "servers": [
     {
@@ -14,7 +14,7 @@
     "/api/v1/photos:batch": {
       "post": {
         "operationId": "bulkPhotos",
-        "summary": "Bulk photo operations (move / delete / addTag / removeTag)",
+        "summary": "Bulk photo operations (move / delete / addTag / removeTag / setColorLabel)",
         "description": "Performs a single action against many photo ids in one call. Cap is 200 by default (configurable via BULK_PHOTOS_BATCH_MAX). Partial failures are reported per-id; the batch is not aborted on a single failure. Any id belonging to a different tenant rejects the entire batch with cross_tenant_reference.",
         "requestBody": {
           "required": true,
@@ -70,7 +70,7 @@
     "schemas": {
       "BulkAction": {
         "type": "string",
-        "enum": ["move", "delete", "addTag", "removeTag"]
+        "enum": ["move", "delete", "addTag", "removeTag", "setColorLabel"]
       },
       "BulkPhotosRequest": {
         "type": "object",
@@ -88,7 +88,12 @@
             "properties": {
               "albumId": { "type": "string" },
               "tag": { "type": "string" },
-              "libraryId": { "type": "string" }
+              "libraryId": { "type": "string" },
+              "colorLabel": {
+                "type": ["string", "null"],
+                "description": "Lightroom-style color label (issue #184). Required when `action=setColorLabel`. Use `null` to clear the label.",
+                "enum": ["red", "yellow", "green", "blue", "purple", null]
+              }
             }
           }
         }
