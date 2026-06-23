@@ -1,0 +1,178 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AuraPix Tenant Trash Retention API",
+    "version": "0.1.0",
+    "description": "Per-tenant Trash retention override (issue #183). Host applications use these endpoints to map pricing tiers (Free / Pro / Business) to Trash retention windows \u2014 e.g. Free=7d, Pro=30d, Business=90d. When no override is set, the deployment-wide `TRASH_RETENTION_DAYS` env default applies.\n\nBoth endpoints are host-API-key only with the `tenant.config` scope; trash retention is NOT end-user-tunable. Cross-tenant requests return `403`.\n\nValid range is `[1, 365]` days inclusive; `null` clears the override and reverts to the deployment default."
+  },
+  "paths": {
+    "/v1/tenants/{tenantId}/config/trash": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "get": {
+        "summary": "Fetch the effective Trash retention window for a tenant",
+        "description": "Returns the effective retention (in days) plus metadata indicating whether the value comes from a per-tenant override or the deployment default.",
+        "security": [{ "hostApiKey": ["tenant.config"] }],
+        "responses": {
+          "200": {
+            "description": "Effective Trash retention",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrashRetentionEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Host API key required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing `tenant.config` scope or cross-tenant request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Set or clear the per-tenant Trash retention override",
+        "description": "Pass an integer in `[1, 365]` to override the deployment default, or `null` to clear the override. Emits a `feature.flag_changed` metering event with `flag=\"trash.retentionDays\"` when the value transitions, and records an audit event.",
+        "security": [{ "hostApiKey": ["tenant.config"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TrashRetentionPatch" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated effective retention",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrashRetentionEnvelope" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body (out of range, non-integer, or unknown keys)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Host API key required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing `tenant.config` scope or cross-tenant request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "hostApiKey": { "type": "apiKey", "in": "header", "name": "X-Host-API-Key" }
+    },
+    "schemas": {
+      "TrashRetentionPatch": {
+        "type": "object",
+        "required": ["retentionDays"],
+        "additionalProperties": false,
+        "properties": {
+          "retentionDays": {
+            "description": "Integer in [1, 365] to set a per-tenant override, or `null` to clear the override and revert to the deployment default.",
+            "oneOf": [
+              { "type": "integer", "minimum": 1, "maximum": 365 },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "TrashRetentionEnvelope": {
+        "type": "object",
+        "required": ["tenantId", "retentionDays", "override", "deploymentDefault", "source"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "retentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Effective retention window in days (override if set, otherwise the deployment default)."
+          },
+          "override": {
+            "oneOf": [
+              { "type": "integer", "minimum": 1, "maximum": 365 },
+              { "type": "null" }
+            ],
+            "description": "Per-tenant override value, or `null` when none is set."
+          },
+          "deploymentDefault": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Deployment-wide default in days (env `TRASH_RETENTION_DAYS`, default 30)."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["tenant", "deployment"],
+            "description": "Where the effective value came from."
+          },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedBy": { "type": ["string", "null"] },
+          "changed": {
+            "type": "boolean",
+            "description": "Present on PATCH responses. `true` when the override value transitioned."
+          },
+          "previous": {
+            "oneOf": [
+              { "type": "integer" },
+              { "type": "null" }
+            ],
+            "description": "Present on PATCH responses. The override value prior to this request."
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

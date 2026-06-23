@@ -26,10 +26,13 @@ import {
   DEFAULT_FEATURE_FLAGS,
   FEATURE_FLAG_NAMES,
   TENANT_FEATURES_CONFIG_COLLECTION,
+  TRASH_RETENTION_MAX_DAYS,
+  TRASH_RETENTION_MIN_DAYS,
   type FeatureFlagName,
   type TenantFeatureFlags,
   type TenantFeaturesConfigRecord,
 } from '../../models/TenantFeaturesConfig.js';
+import { logger } from '../../utils/logger.js';
 
 interface CacheEntry {
   record: TenantFeaturesConfigRecord | null;
@@ -183,6 +186,13 @@ export async function patchTenantFeatures(
   const record: TenantFeaturesConfigRecord = {
     tenantId,
     flags: nextFlags,
+    // Preserve any existing per-tenant Trash retention override
+    // (issue #183). `patchTenantFeatures` and `patchTrashRetention`
+    // share the same underlying doc; flag mutations must NOT clobber a
+    // separately-set retention value.
+    ...(existing && 'trashRetentionDays' in existing
+      ? { trashRetentionDays: existing.trashRetentionDays ?? null }
+      : {}),
     updatedAt: now,
     updatedBy: actor ?? null,
   };
@@ -214,4 +224,128 @@ export function mergeWithDefaults(
 
 function isKnownFeature(value: string): value is FeatureFlagName {
   return (FEATURE_FLAG_NAMES as readonly string[]).includes(value);
+}
+
+/**
+ * Validate + clamp a candidate Trash retention value (issue #183).
+ *
+ * Returns the integer in `[TRASH_RETENTION_MIN_DAYS, TRASH_RETENTION_MAX_DAYS]`
+ * when the input is a finite integer in range, otherwise `null`. Hosts
+ * call `patchTrashRetention` which rejects invalid values; this helper
+ * is also used on the read path so an out-of-band corrupt value falls
+ * back to the deployment default rather than crashing the purge job.
+ */
+export function clampTrashRetentionDays(value: unknown): number | null {
+  if (typeof value !== 'number') return null;
+  if (!Number.isFinite(value)) return null;
+  if (!Number.isInteger(value)) return null;
+  if (value < TRASH_RETENTION_MIN_DAYS) return null;
+  if (value > TRASH_RETENTION_MAX_DAYS) return null;
+  return value;
+}
+
+/**
+ * Resolve the effective Trash retention window for a tenant
+ * (issue #183).
+ *
+ * Lookup order:
+ *   1. Per-tenant override on the features-config doc (when present
+ *      and valid).
+ *   2. The supplied deployment default (the caller passes the result
+ *      of `resolveTrashRetentionDays(env)` from `purgeTrash.ts`).
+ *
+ * Invalid override values are logged at WARN and ignored — the job
+ * MUST keep running on a sensible default rather than skipping the
+ * tenant entirely (acceptance criteria for issue #183).
+ */
+export async function resolveTenantTrashRetentionDays(
+  data: DataAdapter,
+  tenantId: string,
+  deploymentDefault: number
+): Promise<number> {
+  if (!tenantId) return deploymentDefault;
+  const doc = await fetchTenantFeaturesConfig(data, tenantId);
+  if (!doc) return deploymentDefault;
+  const raw = doc.trashRetentionDays;
+  if (raw === undefined || raw === null) return deploymentDefault;
+  const clamped = clampTrashRetentionDays(raw);
+  if (clamped === null) {
+    logger.warn(
+      { tenantId, raw },
+      'tenantFeaturesConfig.trashRetentionDays is invalid; falling back to deployment default'
+    );
+    return deploymentDefault;
+  }
+  return clamped;
+}
+
+/**
+ * Apply a Trash retention update to a tenant's features-config doc
+ * (issue #183).
+ *
+ * `retentionDays` MUST be a finite integer in
+ * `[TRASH_RETENTION_MIN_DAYS, TRASH_RETENTION_MAX_DAYS]`; out-of-range
+ * inputs throw `RangeError` so the route layer can surface `400`.
+ *
+ * Pass `retentionDays: null` to clear the override and fall back to
+ * the deployment default.
+ *
+ * Returns the new record plus `previous`/`next` retention values so
+ * the caller can emit `feature.flag_changed` and audit events only
+ * when the value actually transitioned.
+ */
+export async function patchTrashRetention(
+  data: DataAdapter,
+  options: {
+    tenantId: string;
+    retentionDays: number | null;
+    actor?: string | null;
+  }
+): Promise<{
+  record: TenantFeaturesConfigRecord;
+  previous: number | null;
+  next: number | null;
+  changed: boolean;
+}> {
+  const { tenantId, retentionDays, actor } = options;
+  if (!tenantId) {
+    throw new Error('tenantId is required');
+  }
+
+  let nextValue: number | null;
+  if (retentionDays === null) {
+    nextValue = null;
+  } else {
+    const clamped = clampTrashRetentionDays(retentionDays);
+    if (clamped === null) {
+      throw new RangeError(
+        `retentionDays must be an integer between ${TRASH_RETENTION_MIN_DAYS} and ${TRASH_RETENTION_MAX_DAYS}`
+      );
+    }
+    nextValue = clamped;
+  }
+
+  const existing = await data.fetchData<TenantFeaturesConfigRecord>(
+    TENANT_FEATURES_CONFIG_COLLECTION,
+    tenantId
+  );
+  const previous = clampTrashRetentionDays(existing?.trashRetentionDays);
+  const changed = previous !== nextValue;
+
+  const now = new Date().toISOString();
+  const record: TenantFeaturesConfigRecord = {
+    tenantId,
+    flags: existing?.flags ?? {},
+    // Omit the key entirely when clearing so the doc shape stays clean.
+    ...(nextValue === null
+      ? { trashRetentionDays: null }
+      : { trashRetentionDays: nextValue }),
+    updatedAt: now,
+    updatedBy: actor ?? null,
+  };
+
+  await data.storeData(TENANT_FEATURES_CONFIG_COLLECTION, tenantId, record);
+  invalidateTenantFeaturesCache(tenantId);
+
+  return { record, previous, next: nextValue, changed };
 }
