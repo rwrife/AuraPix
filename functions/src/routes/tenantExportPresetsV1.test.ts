@@ -217,6 +217,130 @@ describe('createTenantExportPresetsRouter', () => {
       expect(res.body.error.code).toBe('INVALID_FORMAT');
     });
 
+    it('returns 400 when watermark.opacity is out of [0,1] (issue #185)', async () => {
+      const { app } = hostKeyApp();
+      const res = await request(
+        app,
+        'put',
+        '/v1/tenants/tenant-a/export-presets/web-small',
+        {
+          maxEdge: 1280,
+          quality: 80,
+          format: 'jpeg',
+          watermark: {
+            enabled: true,
+            text: 'PROOF',
+            opacity: 1.5,
+            position: 'bottom-right',
+          },
+        }
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_WATERMARK_OPACITY');
+    });
+
+    it('returns 400 when watermark.position is unknown (issue #185)', async () => {
+      const { app } = hostKeyApp();
+      const res = await request(
+        app,
+        'put',
+        '/v1/tenants/tenant-a/export-presets/web-small',
+        {
+          maxEdge: 1280,
+          quality: 80,
+          format: 'jpeg',
+          watermark: {
+            enabled: true,
+            text: 'PROOF',
+            opacity: 0.5,
+            position: 'middle',
+          },
+        }
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_WATERMARK_POSITION');
+    });
+
+    it('returns 400 when watermark.enabled is true but text is blank (issue #185)', async () => {
+      const { app } = hostKeyApp();
+      const res = await request(
+        app,
+        'put',
+        '/v1/tenants/tenant-a/export-presets/web-small',
+        {
+          maxEdge: 1280,
+          quality: 80,
+          format: 'jpeg',
+          watermark: {
+            enabled: true,
+            text: '   ',
+            opacity: 0.5,
+            position: 'bottom-right',
+          },
+        }
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_WATERMARK_TEXT');
+    });
+
+    it('persists a watermark block when provided (issue #185)', async () => {
+      const { app, store } = hostKeyApp();
+      const wm = {
+        enabled: true,
+        text: 'PROOF — {tenantName}',
+        opacity: 0.5,
+        position: 'bottom-right' as const,
+      };
+      const res = await request(
+        app,
+        'put',
+        '/v1/tenants/tenant-a/export-presets/web-large',
+        {
+          maxEdge: 2048,
+          quality: 85,
+          format: 'jpeg',
+          label: 'Web (large)',
+          watermark: wm,
+        }
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.preset.watermark).toEqual(wm);
+      const persisted: any = store
+        .get(TENANT_EXPORT_PRESETS_COLLECTION)
+        ?.get('tenant-a');
+      const found = persisted.presets.find((p: any) => p.name === 'web-large');
+      expect(found.watermark).toEqual(wm);
+    });
+
+    it('rejects cross-tenant preset write with 403 (issue #185 AC)', async () => {
+      const { data } = makeMemoryAdapter();
+      const app = makeApp(data, (req) => {
+        req.tenant = {
+          id: 'tenant-other',
+          scopes: ['export-presets.write'],
+          keyId: 'tak_x',
+        };
+      });
+      const res = await request(
+        app,
+        'put',
+        '/v1/tenants/tenant-a/export-presets/web-small',
+        {
+          maxEdge: 1280,
+          quality: 80,
+          format: 'jpeg',
+          watermark: {
+            enabled: true,
+            text: 'PROOF',
+            opacity: 0.5,
+            position: 'bottom-right',
+          },
+        }
+      );
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('CROSS_TENANT_FORBIDDEN');
+    });
+
     it('creates a new preset and reports `changed: true`', async () => {
       const { app, store } = hostKeyApp();
       const res = await request(

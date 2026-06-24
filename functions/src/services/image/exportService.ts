@@ -16,12 +16,25 @@
 
 import { createHash, createHmac } from 'node:crypto';
 import sharp from 'sharp';
+import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
 import type { Photo } from '../../models/Photo.js';
-import type { ExportPreset } from '../../models/ExportPreset.js';
+import type { ExportPreset, ExportPresetWatermark } from '../../models/ExportPreset.js';
 import { applyEdits } from '../edits/EditProcessor.js';
 import { signingConfig } from '../../config/index.js';
 import { signData, verifySignature } from '../../utils/crypto.js';
+import { renderWatermark } from '../watermark/index.js';
+
+/**
+ * Local re-declaration of the branding-doc shape used for `{tenantName}`
+ * substitution. Kept here — rather than importing from
+ * `routes/brandingV1.ts` — to avoid pulling express + zod into the
+ * services layer for a single string lookup.
+ */
+const BRANDING_COLLECTION = 'tenants_branding';
+interface BrandingDoc {
+  appName?: string;
+}
 
 /**
  * Result of rendering a photo to an export preset.
@@ -37,6 +50,12 @@ export interface RenderedExport {
   outputHeight: number;
   cacheHit: boolean;
   cacheKey: string;
+  /**
+   * True when the rendered bytes had a watermark composited on them
+   * (issue #185). Forwarded to the metering layer as `meta.watermark`
+   * so hosts can price watermarked vs clean exports differently.
+   */
+  watermarkApplied: boolean;
 }
 
 /**
@@ -78,14 +97,42 @@ export function computeRecipeHash(photo: Photo): string {
 }
 
 /**
- * Composite cache key: `(photoId, recipeHash, preset)` per the issue.
+ * Composite cache key: `(photoId, recipeHash, preset[, watermarkHash])`.
+ *
+ * When the preset declares an enabled watermark we include a short
+ * hash of the watermark config so changing the watermark text/opacity/
+ * position automatically produces a cache miss — otherwise we'd keep
+ * serving the previously-watermarked bytes after a host updated the
+ * preset. Presets without a watermark keep the original key shape so
+ * pre-#185 cache entries remain valid.
  */
 export function computeCacheKey(
   photoId: string,
   recipeHash: string,
-  presetName: string
+  presetName: string,
+  watermark?: ExportPresetWatermark
 ): string {
+  if (watermark && watermark.enabled) {
+    const wmHash = computeWatermarkHash(watermark);
+    return `${photoId}.${recipeHash}.${presetName}.wm-${wmHash}.jpg`;
+  }
   return `${photoId}.${recipeHash}.${presetName}.jpg`;
+}
+
+/**
+ * Short stable hash of the watermark config used to partition the
+ * export cache. Exported for tests.
+ */
+export function computeWatermarkHash(watermark: ExportPresetWatermark): string {
+  // Stringify with a stable property order; watermark only has four
+  // documented fields so we don't need a deep sort.
+  const payload = JSON.stringify({
+    enabled: watermark.enabled,
+    text: watermark.text,
+    opacity: watermark.opacity,
+    position: watermark.position,
+  });
+  return createHash('sha256').update(payload).digest('hex').slice(0, 12);
 }
 
 /**
@@ -112,17 +159,39 @@ function normalize(path: string): string {
  * possible. The caller is responsible for tenant + auth checks.
  *
  * For `preset.format === 'original'` we serve the original bytes
- * unchanged (no resize, no transcode). For `jpeg` we apply the active
- * edit recipe and then resize/encode via the existing Sharp pipeline.
+ * unchanged (no resize, no transcode, no watermark — see
+ * `ExportPreset.watermark`). For `jpeg` we apply the active edit
+ * recipe, resize/encode via the existing Sharp pipeline, and
+ * (when enabled on the preset) composite a watermark over the
+ * resulting JPEG using the shared `renderWatermark` util.
+ *
+ * Pass `data` so the renderer can resolve `{tenantName}` from the
+ * tenant's branding doc; without it the token substitutes to an empty
+ * string.
  */
 export async function renderExport(opts: {
   storage: StorageAdapter;
   photo: Photo;
   preset: ExportPreset;
+  /**
+   * Optional data adapter used to fetch the tenant branding doc when
+   * substituting `{tenantName}` in a watermark template. When omitted
+   * the token falls back to the tenantId.
+   */
+  data?: DataAdapter;
 }): Promise<RenderedExport> {
-  const { storage, photo, preset } = opts;
+  const { storage, photo, preset, data } = opts;
   const recipeHash = computeRecipeHash(photo);
-  const cacheKey = computeCacheKey(photo.id, recipeHash, preset.name);
+  const watermarkActive =
+    preset.format === 'jpeg' &&
+    preset.watermark !== undefined &&
+    preset.watermark.enabled;
+  const cacheKey = computeCacheKey(
+    photo.id,
+    recipeHash,
+    preset.name,
+    watermarkActive ? preset.watermark : undefined
+  );
   const cachePath = cacheStoragePath(photo.libraryId, cacheKey);
 
   // 1. Cache lookup (works for both formats).
@@ -138,6 +207,7 @@ export async function renderExport(opts: {
       outputHeight: meta.height ?? 0,
       cacheHit: true,
       cacheKey,
+      watermarkApplied: watermarkActive,
     };
   }
 
@@ -150,6 +220,9 @@ export async function renderExport(opts: {
   let height: number;
 
   if (preset.format === 'original') {
+    // `original` format intentionally skips watermarking: passthrough
+    // delivery must not modify the source bytes. A host that wants a
+    // watermarked original ships a separate jpeg preset.
     outputBuffer = sourceBuffer;
     const meta = await sharp(sourceBuffer).metadata();
     width = meta.width ?? 0;
@@ -182,6 +255,31 @@ export async function renderExport(opts: {
     outputBuffer = out.data;
     width = out.info.width;
     height = out.info.height;
+
+    // Composite the watermark on top of the encoded JPEG. We re-encode
+    // at the preset quality so the watermark layer doesn't degrade the
+    // image any more than the original encode pass.
+    if (watermarkActive && preset.watermark) {
+      const tenantName = await resolveTenantName(
+        data,
+        photo.tenantId ?? null
+      );
+      const watermarked = await renderWatermark({
+        inputBuffer: outputBuffer,
+        watermark: preset.watermark,
+        tokens: {
+          tenantName,
+          photoId: photo.id,
+        },
+        jpegQuality: preset.quality,
+      });
+      outputBuffer = watermarked;
+      // Dimensions are preserved by the composite; re-probe in case
+      // Sharp normalized orientation differently on the second pass.
+      const wmMeta = await sharp(outputBuffer).metadata();
+      width = wmMeta.width ?? width;
+      height = wmMeta.height ?? height;
+    }
   }
 
   // 3. Write to cache (best-effort; failures here must not block the export).
@@ -194,7 +292,29 @@ export async function renderExport(opts: {
     outputHeight: height,
     cacheHit: false,
     cacheKey,
+    watermarkApplied: watermarkActive,
   };
+}
+
+/**
+ * Resolve the tenant's display name (branding `appName`) for `{tenantName}`
+ * watermark substitution. Falls back to the tenantId, then the empty
+ * string, so a missing branding doc never throws.
+ */
+async function resolveTenantName(
+  data: DataAdapter | undefined,
+  tenantId: string | null
+): Promise<string> {
+  if (!data || !tenantId) return tenantId ?? '';
+  try {
+    const branding = await data.fetchData<BrandingDoc>(
+      BRANDING_COLLECTION,
+      tenantId
+    );
+    return branding?.appName ?? tenantId;
+  } catch {
+    return tenantId;
+  }
 }
 
 async function tryReadCache(

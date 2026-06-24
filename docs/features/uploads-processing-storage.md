@@ -86,3 +86,119 @@ photo has no `exif.capturedAt`. Results are tenant-scoped. See
 
 Backfill of `exif` on photos uploaded before this change is out of scope and
 will ship as a separate maintenance script.
+
+## Export presets (Issue #174)
+
+Tenants can define a list of named **export presets** that the
+`POST /v1/photos/{id}/export` and `GET /v1/photos/{id}/export/{token}`
+endpoints select from. The preset doc lives at
+`tenants_export_presets/{tenantId}` and is managed via
+`GET|PUT|DELETE /v1/tenants/{tenantId}/export-presets[/{name}]`. Presets
+are tenant-scoped; cross-tenant reads / writes are rejected with
+`CROSS_TENANT_FORBIDDEN`.
+
+A preset has the following shape:
+
+| Field | Notes |
+|-------|-------|
+| `name` | URL-safe id (`^[a-z0-9][a-z0-9-]{0,31}$`) |
+| `maxEdge` | Integer 1-8192. Ignored when `format = original`. |
+| `quality` | JPEG quality 1-100. Ignored when `format = original`. |
+| `format` | `jpeg` (default, re-encoded) or `original` (passthrough bytes) |
+| `label` | Optional human-readable label (≤128 chars) |
+| `watermark` | Optional watermark config — see below (issue #185) |
+
+The render pipeline caches results under
+`exports/{libraryId}/{photoId}.{recipeHash}.{preset}[.wm-{hash}].jpg` so
+re-downloads of the same `(photo, edit recipe, preset[, watermark])`
+tuple are served from disk without re-encoding.
+
+## Export watermarks (Issue #185)
+
+Share-link delivery already supports a watermark policy (#32/#46). For
+hosts who resell AuraPix as a client-proofing platform, the export
+pipeline now supports a per-preset watermark independent from share
+delivery, so they can ship watermarked exports without changing how
+links work.
+
+**Schema** (added to `ExportPreset`):
+
+```json
+{
+  "watermark": {
+    "enabled": true,
+    "text": "PROOF — {tenantName}",
+    "opacity": 0.5,
+    "position": "bottom-right"
+  }
+}
+```
+
+**Token substitution.** The `text` field supports three non-PII tokens
+substituted at render time:
+
+- `{tenantName}` — the tenant's branding `appName`, falling back to
+  the tenant id when branding is not configured.
+- `{photoId}` — the photo id.
+- `{date}` — UTC `YYYY-MM-DD` at render time.
+
+Any other `{foo}` sequence is passed through verbatim (no error, no PII
+leak).
+
+**Validation rules.** All return HTTP 400 with an explicit error code:
+
+- `INVALID_WATERMARK_TEXT` — non-string, blank when `enabled: true`,
+  or longer than 256 characters.
+- `INVALID_WATERMARK_OPACITY` — not a finite number in `[0, 1]`.
+- `INVALID_WATERMARK_POSITION` — must be one of `top-left`,
+  `top-right`, `bottom-left`, `bottom-right`.
+
+**Format interaction.** `watermark` is ignored when `format =
+original` — passthrough delivery must not modify the source bytes. A
+host that wants watermarked originals ships a separate `jpeg` preset
+with `maxEdge: 8192`.
+
+**Cache partitioning.** Enabling or changing a watermark on an existing
+preset automatically invalidates the cache for that preset — the cache
+key includes a 12-character hash of the watermark config when enabled.
+Clean exports (no watermark) keep their existing cache key shape so
+pre-#185 cache entries remain valid.
+
+**Renderer.** The watermark renderer lives in
+`functions/src/services/watermark/` and is intended as a shared util:
+both the export pipeline and (in a future change) share delivery
+should use it instead of duplicating SVG/Sharp wiring. The renderer
+composites an SVG `<text>` layer over the encoded JPEG using Sharp's
+`composite()`, scales font size to the image's shortest edge, and
+draws white text with a black stroke so it stays legible on both
+bright and dark images.
+
+**Metering.** The existing `photo.exported` event gains
+`meta.watermark: boolean` so hosts can price watermarked vs clean
+exports differently. This is an **additive** field on the same event
+version (`photo.exported` v1); no event-version bump per the rules in
+`eventCatalog.ts`.
+
+### Example: configure a watermarked preset
+
+```http
+PUT /v1/tenants/tenant-a/export-presets/web-large HTTP/1.1
+Authorization: Bearer tak_...
+
+{
+  "maxEdge": 2048,
+  "quality": 85,
+  "format": "jpeg",
+  "label": "Web (large) — watermarked",
+  "watermark": {
+    "enabled": true,
+    "text": "PROOF — {tenantName}",
+    "opacity": 0.5,
+    "position": "bottom-right"
+  }
+}
+```
+
+Subsequent calls to `POST /v1/photos/{id}/export` with
+`{"preset":"web-large"}` will composite the watermark on the rendered
+JPEG and emit `photo.exported` with `meta.watermark: true`.

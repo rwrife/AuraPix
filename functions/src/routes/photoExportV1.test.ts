@@ -319,6 +319,90 @@ describe('POST /v1/photos/:id/export', () => {
     expect(counts[0]?.value).toBeGreaterThan(0);
   });
 
+  it('applies a watermark when the preset declares one and emits meta.watermark:true (issue #185)', async () => {
+    const tiny = await makeTinyJpeg();
+    const photo = makePhoto({ tenantId: 'tenant-a' });
+    const presetDoc: TenantExportPresetsRecord = {
+      tenantId: 'tenant-a',
+      presets: [
+        {
+          name: 'web-small',
+          maxEdge: 1280,
+          quality: 80,
+          format: 'jpeg',
+          label: 'Web (small)',
+          watermark: {
+            enabled: true,
+            text: 'PROOF — {tenantName}',
+            opacity: 0.5,
+            position: 'bottom-right',
+          },
+        },
+        {
+          name: 'web-small-clean',
+          maxEdge: 1280,
+          quality: 80,
+          format: 'jpeg',
+          label: 'Web (small) clean',
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'tak_x',
+    };
+    const data = makeData(photo, presetDoc);
+    const { storage, files } = makeStorage({
+      [`images/lib-1/photo-1/original.jpg`]: tiny,
+    });
+    const app = makeApp({
+      data,
+      storage,
+      inject: (req) => {
+        req.user = { uid: 'u_1' };
+        req.tenantId = 'tenant-a';
+      },
+    });
+
+    // Watermarked preset.
+    const wm = await request(app, 'post', '/v1/photos/photo-1/export', {
+      preset: 'web-small',
+    });
+    expect(wm.status).toBe(200);
+    expect(wm.body.cacheHit).toBe(false);
+
+    // Clean preset (no watermark on this one).
+    const clean = await request(app, 'post', '/v1/photos/photo-1/export', {
+      preset: 'web-small-clean',
+    });
+    expect(clean.status).toBe(200);
+
+    await bus.flush();
+    const exportEvents = sink.events.filter((e) => e.type === 'photo.exported');
+    expect(exportEvents).toHaveLength(2);
+    const wmEvent = exportEvents.find(
+      (e) => (e.meta as any).preset === 'web-small'
+    );
+    const cleanEvent = exportEvents.find(
+      (e) => (e.meta as any).preset === 'web-small-clean'
+    );
+    expect((wmEvent?.meta as any).watermark).toBe(true);
+    expect((cleanEvent?.meta as any).watermark).toBe(false);
+
+    // Watermarked and clean variants should land in distinct cache entries
+    // (cache key includes a watermark hash when enabled).
+    const exportKeys = [...files.keys()].filter((k) =>
+      k.startsWith('exports/lib-1/')
+    );
+    expect(exportKeys.length).toBe(2);
+    expect(exportKeys.some((k) => k.includes('.wm-'))).toBe(true);
+    expect(exportKeys.some((k) => !k.includes('.wm-'))).toBe(true);
+
+    // A re-export of the watermarked preset still hits the cache.
+    const wm2 = await request(app, 'post', '/v1/photos/photo-1/export', {
+      preset: 'web-small',
+    });
+    expect(wm2.body.cacheHit).toBe(true);
+  });
+
   it('rejects cross-tenant access with 403', async () => {
     const tiny = await makeTinyJpeg();
     const photo = makePhoto({ tenantId: 'tenant-a' });

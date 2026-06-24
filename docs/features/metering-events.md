@@ -47,8 +47,8 @@ discarded; there is no outbound traffic.
 | `plugin.blocked` | 1 | — | An edit operation referenced a plugin not in the tenant allowlist. |
 | `photo.trashed` | 1 | — | A photo was soft-deleted (moved to trash). |
 | `photo.purged` | 1 | — | A trashed photo was permanently purged and its bytes freed. `bytes` is negative. |
-| `photo.tagged` | 1 | — | A photo had tags added or removed. One event per mutation, not per tag. |
-| `photo.exported` | 1 | ✅ | A photo was successfully exported (cache hit or miss). Drives the `exportBytes` rollup. |
+| `photo.tagged` | 1 | — | A photo had tags, rating, flag, or color label changed. One event per mutation, not per tag. Issue #184 added `meta.kind` to disambiguate (`tag` \| `rating` \| `flag` \| `colorLabel`). |
+| `photo.exported` | 1 | ✅ | A photo was successfully exported (cache hit or miss). Drives the `exportBytes` rollup. Issue #185 added `meta.watermark` (boolean) to distinguish watermarked vs clean exports. |
 | `audit.queried` | 1 | — | The host audit-events API was queried. |
 | `tenant.export.requested` | 1 | — | A tenant data export was initiated via the offboarding API. |
 | `tenant.export.completed` | 1 | — | A tenant data export finished and the bundle is available. |

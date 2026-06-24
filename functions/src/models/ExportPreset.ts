@@ -22,6 +22,57 @@
 export const TENANT_EXPORT_PRESETS_COLLECTION = 'tenantExportPresets';
 
 /**
+ * Optional watermark configuration for an export preset (issue #185).
+ *
+ * Independent from share-link watermarking (#32/#46): hosts reselling
+ * AuraPix for client-proofing want a per-preset watermark ("PROOF —
+ * example.com") applied during the export pipeline. The renderer is
+ * the same as share delivery via the shared `watermark` util.
+ *
+ * `text` may include the following non-PII tokens, substituted at
+ * render time:
+ *   - `{tenantName}` — branding `appName`, or the tenantId when unset
+ *   - `{photoId}`    — the photo's id
+ *   - `{date}`       — `YYYY-MM-DD` in UTC at render time
+ *
+ * `opacity` is the watermark layer opacity in `[0, 1]`. `position`
+ * controls which corner the watermark anchors to.
+ */
+export interface ExportPresetWatermark {
+  /** When false the watermark renderer is skipped entirely. */
+  enabled: boolean;
+  /**
+   * Display text. Up to 256 characters after token substitution; must
+   * be non-empty when `enabled` is true. Tokens not in the allowlist
+   * are passed through verbatim (no error) so a host can include
+   * literal `{` characters in their watermark.
+   */
+  text: string;
+  /** Opacity in `[0, 1]`. Validated; out-of-range values are rejected. */
+  opacity: number;
+  /** Anchor corner for the watermark layer. */
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+}
+
+/**
+ * Allowed `position` values for an export-preset watermark. Mirrors the
+ * `ExportPresetWatermark.position` union so the validator can iterate
+ * without re-declaring the literal list.
+ */
+export const EXPORT_PRESET_WATERMARK_POSITIONS = [
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+] as const;
+
+export type ExportPresetWatermarkPosition =
+  (typeof EXPORT_PRESET_WATERMARK_POSITIONS)[number];
+
+/** Max length of the (pre-substitution) watermark text. */
+export const EXPORT_PRESET_WATERMARK_MAX_TEXT_LENGTH = 256;
+
+/**
  * A single named export preset. `format` is either `jpeg` (default,
  * matches the issue: rendered JPEG output) or `original` (no transcode,
  * stream the bytes already on disk). Sizes are an upper bound — the
@@ -47,12 +98,22 @@ export interface ExportPreset {
   /**
    * Output format. `original` returns the stored original bytes
    * unchanged (no recompression, no resize).
+   *
+   * NOTE: `watermark` is ignored when `format === 'original'` because
+   * passthrough delivery must not modify the source bytes (a host that
+   * needs a watermarked original should ship a separate JPEG preset).
    */
   format: 'jpeg' | 'original';
   /**
    * Optional human-readable label shown in host admin UI.
    */
   label?: string;
+  /**
+   * Optional watermark configuration (issue #185). Missing means "no
+   * watermark" — semantically identical to `{ enabled: false }`.
+   * Ignored when `format === 'original'`.
+   */
+  watermark?: ExportPresetWatermark;
 }
 
 export interface TenantExportPresetsRecord {

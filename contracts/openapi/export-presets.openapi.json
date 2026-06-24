@@ -74,6 +74,20 @@
                 "web-large": {
                   "value": { "maxEdge": 2048, "quality": 85, "format": "jpeg", "label": "Web (large)" }
                 },
+                "web-large-with-watermark": {
+                  "value": {
+                    "maxEdge": 2048,
+                    "quality": 85,
+                    "format": "jpeg",
+                    "label": "Web (large) — watermarked",
+                    "watermark": {
+                      "enabled": true,
+                      "text": "PROOF — {tenantName}",
+                      "opacity": 0.5,
+                      "position": "bottom-right"
+                    }
+                  }
+                },
                 "original": {
                   "value": { "maxEdge": 8192, "quality": 100, "format": "original" }
                 }
@@ -186,6 +200,34 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional human-readable label for host admin UI."
+          },
+          "watermark": { "$ref": "#/components/schemas/ExportPresetWatermark" }
+        }
+      },
+      "ExportPresetWatermark": {
+        "type": "object",
+        "required": ["enabled", "text", "opacity", "position"],
+        "description": "Per-preset watermark configuration (issue #185). Hosts reselling AuraPix for client-proofing can apply a watermark (e.g. `PROOF — {tenantName}`) to exported JPEGs without affecting share-link delivery. Ignored when `format` is `original` because passthrough delivery must not modify the source bytes.\n\nToken substitution supports `{tenantName}` (branding `appName`), `{photoId}`, and `{date}` (UTC `YYYY-MM-DD`) only — no user PII tokens. Other `{...}` sequences are passed through verbatim.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "When false the watermark renderer is skipped entirely."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Watermark text. Must be non-empty when `enabled` is true. Supports `{tenantName}`, `{photoId}`, and `{date}` tokens."
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Watermark layer opacity in `[0, 1]`. Out-of-range values are rejected with HTTP 400."
+          },
+          "position": {
+            "type": "string",
+            "enum": ["top-left", "top-right", "bottom-left", "bottom-right"],
+            "description": "Anchor corner for the watermark layer."
           }
         }
       },
@@ -196,9 +238,10 @@
           "maxEdge": { "type": "integer", "minimum": 1, "maximum": 8192 },
           "quality": { "type": "integer", "minimum": 1, "maximum": 100 },
           "format": { "type": "string", "enum": ["jpeg", "original"] },
-          "label": { "type": "string", "maxLength": 128 }
+          "label": { "type": "string", "maxLength": 128 },
+          "watermark": { "$ref": "#/components/schemas/ExportPresetWatermark" }
         },
-        "description": "Body of `PUT /export-presets/{name}`. The URL `name` is authoritative; any `name` field in the body is ignored. `maxEdge` / `quality` are optional when `format` is `original`."
+        "description": "Body of `PUT /export-presets/{name}`. The URL `name` is authoritative; any `name` field in the body is ignored. `maxEdge` / `quality` are optional when `format` is `original`. `watermark` is ignored when `format` is `original`."
       },
       "TenantExportPresetsResponse": {
         "type": "object",
