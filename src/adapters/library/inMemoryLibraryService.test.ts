@@ -488,4 +488,246 @@ describe('InMemoryLibraryService', () => {
       expect(myPicks.photos.find((p) => p.id === theirs.id)).toBeUndefined();
     });
   });
+
+  describe('triage (colorLabel — issue #184)', () => {
+    it('defaults new photos to colorLabel=null', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'fresh.jpg',
+        dataUrl: 'data:image/jpeg;base64,fresh',
+      });
+      expect(photo.colorLabel).toBeNull();
+    });
+
+    it('sets and clears colorLabel through updatePhoto', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'colorme.jpg',
+        dataUrl: 'data:image/jpeg;base64,colorme',
+      });
+
+      const red = await svc.updatePhoto(photo.id, { colorLabel: 'red' });
+      expect(red.colorLabel).toBe('red');
+
+      const blue = await svc.updatePhoto(photo.id, { colorLabel: 'blue' });
+      expect(blue.colorLabel).toBe('blue');
+
+      const cleared = await svc.updatePhoto(photo.id, { colorLabel: null });
+      expect(cleared.colorLabel).toBeNull();
+    });
+
+    it('rejects invalid colorLabel values with strict enum validation', async () => {
+      const svc = new InMemoryLibraryService();
+      const photo = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'bad-color.jpg',
+        dataUrl: 'data:image/jpeg;base64,badcolor',
+      });
+
+      await expect(
+        svc.updatePhoto(photo.id, {
+          colorLabel: 'orange' as unknown as 'red',
+        })
+      ).rejects.toThrow(/Invalid colorLabel/);
+      await expect(
+        svc.updatePhoto(photo.id, { colorLabel: '' as unknown as 'red' })
+      ).rejects.toThrow(/Invalid colorLabel/);
+      await expect(
+        svc.updatePhoto(photo.id, { colorLabel: 42 as unknown as 'red' })
+      ).rejects.toThrow(/Invalid colorLabel/);
+    });
+
+    it('filters by a single colorLabel value', async () => {
+      const svc = new InMemoryLibraryService();
+      const red = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'red.jpg',
+        dataUrl: 'data:image/jpeg;base64,red',
+      });
+      const green = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'green.jpg',
+        dataUrl: 'data:image/jpeg;base64,green',
+      });
+      const none = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'none.jpg',
+        dataUrl: 'data:image/jpeg;base64,none',
+      });
+
+      await svc.updatePhoto(red.id, { colorLabel: 'red' });
+      await svc.updatePhoto(green.id, { colorLabel: 'green' });
+
+      const reds = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        colorLabel: 'red',
+      });
+      expect(reds.photos.map((p) => p.id)).toEqual([red.id]);
+
+      const uncolored = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        colorLabel: 'uncolored',
+      });
+      expect(uncolored.photos.map((p) => p.id)).toEqual([none.id]);
+    });
+
+    it('filters by multiple colorLabel values with OR semantics', async () => {
+      const svc = new InMemoryLibraryService();
+      const red = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'red.jpg',
+        dataUrl: 'data:image/jpeg;base64,red',
+      });
+      const green = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'green.jpg',
+        dataUrl: 'data:image/jpeg;base64,green',
+      });
+      const blue = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'blue.jpg',
+        dataUrl: 'data:image/jpeg;base64,blue',
+      });
+
+      await svc.updatePhoto(red.id, { colorLabel: 'red' });
+      await svc.updatePhoto(green.id, { colorLabel: 'green' });
+      await svc.updatePhoto(blue.id, { colorLabel: 'blue' });
+
+      const redOrGreen = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        colorLabel: ['red', 'green'],
+      });
+      expect(new Set(redOrGreen.photos.map((p) => p.id))).toEqual(
+        new Set([red.id, green.id])
+      );
+      expect(redOrGreen.photos.find((p) => p.id === blue.id)).toBeUndefined();
+    });
+
+    it('rejects an invalid colorLabel filter value', async () => {
+      const svc = new InMemoryLibraryService();
+      await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'a.jpg',
+        dataUrl: 'data:image/jpeg;base64,a',
+      });
+
+      await expect(
+        svc.listPhotos({
+          libraryId: LIBRARY_ID,
+          colorLabel: 'orange' as unknown as 'red',
+        })
+      ).rejects.toThrow(/Invalid colorLabel/);
+      await expect(
+        svc.listPhotos({
+          libraryId: LIBRARY_ID,
+          colorLabel: [
+            'red',
+            'orange' as unknown as 'green',
+          ] as readonly Exclude<
+            import('../../domain/library/types').PhotoColorLabel,
+            null
+          >[],
+        })
+      ).rejects.toThrow(/Invalid colorLabel/);
+    });
+
+    it('scopes colorLabel filters per library (cross-tenant isolation)', async () => {
+      const svc = new InMemoryLibraryService();
+      const otherLibrary = 'library-other-user';
+
+      const mine = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'mine.jpg',
+        dataUrl: 'data:image/jpeg;base64,mine',
+      });
+      const theirs = await svc.addPhoto({
+        libraryId: otherLibrary,
+        originalName: 'theirs.jpg',
+        dataUrl: 'data:image/jpeg;base64,theirs',
+      });
+      await svc.updatePhoto(mine.id, { colorLabel: 'red' });
+      await svc.updatePhoto(theirs.id, { colorLabel: 'red' });
+
+      const myReds = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        colorLabel: 'red',
+      });
+      expect(myReds.photos.map((p) => p.id)).toEqual([mine.id]);
+      expect(myReds.photos.find((p) => p.id === theirs.id)).toBeUndefined();
+    });
+
+    it('combines colorLabel with rating + flag filters', async () => {
+      const svc = new InMemoryLibraryService();
+      const target = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'target.jpg',
+        dataUrl: 'data:image/jpeg;base64,target',
+      });
+      const wrongRating = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'wrong-rating.jpg',
+        dataUrl: 'data:image/jpeg;base64,wr',
+      });
+      const wrongLabel = await svc.addPhoto({
+        libraryId: LIBRARY_ID,
+        originalName: 'wrong-label.jpg',
+        dataUrl: 'data:image/jpeg;base64,wl',
+      });
+
+      await svc.updatePhoto(target.id, {
+        rating: 5,
+        flag: 'pick',
+        colorLabel: 'green',
+      });
+      await svc.updatePhoto(wrongRating.id, {
+        rating: 2,
+        flag: 'pick',
+        colorLabel: 'green',
+      });
+      await svc.updatePhoto(wrongLabel.id, {
+        rating: 5,
+        flag: 'pick',
+        colorLabel: 'red',
+      });
+
+      const results = await svc.listPhotos({
+        libraryId: LIBRARY_ID,
+        minRating: 5,
+        flag: 'pick',
+        colorLabel: 'green',
+      });
+      expect(results.photos.map((p) => p.id)).toEqual([target.id]);
+    });
+
+    it('backfills colorLabel=null when loading legacy records from storage', async () => {
+      // Simulate a legacy record that pre-dates the colorLabel field.
+      const legacy = {
+        id: 'photo-legacy',
+        libraryId: LIBRARY_ID,
+        albumIds: [],
+        originalName: 'legacy.jpg',
+        storagePath: 'data:image/jpeg;base64,legacy',
+        thumbnailPath: 'data:image/jpeg;base64,legacy',
+        status: 'ready',
+        metadata: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isFavorite: false,
+        tags: [],
+        rating: 3,
+        flag: 'pick',
+        // colorLabel intentionally omitted
+      };
+      localStorage.setItem('aurapix:local:photos', JSON.stringify([legacy]));
+
+      const svc = new InMemoryLibraryService();
+      const loaded = await svc.getPhoto('photo-legacy');
+      expect(loaded).not.toBeNull();
+      expect(loaded?.colorLabel).toBeNull();
+      expect(loaded?.rating).toBe(3);
+      expect(loaded?.flag).toBe('pick');
+    });
+  });
 });

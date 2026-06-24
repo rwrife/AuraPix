@@ -3,18 +3,20 @@
  *
  * POST /api/v1/photos:batch
  * {
- *   action: "move" | "delete" | "addTag" | "removeTag",
+ *   action: "move" | "delete" | "addTag" | "removeTag" | "setColorLabel",
  *   photoIds: [...],
- *   params?: { albumId?: string, tag?: string }
+ *   params?: { albumId?: string, tag?: string, colorLabel?: PhotoColorLabel }
  * }
  *
- * Implements issue #142:
+ * Implements issue #142 (and #184 for setColorLabel):
  *   - Cap N (configurable via BULK_PHOTOS_BATCH_MAX, default 200), oversize -> 413
  *   - Per-id result array; partial failures do not abort the batch
  *   - Cross-tenant id -> entire batch rejected with 400 cross_tenant_reference
  *   - Per-tenant sliding-window rate limit (default 10/sec, configurable)
  *   - Each affected photo still emits its existing per-photo audit event;
  *     additionally one `bulk.batch` metering event per call.
+ *   - `setColorLabel` additionally emits one `photo.tagged` event per id
+ *     with `meta.kind="colorLabel"` (issue #184).
  */
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
@@ -23,17 +25,28 @@ import {
   DEFAULT_TENANT_ID,
   type TenantId,
 } from '../../domain/tenant/Tenant.js';
+import {
+  isPhotoColorLabel,
+  PHOTO_COLOR_LABEL_VALUES,
+  type PhotoColorLabel,
+} from '../../models/Photo.js';
 import { recordAuditEvent } from '../../services/audit/AuditService.js';
 import { emitMeteringEvent } from '../../services/metering/index.js';
 import { logger } from '../../utils/logger.js';
 
-export type BulkAction = 'move' | 'delete' | 'addTag' | 'removeTag';
+export type BulkAction =
+  | 'move'
+  | 'delete'
+  | 'addTag'
+  | 'removeTag'
+  | 'setColorLabel';
 
 const VALID_ACTIONS: ReadonlySet<string> = new Set([
   'move',
   'delete',
   'addTag',
   'removeTag',
+  'setColorLabel',
 ]);
 
 export interface BulkRequestBody {
@@ -42,6 +55,8 @@ export interface BulkRequestBody {
   params?: {
     albumId?: string;
     tag?: string;
+    libraryId?: string;
+    colorLabel?: PhotoColorLabel;
   };
 }
 
@@ -201,13 +216,28 @@ function parseBody(
       };
     }
   }
+  if (action === 'setColorLabel') {
+    // Strict enum validation (issue #184 acceptance criteria).
+    // `null` is a valid value (it clears the label) so we do NOT reject
+    // it like other params; we just require the key to be supplied.
+    if (!params || !('colorLabel' in params) || !isPhotoColorLabel(params.colorLabel)) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'invalid_params',
+        message: `params.colorLabel must be one of: ${PHOTO_COLOR_LABEL_VALUES.join(
+          ', '
+        )}, or null (action="setColorLabel")`,
+      };
+    }
+  }
 
   return {
     ok: true,
     value: {
       action: action as BulkAction,
       photoIds: photoIds as string[],
-      params,
+      params: params as BulkRequestBody['params'],
     },
   };
 }
@@ -264,6 +294,15 @@ async function applyToPhoto(
       }
       return;
     }
+    case 'setColorLabel': {
+      // Issue #184: idempotent color-label write. Validated upstream.
+      const colorLabel = (params!.colorLabel ?? null) as PhotoColorLabel;
+      await dataAdapter.updateData('photos', photoId, {
+        colorLabel,
+        updatedAt: new Date().toISOString(),
+      });
+      return;
+    }
   }
 }
 
@@ -277,6 +316,8 @@ function auditTypeFor(action: BulkAction): string {
       return 'photo.tag.added';
     case 'removeTag':
       return 'photo.tag.removed';
+    case 'setColorLabel':
+      return 'photo.tagged';
   }
 }
 
@@ -393,6 +434,24 @@ export function createBulkPhotosHandler(deps: {
       }
       try {
         await applyToPhoto(deps.dataAdapter, libraryId, id, action, params);
+        // Issue #184: `setColorLabel` reuses the `photo.tagged` metering
+        // event with `meta.kind="colorLabel"` so hosts that already consume
+        // tagging activity see color-label triage too. No new event type.
+        if (action === 'setColorLabel') {
+          emitMeteringEvent({
+            tenantId: callerTenant,
+            type: 'photo.tagged',
+            count: 1,
+            resourceId: id,
+            meta: {
+              libraryId: libraryId || null,
+              actor: userId,
+              kind: 'colorLabel',
+              colorLabel: (params?.colorLabel ?? null) as PhotoColorLabel,
+              viaBulk: true,
+            },
+          });
+        }
         // Per-photo existing audit event (do NOT collapse).
         await recordAuditEvent(deps.dataAdapter, {
           eventType: auditTypeFor(action),

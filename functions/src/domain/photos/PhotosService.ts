@@ -20,7 +20,16 @@
 
 import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import type { StorageAdapter } from '../../adapters/storage/StorageAdapter.js';
-import type { Photo } from '../../models/Photo.js';
+import {
+  isPhotoColorLabel,
+  isPhotoFlag,
+  isPhotoRating,
+  PHOTO_COLOR_LABEL_VALUES,
+  type Photo,
+  type PhotoColorLabel,
+  type PhotoFlag,
+  type PhotoRating,
+} from '../../models/Photo.js';
 import { logger } from '../../utils/logger.js';
 import {
   assertSameTenant,
@@ -53,6 +62,26 @@ export class PhotoNotFoundError extends Error {
     super(`Photo ${photoId} not found`);
     this.name = 'PhotoNotFoundError';
   }
+}
+
+export class TriageValidationError extends Error {
+  public readonly status = 400;
+  public readonly code = 'INVALID_FIELD_VALUE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'TriageValidationError';
+  }
+}
+
+/**
+ * Patch input for {@link PhotosService.updateTriage}. Each field is optional;
+ * supply only the axes you want to mutate. Strict enum validation; invalid
+ * values throw {@link TriageValidationError}. Issue #184 added `colorLabel`.
+ */
+export interface PhotoTriagePatch {
+  rating?: PhotoRating;
+  flag?: PhotoFlag;
+  colorLabel?: PhotoColorLabel;
 }
 
 export class PhotosService {
@@ -267,6 +296,106 @@ export class PhotosService {
     }
 
     return { photo: updated, mutation: result };
+  }
+
+  /**
+   * Apply a Lightroom-style triage patch (rating + flag + colorLabel).
+   * Each field is independently validated against the strict enum and
+   * either persisted (when supplied) or left untouched (when omitted).
+   *
+   * Emits exactly one `photo.tagged` event per mutated axis, with
+   * `meta.kind` set to `rating | flag | colorLabel` (issue #184) so hosts
+   * that already consume `photo.tagged` for activity heuristics see triage
+   * activity without a new event type. No bytes are accounted (labels are
+   * pure metadata).
+   *
+   * @throws {@link PhotoNotFoundError} when the id is unknown.
+   * @throws {@link CrossTenantAccessError} for cross-tenant writes (403).
+   * @throws {@link TriageValidationError} (400) when a value fails strict
+   *   enum validation.
+   */
+  async updateTriage(
+    photoId: string,
+    callerTenantId: TenantId,
+    actor: string | null,
+    patch: PhotoTriagePatch
+  ): Promise<Photo> {
+    const photo = await this.getOwned(photoId, callerTenantId);
+
+    if (patch.rating !== undefined && !isPhotoRating(patch.rating)) {
+      throw new TriageValidationError(
+        `Invalid rating: ${String(patch.rating)} (expected integer 0–5).`
+      );
+    }
+    if (patch.flag !== undefined && !isPhotoFlag(patch.flag)) {
+      throw new TriageValidationError(
+        `Invalid flag: ${String(patch.flag)} (expected 'pick' | 'reject' | null).`
+      );
+    }
+    if (
+      patch.colorLabel !== undefined &&
+      !isPhotoColorLabel(patch.colorLabel)
+    ) {
+      throw new TriageValidationError(
+        `Invalid colorLabel: ${String(
+          patch.colorLabel
+        )} (expected one of ${PHOTO_COLOR_LABEL_VALUES.join(', ')}, or null).`
+      );
+    }
+
+    const updates: Partial<Photo> & { updatedAt: string } = {
+      updatedAt: this.now().toISOString(),
+    };
+    const changed: Array<'rating' | 'flag' | 'colorLabel'> = [];
+
+    if (patch.rating !== undefined && patch.rating !== (photo.rating ?? 0)) {
+      updates.rating = patch.rating;
+      changed.push('rating');
+    }
+    if (patch.flag !== undefined && patch.flag !== (photo.flag ?? null)) {
+      updates.flag = patch.flag;
+      changed.push('flag');
+    }
+    if (
+      patch.colorLabel !== undefined &&
+      patch.colorLabel !== (photo.colorLabel ?? null)
+    ) {
+      updates.colorLabel = patch.colorLabel;
+      changed.push('colorLabel');
+    }
+
+    // No-op short-circuit: nothing changed, don't write or emit.
+    if (changed.length === 0) {
+      return photo;
+    }
+
+    await this.data.updateData<Photo>(PHOTOS_COLLECTION, photoId, updates);
+    const updated: Photo = { ...photo, ...updates };
+
+    // Emit one `photo.tagged` event per mutated axis. Hosts that
+    // care can use `meta.kind` to discriminate; aggregate consumers
+    // still see a stream of mutations.
+    for (const kind of changed) {
+      emitMeteringEvent({
+        tenantId: photo.tenantId ?? DEFAULT_TENANT_ID,
+        type: 'photo.tagged',
+        count: 1,
+        resourceId: photoId,
+        occurredAt: updates.updatedAt,
+        meta: {
+          libraryId: photo.libraryId,
+          actor,
+          kind,
+          ...(kind === 'rating' ? { rating: updates.rating } : {}),
+          ...(kind === 'flag' ? { flag: updates.flag } : {}),
+          ...(kind === 'colorLabel'
+            ? { colorLabel: updates.colorLabel }
+            : {}),
+        },
+      });
+    }
+
+    return updated;
   }
 
   /**

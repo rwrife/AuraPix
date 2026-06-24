@@ -1,10 +1,12 @@
-import type { Photo } from '../../../domain/library/types';
+import type { Photo, PhotoColorLabel } from '../../../domain/library/types';
+import { PHOTO_COLOR_LABEL_VALUES } from '../../../domain/library/types';
 import type { ToolbarButton, ModalContentProps } from '../types';
 
 interface ViewerToolbarConfigProps {
   currentPhoto: Photo;
   onToggleFavorite: () => void;
   onDelete: () => void;
+  onSetColorLabel?: (label: PhotoColorLabel) => void;
   brightness: number;
   setBrightness: (v: number) => void;
   contrast: number;
@@ -12,6 +14,15 @@ interface ViewerToolbarConfigProps {
   saturation: number;
   setSaturation: (v: number) => void;
 }
+
+/** CSS color tokens for each label swatch (issue #184). */
+const COLOR_LABEL_HEX: Record<Exclude<PhotoColorLabel, null>, string> = {
+  red: '#e0524a',
+  yellow: '#e8c547',
+  green: '#4caf50',
+  blue: '#3a8dde',
+  purple: '#9b59b6',
+};
 
 /**
  * Example configuration for viewer toolbar
@@ -21,6 +32,7 @@ export function createViewerToolbarConfig({
   currentPhoto,
   onToggleFavorite,
   onDelete,
+  onSetColorLabel,
   brightness,
   setBrightness,
   contrast,
@@ -28,6 +40,7 @@ export function createViewerToolbarConfig({
   saturation,
   setSaturation,
 }: ViewerToolbarConfigProps): ToolbarButton[] {
+  const currentLabel: PhotoColorLabel = currentPhoto.colorLabel ?? null;
   return [
     // Modal button example: Delete with confirmation
     {
@@ -98,6 +111,52 @@ export function createViewerToolbarConfig({
       icon: '💬',
       title: 'Comments',
       panelContent: <p className="state-message">Comments tools coming soon.</p>,
+    },
+
+    // Panel button: Color label (Lightroom-style triage, issue #184)
+    {
+      type: 'panel',
+      id: 'colorLabel',
+      icon: '●',
+      title: currentLabel
+        ? `Color label: ${currentLabel}`
+        : 'Color label',
+      className: currentLabel
+        ? `btn-ghost color-label-toolbar color-label-toolbar--${currentLabel}`
+        : 'btn-ghost color-label-toolbar',
+      panelContent: (
+        <div className="color-label-picker" role="group" aria-label="Color label">
+          <p className="state-message">Color label</p>
+          <div className="color-label-swatches">
+            {PHOTO_COLOR_LABEL_VALUES.map((label) => (
+              <button
+                key={label}
+                type="button"
+                aria-label={`Set color label to ${label}`}
+                aria-pressed={currentLabel === label}
+                className={`color-label-swatch ${
+                  currentLabel === label ? 'is-active' : ''
+                }`}
+                style={{ backgroundColor: COLOR_LABEL_HEX[label] }}
+                onClick={() =>
+                  onSetColorLabel?.(currentLabel === label ? null : label)
+                }
+              />
+            ))}
+            <button
+              type="button"
+              aria-label="Clear color label"
+              aria-pressed={currentLabel === null}
+              className={`color-label-swatch color-label-swatch--clear ${
+                currentLabel === null ? 'is-active' : ''
+              }`}
+              onClick={() => onSetColorLabel?.(null)}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      ),
     },
 
     // Panel button example: Tags

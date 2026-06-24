@@ -53,6 +53,15 @@
               "maximum": 200,
               "default": 50
             }
+          },
+          {
+            "name": "colorLabel",
+            "in": "query",
+            "description": "Filter by Lightroom-style color label (issue #184). Accepts a single value (`red|yellow|green|blue|purple`), `uncolored` for photos without a label, or a comma-separated list for OR semantics (e.g. `red,green`). Uses the `libraryId+colorLabel+createdAt` composite Firestore index.",
+            "schema": {
+              "type": "string",
+              "example": "red"
+            }
           }
         ],
         "responses": {
@@ -131,6 +140,18 @@
           },
           "metadata": { "type": "object" },
           "exif": { "$ref": "#/components/schemas/NormalizedExif" },
+          "rating": { "type": "integer", "minimum": 0, "maximum": 5, "default": 0 },
+          "flag": {
+            "type": ["string", "null"],
+            "enum": ["pick", "reject", null],
+            "default": null
+          },
+          "colorLabel": {
+            "type": ["string", "null"],
+            "description": "Lightroom-style color label (issue #184). One of the five standard colors, or `null` for no label.",
+            "enum": ["red", "yellow", "green", "blue", "purple", null],
+            "default": null
+          },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         },

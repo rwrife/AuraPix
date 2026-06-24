@@ -194,6 +194,7 @@ export function LibraryPage() {
     toggleFavorite,
     setRating,
     setFlag,
+    setColorLabel,
     setTags,
     deletePhoto,
   } = useLibrary(libraryId, metadataFilters);
@@ -281,12 +282,60 @@ export function LibraryPage() {
       } else if (key === '`' || key === '~') {
         event.preventDefault();
         void setFlag(photoId, null);
+      } else if (lower === 'r') {
+        // Lightroom-style color labels (issue #184). r/y/g/b/u (=purple)
+        // are mnemonic; press the same key twice to clear (handled by
+        // toggling against the current value).
+        event.preventDefault();
+        void setColorLabel(
+          photoId,
+          viewerState?.currentPhoto.id === photoId &&
+            viewerState.currentPhoto.colorLabel === 'red'
+            ? null
+            : 'red'
+        );
+      } else if (lower === 'y') {
+        event.preventDefault();
+        void setColorLabel(
+          photoId,
+          viewerState?.currentPhoto.id === photoId &&
+            viewerState.currentPhoto.colorLabel === 'yellow'
+            ? null
+            : 'yellow'
+        );
+      } else if (lower === 'g') {
+        event.preventDefault();
+        void setColorLabel(
+          photoId,
+          viewerState?.currentPhoto.id === photoId &&
+            viewerState.currentPhoto.colorLabel === 'green'
+            ? null
+            : 'green'
+        );
+      } else if (lower === 'b') {
+        event.preventDefault();
+        void setColorLabel(
+          photoId,
+          viewerState?.currentPhoto.id === photoId &&
+            viewerState.currentPhoto.colorLabel === 'blue'
+            ? null
+            : 'blue'
+        );
+      } else if (lower === 'u') {
+        event.preventDefault();
+        void setColorLabel(
+          photoId,
+          viewerState?.currentPhoto.id === photoId &&
+            viewerState.currentPhoto.colorLabel === 'purple'
+            ? null
+            : 'purple'
+        );
       }
     }
 
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [selectedPhotoIds, setRating, setFlag]);
+  }, [selectedPhotoIds, setRating, setFlag, setColorLabel, viewerState]);
 
   // Handle upload modal trigger from URL query parameter
   useEffect(() => {
@@ -382,6 +431,8 @@ export function LibraryPage() {
     return createViewerToolbarConfig({
       currentPhoto: viewerState.currentPhoto,
       onToggleFavorite: viewerState.onToggleFavorite,
+      onSetColorLabel: (label) =>
+        void setColorLabel(viewerState.currentPhoto.id, label),
       onDelete: async () => {
         await deletePhoto(viewerState.currentPhoto.id);
         if (photos.length <= 1) {
@@ -395,7 +446,7 @@ export function LibraryPage() {
       saturation: viewerState.saturation,
       setSaturation: viewerState.setSaturation,
     });
-  }, [viewerState, deletePhoto, photos.length]);
+  }, [viewerState, deletePhoto, photos.length, setColorLabel]);
 
   const availableTags = useMemo(
     () => [...new Set(photos.flatMap((photo) => photo.tags))].sort((a, b) => a.localeCompare(b)),

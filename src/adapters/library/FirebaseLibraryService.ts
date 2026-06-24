@@ -23,8 +23,10 @@ import {
 } from 'firebase/storage';
 import type { LibraryService } from '../../domain/library/contract';
 import {
+  isPhotoColorLabel,
   isPhotoFlag,
   isPhotoRating,
+  PHOTO_COLOR_LABEL_VALUES,
   type AddPhotoInput,
   type BulkAddToAlbumInput,
   type BulkAddToAlbumResult,
@@ -113,6 +115,32 @@ export class FirebaseLibraryService implements LibraryService {
           throw new Error(`Invalid flag: ${String(input.flag)}.`);
         }
         constraints.push(where('flag', '==', input.flag));
+      }
+    }
+
+    // Filter by color label (composite index: tenantId/libraryId, colorLabel) — issue #184
+    if (input.colorLabel !== undefined) {
+      if (Array.isArray(input.colorLabel)) {
+        if (input.colorLabel.length === 0) {
+          throw new Error('Invalid colorLabel filter: empty array.');
+        }
+        for (const value of input.colorLabel) {
+          if (!isPhotoColorLabel(value) || value === null) {
+            throw new Error(
+              `Invalid colorLabel filter value: ${String(value)} (expected one of ${PHOTO_COLOR_LABEL_VALUES.join(
+                ', '
+              )}).`
+            );
+          }
+        }
+        constraints.push(where('colorLabel', 'in', input.colorLabel));
+      } else if (input.colorLabel === 'uncolored') {
+        constraints.push(where('colorLabel', '==', null));
+      } else {
+        if (!isPhotoColorLabel(input.colorLabel)) {
+          throw new Error(`Invalid colorLabel: ${String(input.colorLabel)}.`);
+        }
+        constraints.push(where('colorLabel', '==', input.colorLabel));
       }
     }
 
@@ -226,6 +254,7 @@ export class FirebaseLibraryService implements LibraryService {
       tags: [],
       rating: 0,
       flag: null,
+      colorLabel: null,
     };
 
     const docRef = await addDoc(collection(this.db, COLLECTIONS.PHOTOS), photoData);
@@ -291,6 +320,17 @@ export class FirebaseLibraryService implements LibraryService {
         throw new Error(`Invalid flag: ${String(input.flag)} (expected 'pick' | 'reject' | null).`);
       }
       updates.flag = input.flag;
+    }
+
+    if (input.colorLabel !== undefined) {
+      if (!isPhotoColorLabel(input.colorLabel)) {
+        throw new Error(
+          `Invalid colorLabel: ${String(input.colorLabel)} (expected one of ${PHOTO_COLOR_LABEL_VALUES.join(
+            ', '
+          )}, or null).`
+        );
+      }
+      updates.colorLabel = input.colorLabel;
     }
 
     await updateDoc(docRef, updates);
@@ -444,6 +484,7 @@ export class FirebaseLibraryService implements LibraryService {
       tags: data.tags || [],
       rating: isPhotoRating(data.rating) ? data.rating : 0,
       flag: isPhotoFlag(data.flag) ? data.flag : null,
+      colorLabel: isPhotoColorLabel(data.colorLabel) ? data.colorLabel : null,
     };
   }
 }

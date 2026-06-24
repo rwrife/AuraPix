@@ -171,6 +171,19 @@
             }
           },
           "flag": { "type": "string", "enum": ["pick", "reject"] },
+          "colorLabel": {
+            "description": "Lightroom-style color label triage filter (issue #184). Accepts a single value or array of values for OR semantics.",
+            "oneOf": [
+              { "type": "string", "enum": ["red", "yellow", "green", "blue", "purple"] },
+              {
+                "type": "array",
+                "items": { "type": "string", "enum": ["red", "yellow", "green", "blue", "purple"] },
+                "minItems": 1,
+                "maxItems": 5,
+                "uniqueItems": true
+              }
+            ]
+          },
           "tags": {
             "type": "array",
             "items": { "type": "string", "minLength": 1, "maxLength": 64 },

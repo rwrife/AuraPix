@@ -350,6 +350,33 @@ export function PhotoGallery({
                   )}
                 </div>
               )}
+              {photo.colorLabel && (
+                <div
+                  className={`gallery-tile-color-label gallery-tile-color-label--${photo.colorLabel}`}
+                  aria-label={`Color label ${photo.colorLabel}`}
+                  title={`Color label: ${photo.colorLabel}`}
+                  style={{
+                    position: 'absolute',
+                    top: 4,
+                    left: 4,
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    pointerEvents: 'none',
+                    boxShadow: '0 0 0 1.5px rgba(0,0,0,0.55)',
+                    backgroundColor:
+                      photo.colorLabel === 'red'
+                        ? '#e0524a'
+                        : photo.colorLabel === 'yellow'
+                        ? '#e8c547'
+                        : photo.colorLabel === 'green'
+                        ? '#4caf50'
+                        : photo.colorLabel === 'blue'
+                        ? '#3a8dde'
+                        : '#9b59b6',
+                  }}
+                />
+              )}
               {mode === 'large' && <p className="gallery-tile-name">{photo.originalName}</p>}
             </div>
           );

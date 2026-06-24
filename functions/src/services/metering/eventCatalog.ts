@@ -303,12 +303,20 @@ export const EVENT_CATALOG = [
     version: 1,
     billable: false,
     description:
-      'A photo had tags added or removed. One event per mutation, not per tag.',
+      'A photo had tags, rating, flag, or color label changed. One event per mutation, not per tag. Issue #184 added `meta.kind` to disambiguate (`tag` | `rating` | `flag` | `colorLabel`).',
     schema: metaSchema({
       libraryId: S_STRING,
       actor: S_STRING,
       added: { type: 'array', items: S_STRING },
       removed: { type: 'array', items: S_STRING },
+      kind: { type: 'string', enum: ['tag', 'rating', 'flag', 'colorLabel'] },
+      rating: { type: 'integer', minimum: 0, maximum: 5 },
+      flag: { type: ['string', 'null'], enum: ['pick', 'reject', null] },
+      colorLabel: {
+        type: ['string', 'null'],
+        enum: ['red', 'yellow', 'green', 'blue', 'purple', null],
+      },
+      viaBulk: S_BOOLEAN,
     }),
   },
   {

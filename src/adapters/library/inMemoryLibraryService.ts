@@ -1,7 +1,9 @@
 import type { LibraryService } from '../../domain/library/contract';
 import {
+  isPhotoColorLabel,
   isPhotoFlag,
   isPhotoRating,
+  PHOTO_COLOR_LABEL_VALUES,
   type AddPhotoInput,
   type BulkAddToAlbumInput,
   type BulkAddToAlbumResult,
@@ -11,6 +13,7 @@ import {
   type LibraryQuickCollection,
   type LibrarySort,
   type Photo,
+  type PhotoColorLabel,
   type UpdatePhotoInput,
 } from '../../domain/library/types';
 
@@ -31,6 +34,7 @@ function loadPhotos(): Photo[] {
       ...photo,
       rating: isPhotoRating(photo.rating) ? photo.rating : 0,
       flag: isPhotoFlag(photo.flag) ? photo.flag : null,
+      colorLabel: isPhotoColorLabel(photo.colorLabel) ? photo.colorLabel : null,
     }));
   } catch {
     return [];
@@ -138,6 +142,35 @@ export class InMemoryLibraryService implements LibraryService {
           throw new Error(`Invalid flag: ${String(input.flag)}.`);
         }
         results = results.filter((p) => (p.flag ?? null) === input.flag);
+      }
+    }
+
+    if (input.colorLabel !== undefined) {
+      if (Array.isArray(input.colorLabel)) {
+        if (input.colorLabel.length === 0) {
+          throw new Error('Invalid colorLabel filter: empty array.');
+        }
+        for (const value of input.colorLabel) {
+          if (!isPhotoColorLabel(value) || value === null) {
+            throw new Error(
+              `Invalid colorLabel filter value: ${String(value)} (expected one of ${PHOTO_COLOR_LABEL_VALUES.join(
+                ', '
+              )}).`
+            );
+          }
+        }
+        const allowed = new Set<string>(input.colorLabel as string[]);
+        results = results.filter((p) => {
+          const label = p.colorLabel ?? null;
+          return label !== null && allowed.has(label);
+        });
+      } else if (input.colorLabel === 'uncolored') {
+        results = results.filter((p) => (p.colorLabel ?? null) === null);
+      } else {
+        if (!isPhotoColorLabel(input.colorLabel)) {
+          throw new Error(`Invalid colorLabel: ${String(input.colorLabel)}.`);
+        }
+        results = results.filter((p) => (p.colorLabel ?? null) === input.colorLabel);
       }
     }
 
@@ -262,6 +295,7 @@ export class InMemoryLibraryService implements LibraryService {
       tags: [],
       rating: 0,
       flag: null,
+      colorLabel: null,
     };
 
     this.photos = [photo, ...this.photos];
@@ -281,6 +315,14 @@ export class InMemoryLibraryService implements LibraryService {
       throw new Error(`Invalid flag: ${String(input.flag)} (expected 'pick' | 'reject' | null).`);
     }
 
+    if (input.colorLabel !== undefined && !isPhotoColorLabel(input.colorLabel)) {
+      throw new Error(
+        `Invalid colorLabel: ${String(input.colorLabel)} (expected one of ${PHOTO_COLOR_LABEL_VALUES.join(
+          ', '
+        )}, or null).`
+      );
+    }
+
     const updated: Photo = {
       ...this.photos[idx],
       ...(input.isFavorite !== undefined && { isFavorite: input.isFavorite }),
@@ -288,6 +330,7 @@ export class InMemoryLibraryService implements LibraryService {
       ...(input.albumIds !== undefined && { albumIds: input.albumIds }),
       ...(input.rating !== undefined && { rating: input.rating }),
       ...(input.flag !== undefined && { flag: input.flag }),
+      ...(input.colorLabel !== undefined && { colorLabel: input.colorLabel as PhotoColorLabel }),
       updatedAt: new Date().toISOString(),
     };
 

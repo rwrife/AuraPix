@@ -49,6 +49,49 @@ export interface StoragePaths {
 
 export type PhotoSourceType = 'raster' | 'raw';
 
+/** Lightroom-style 0–5 star triage rating. 0 means unrated. */
+export type PhotoRating = 0 | 1 | 2 | 3 | 4 | 5;
+
+/** Lightroom-style pick/reject flag. `null` (default) means unflagged. */
+export type PhotoFlag = 'pick' | 'reject' | null;
+
+/**
+ * Lightroom-style color label (third triage axis, complementing rating + flag).
+ * `null` (default) means no color label is assigned. Issue #184.
+ */
+export type PhotoColorLabel = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | null;
+
+export const PHOTO_RATING_VALUES: readonly PhotoRating[] = [0, 1, 2, 3, 4, 5];
+export const PHOTO_FLAG_VALUES: readonly Exclude<PhotoFlag, null>[] = ['pick', 'reject'];
+export const PHOTO_COLOR_LABEL_VALUES: readonly Exclude<PhotoColorLabel, null>[] = [
+  'red',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+];
+
+export function isPhotoRating(value: unknown): value is PhotoRating {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    (PHOTO_RATING_VALUES as readonly number[]).includes(value)
+  );
+}
+
+export function isPhotoFlag(value: unknown): value is PhotoFlag {
+  if (value === null) return true;
+  return typeof value === 'string' && (PHOTO_FLAG_VALUES as readonly string[]).includes(value);
+}
+
+export function isPhotoColorLabel(value: unknown): value is PhotoColorLabel {
+  if (value === null) return true;
+  return (
+    typeof value === 'string' &&
+    (PHOTO_COLOR_LABEL_VALUES as readonly string[]).includes(value)
+  );
+}
+
 export interface Photo {
   id: string;
   libraryId: string;
@@ -107,6 +150,22 @@ export interface Photo {
    * treat a missing value as an empty array.
    */
   tags?: string[];
+  /**
+   * Lightroom-style triage rating, 0–5 stars. Optional for backwards
+   * compatibility with photos written before triage rollout; treat a
+   * missing value as 0 (unrated). See issue #141.
+   */
+  rating?: PhotoRating;
+  /**
+   * Lightroom-style pick/reject flag. Optional for backwards compatibility;
+   * treat a missing value as `null` (unflagged). See issue #149.
+   */
+  flag?: PhotoFlag;
+  /**
+   * Lightroom-style color label (third triage axis). Optional for backwards
+   * compatibility; treat a missing value as `null` (no label). See issue #184.
+   */
+  colorLabel?: PhotoColorLabel;
 }
 
 export function createPhotoDocument(
@@ -144,5 +203,8 @@ export function createPhotoDocument(
     trashedAt: null,
     trashedBy: null,
     tags: [],
+    rating: 0,
+    flag: null,
+    colorLabel: null,
   };
 }

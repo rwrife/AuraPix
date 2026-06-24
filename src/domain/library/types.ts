@@ -6,11 +6,26 @@ export type PhotoRating = 0 | 1 | 2 | 3 | 4 | 5;
 /** Lightroom-style pick/reject flag; `null` (default) means unflagged. */
 export type PhotoFlag = 'pick' | 'reject' | null;
 
+/**
+ * Lightroom-style color label (third triage axis, complementing rating + flag).
+ * `null` (default) means no color label is assigned. Issue #184.
+ */
+export type PhotoColorLabel = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | null;
+
 /** Allowed values for {@link PhotoRating}. Useful for validation. */
 export const PHOTO_RATING_VALUES: readonly PhotoRating[] = [0, 1, 2, 3, 4, 5];
 
 /** Allowed non-null values for {@link PhotoFlag}. Useful for validation. */
 export const PHOTO_FLAG_VALUES: readonly Exclude<PhotoFlag, null>[] = ['pick', 'reject'];
+
+/** Allowed non-null values for {@link PhotoColorLabel}. Useful for validation. */
+export const PHOTO_COLOR_LABEL_VALUES: readonly Exclude<PhotoColorLabel, null>[] = [
+  'red',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+];
 
 export function isPhotoRating(value: unknown): value is PhotoRating {
   return (
@@ -23,6 +38,14 @@ export function isPhotoRating(value: unknown): value is PhotoRating {
 export function isPhotoFlag(value: unknown): value is PhotoFlag {
   if (value === null) return true;
   return typeof value === 'string' && (PHOTO_FLAG_VALUES as readonly string[]).includes(value);
+}
+
+export function isPhotoColorLabel(value: unknown): value is PhotoColorLabel {
+  if (value === null) return true;
+  return (
+    typeof value === 'string' &&
+    (PHOTO_COLOR_LABEL_VALUES as readonly string[]).includes(value)
+  );
 }
 
 export interface PhotoMetadata {
@@ -57,6 +80,11 @@ export interface Photo {
    * Lightroom-style pick/reject flag. `null` (default) means unflagged.
    */
   flag: PhotoFlag;
+  /**
+   * Lightroom-style color label (third triage axis). `null` (default) means
+   * no color label is assigned. Issue #184.
+   */
+  colorLabel: PhotoColorLabel;
 }
 
 export interface MetadataFilterInput {
@@ -96,6 +124,11 @@ export interface ListPhotosInput {
    * Filter by triage flag. Use `'unflagged'` to request rows with `flag === null`.
    */
   flag?: PhotoFlag | 'unflagged';
+  /**
+   * Filter by color label (issue #184). Pass one or more values to match any of them
+   * (OR semantics). Use `'uncolored'` to request rows with `colorLabel === null`.
+   */
+  colorLabel?: PhotoColorLabel | 'uncolored' | readonly Exclude<PhotoColorLabel, null>[];
   pageSize?: number;
   pageToken?: string;
 }
@@ -130,6 +163,11 @@ export interface UpdatePhotoInput {
   rating?: PhotoRating;
   /** Triage flag (`'pick' | 'reject' | null`). Validated by the service. */
   flag?: PhotoFlag;
+  /**
+   * Triage color label (`'red' | 'yellow' | 'green' | 'blue' | 'purple' | null`).
+   * Validated by the service. Issue #184.
+   */
+  colorLabel?: PhotoColorLabel;
 }
 
 export type BulkAddToAlbumErrorCode = 'not_found' | 'already_in_album';

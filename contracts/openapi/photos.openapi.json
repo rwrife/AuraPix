@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Photos API",
-    "version": "1.2.0",
-    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) + photo export (#174) for photos. Mutating endpoints support the `Idempotency-Key` header (issue #162) for safe retries."
+    "version": "1.3.0",
+    "description": "Soft-delete (Trash) lifecycle (#152) + keyword tags (#173) + photo export (#174) for photos. Issue #184 adds Lightroom-style color labels via PATCH /v1/photos/{id}. Mutating endpoints support the `Idempotency-Key` header (issue #162) for safe retries."
   },
   "servers": [
     { "url": "https://api.aurapix.example" }
@@ -26,6 +26,13 @@
             "description": "Comma-separated list of keyword tags. Photos must contain **all** tags (AND semantics). Tags are normalized (trimmed, lowercased) before matching.",
             "schema": { "type": "string" },
             "example": "wedding,print-ready"
+          },
+          {
+            "name": "colorLabel",
+            "in": "query",
+            "description": "Filter by Lightroom-style color label (issue #184). Accepts a single value (`red|yellow|green|blue|purple`), `uncolored` for photos without a label, or a comma-separated list for OR semantics (e.g. `red,green`). Uses the `libraryId+colorLabel+createdAt` Firestore composite index, matching the `rating` filter pattern.",
+            "schema": { "type": "string" },
+            "example": "red,green"
           }
         ],
         "responses": {
@@ -43,6 +50,41 @@
       }
     },
     "/v1/photos/{id}": {
+      "patch": {
+        "operationId": "updatePhoto",
+        "summary": "Partially update photo triage fields (rating, flag, colorLabel)",
+        "description": "Updates one or more triage fields on a single photo. Only the supplied fields are modified; omitted fields are left untouched. Strict enum validation: invalid values return `400` with `INVALID_FIELD_VALUE`. Cross-tenant access returns `403`. Issue #184 introduces the `colorLabel` field; the metering event `photo.tagged` is emitted with `meta.kind=\"colorLabel\"` (or `\"rating\"`/`\"flag\"` for the other axes) so hosts can audit triage activity without a new event type.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdatePhotoRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated photo summary",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PhotoSummary" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/IdempotencyConflict" }
+        }
+      },
       "delete": {
         "operationId": "trashPhoto",
         "summary": "Soft-delete (Trash) a photo",
@@ -272,8 +314,58 @@
             "description": "Normalized keyword tags. May be empty.",
             "default": []
           },
+          "rating": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 0,
+            "description": "Lightroom-style 0–5 star rating."
+          },
+          "flag": {
+            "type": ["string", "null"],
+            "enum": ["pick", "reject", null],
+            "default": null,
+            "description": "Lightroom-style pick/reject flag."
+          },
+          "colorLabel": {
+            "type": ["string", "null"],
+            "enum": ["red", "yellow", "green", "blue", "purple", null],
+            "default": null,
+            "description": "Lightroom-style color label (issue #184). One of five standard colors, or null."
+          },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "UpdatePhotoRequest": {
+        "type": "object",
+        "description": "Partial photo update. At least one of `rating`, `flag`, `colorLabel`, `tags`, `albumIds`, or `isFavorite` should be supplied; omitting all fields is a no-op. Strict enum validation applies.",
+        "properties": {
+          "rating": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5,
+            "description": "0 clears the rating."
+          },
+          "flag": {
+            "type": ["string", "null"],
+            "enum": ["pick", "reject", null]
+          },
+          "colorLabel": {
+            "type": ["string", "null"],
+            "enum": ["red", "yellow", "green", "blue", "purple", null],
+            "description": "Lightroom-style color label (issue #184). Pass `null` to clear."
+          },
+          "isFavorite": { "type": "boolean" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "maxItems": 50
+          },
+          "albumIds": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         }
       },
       "ListPhotosResponse": {
