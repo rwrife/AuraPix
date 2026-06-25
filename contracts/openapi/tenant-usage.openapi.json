@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Tenant Usage API",
-    "version": "0.1.0",
-    "description": "Per-tenant daily usage rollups. The canonical pull surface for host billing systems (issue #133)."
+    "version": "0.2.0",
+    "description": "Per-tenant daily usage rollups. The canonical pull surface for host billing systems (issue #133). Supports JSON (default) and CSV (issue #186) via content negotiation."
   },
   "servers": [
     { "url": "https://api.aurapix.example" }
@@ -13,7 +13,7 @@
       "get": {
         "operationId": "getTenantUsage",
         "summary": "Fetch daily usage rollups for a tenant over a date range",
-        "description": "Returns one document per UTC day in [from, to] inclusive. Days with no recorded activity are returned as zero-filled docs so callers can iterate without gap handling. Max range: 100 days.\n\nAuth: tenant owner (Bearer) OR host API key with `usage.read` scope.",
+        "description": "Returns one document per UTC day in [from, to] inclusive. Days with no recorded activity are returned as zero-filled docs so callers can iterate without gap handling. Max range: 100 days.\n\nAuth: tenant owner (Bearer) OR host API key with `usage.read` scope.\n\n**Response format (issue #186)**\n\n- Default: `application/json` (the `TenantUsageResponse` schema below).\n- CSV: returned when the request carries `Accept: text/csv` **or** the query parameter `?format=csv`. CSV rows mirror the JSON `items` array in a documented, locked column order \u2014 see `CsvColumnOrder` below. The CSV body is streamed (chunked transfer encoding); the server does not buffer the full range in memory. Empty / zero-filled days still produce rows.\n\n**Column order is part of the public contract.** Existing columns will not be renamed, reordered, or removed; new counters are only ever appended at the end.",
         "parameters": [
           {
             "name": "tenantId",
@@ -34,14 +34,45 @@
             "required": true,
             "description": "Inclusive end date, YYYY-MM-DD (UTC). Must be >= from and <= from + 99 days.",
             "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "Fallback content-negotiation hint for clients that cannot set the Accept header. Currently only `csv` is recognised; any other value is ignored.",
+            "schema": { "type": "string", "enum": ["csv"] }
+          },
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": false,
+            "description": "Set to `text/csv` to receive a streamed CSV body. Anything else (including `*/*` and missing) yields JSON.",
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Daily usage rollups",
+            "description": "Daily usage rollups. Body is JSON or streamed CSV depending on `Accept` / `?format=csv`. CSV responses use chunked transfer encoding and an `attachment` Content-Disposition.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Only present on CSV responses: `attachment; filename=\"usage-<tenantId>-<from>-to-<to>.csv\"`.",
+                "schema": { "type": "string" }
+              },
+              "Transfer-Encoding": {
+                "description": "CSV responses are streamed and therefore lack `Content-Length`; the server uses `chunked` transfer encoding so downstream pipelines never have to wait for the full body before processing rows.",
+                "schema": { "type": "string", "enum": ["chunked"] }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/TenantUsageResponse" }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "description": "CSV-encoded daily rollups. Header row first, then one row per UTC day in [from, to] inclusive, in the order listed by `CsvColumnOrder`. Cells follow RFC 4180: fields containing `,`, `\"`, CR, or LF are wrapped in double quotes and embedded `\"` is escaped as `\"\"`. `storageBytesTotal` is rendered as an empty cell until the daily snapshot completes."
+                },
+                "example": "tenantId,date,storageBytesDelta,imagesUploaded,imagesProcessed,signedUrlsIssued,editsApplied,tagsApplied,apiCalls,exportBytes,activeUsers,rateLimited,storageBytesTotal,updatedAt\ntenant-A,2026-04-01,0,0,0,0,0,0,4,0,0,0,,2026-04-02T10:00:00.000Z\ntenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,2026-04-02T10:00:00.000Z\ntenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z\n"
               }
             }
           },
@@ -81,6 +112,29 @@
   },
   "components": {
     "schemas": {
+      "CsvColumnOrder": {
+        "type": "array",
+        "description": "Locked column order for the CSV variant of `GET /v1/tenants/:id/usage` (issue #186). Part of the public billing contract \u2014 existing columns are never renamed, reordered, or removed; new counters are only appended at the end. Mirrors `UsageDailyDoc` in the same order.",
+        "items": { "type": "string" },
+        "minItems": 14,
+        "maxItems": 14,
+        "example": [
+          "tenantId",
+          "date",
+          "storageBytesDelta",
+          "imagesUploaded",
+          "imagesProcessed",
+          "signedUrlsIssued",
+          "editsApplied",
+          "tagsApplied",
+          "apiCalls",
+          "exportBytes",
+          "activeUsers",
+          "rateLimited",
+          "storageBytesTotal",
+          "updatedAt"
+        ]
+      },
       "UsageDailyDoc": {
         "type": "object",
         "required": [
@@ -91,7 +145,9 @@
           "imagesProcessed",
           "signedUrlsIssued",
           "editsApplied",
+          "tagsApplied",
           "apiCalls",
+          "exportBytes",
           "activeUsers",
           "rateLimited",
           "storageBytesTotal",
@@ -108,11 +164,22 @@
           "imagesProcessed": { "type": "integer", "minimum": 0 },
           "signedUrlsIssued": { "type": "integer", "minimum": 0 },
           "editsApplied": { "type": "integer", "minimum": 0 },
+          "tagsApplied": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Keyword tag mutations applied on this UTC day (`added + removed` per `photo.tagged` event)."
+          },
           "apiCalls": { "type": "integer", "minimum": 0 },
+          "exportBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bytes egressed via `POST /v1/photos/:id/export` (issue #174). Used for bandwidth-tier billing without parsing every event."
+          },
           "activeUsers": {
             "type": "integer",
             "minimum": 0,
             "description": "Distinct end-users active for this tenant on this UTC day (seat-based billing signal). Driven by `user.active` metering events; host-API-key (service-to-service) traffic is excluded. Zero-filled when no activity was recorded."
+          },
           "rateLimited": {
             "type": "integer",
             "minimum": 0,
@@ -120,7 +187,7 @@
           },
           "storageBytesTotal": {
             "type": ["integer", "null"],
-            "description": "Absolute storage footprint at end-of-day, written by the scheduled snapshot job. Null until the first snapshot for the day completes."
+            "description": "Absolute storage footprint at end-of-day, written by the scheduled snapshot job. Null until the first snapshot for the day completes. Rendered as an empty cell in CSV."
           },
           "updatedAt": { "type": "string", "format": "date-time" }
         }

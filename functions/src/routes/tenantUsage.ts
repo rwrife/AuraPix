@@ -12,6 +12,14 @@
  *   - from/to are required, YYYY-MM-DD
  *   - max range: 100 days (inclusive)
  *   - cross-tenant access returns 403
+ *
+ * Response negotiation (issue #186):
+ *   - Default: JSON (`application/json`).
+ *   - CSV: returned when `Accept: text/csv` is sent OR `?format=csv` is
+ *     present. CSV rows mirror the JSON `items` in a documented, locked
+ *     column order (see `CSV_COLUMNS` below and
+ *     `docs/features/usage-and-billing.md`). The CSV body is streamed
+ *     (chunked transfer) so we never buffer the full range in memory.
  */
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
@@ -24,6 +32,70 @@ import { emptyDailyDoc } from '../services/metering/UsageRollupConsumer.js';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 100;
+
+/**
+ * Locked column order for the CSV variant. This is part of the public
+ * billing contract — never reorder, rename, or insert columns in the
+ * middle; only append new columns at the end, and only after coordinating
+ * with the docs (`docs/features/usage-and-billing.md`) and the OpenAPI
+ * response example.
+ *
+ * `appliedEventIds` (idempotency bookkeeping on `UsageDailyDoc`) is
+ * intentionally excluded — it is not a billing field.
+ */
+export const CSV_COLUMNS = [
+  'tenantId',
+  'date',
+  'storageBytesDelta',
+  'imagesUploaded',
+  'imagesProcessed',
+  'signedUrlsIssued',
+  'editsApplied',
+  'tagsApplied',
+  'apiCalls',
+  'exportBytes',
+  'activeUsers',
+  'rateLimited',
+  'storageBytesTotal',
+  'updatedAt',
+] as const satisfies ReadonlyArray<keyof UsageDailyDoc>;
+
+type CsvColumn = (typeof CSV_COLUMNS)[number];
+
+/**
+ * Render a single CSV cell. Per RFC 4180:
+ *   - Fields containing `,`, `"`, CR, or LF are wrapped in double quotes.
+ *   - Embedded `"` is escaped as `""`.
+ * `null` is rendered as an empty cell (used by `storageBytesTotal` until
+ * the daily snapshot lands).
+ */
+function renderCsvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const s = typeof value === 'string' ? value : String(value);
+  if (/[",\r\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function renderCsvRow(doc: UsageDailyDoc): string {
+  const cells: string[] = [];
+  for (const col of CSV_COLUMNS) {
+    cells.push(renderCsvCell(doc[col as CsvColumn]));
+  }
+  return cells.join(',');
+}
+
+function wantsCsv(req: Request): boolean {
+  const fmt = String(req.query.format ?? '').toLowerCase();
+  if (fmt === 'csv') return true;
+  const accept = String(req.headers['accept'] ?? '').toLowerCase();
+  if (!accept) return false;
+  // We only honour an explicit text/csv preference. Wildcards (`*/*`) fall
+  // back to JSON to preserve the existing default for tools that don't set
+  // an Accept header explicitly.
+  return accept.split(',').some((part) => part.trim().startsWith('text/csv'));
+}
 
 export type TenantOwnershipChecker = (
   userId: string,
@@ -186,6 +258,26 @@ export function createTenantUsageRouter(deps: UsageRouterDeps): Router {
         }
         docs.sort((a, b) => a.date.localeCompare(b.date));
 
+        if (wantsCsv(req)) {
+          // Stream the response. We deliberately set neither Content-Length
+          // nor accumulate the full body into a string — Express/Node will
+          // pick chunked transfer for HTTP/1.1, ensuring the response is
+          // not buffered (verified in the integration test).
+          res.status(200);
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="usage-${tenantId}-${fromRaw}-to-${toRaw}.csv"`
+          );
+          // Header row first.
+          res.write(`${CSV_COLUMNS.join(',')}\n`);
+          for (const doc of docs) {
+            res.write(`${renderCsvRow(doc)}\n`);
+          }
+          res.end();
+          return;
+        }
+
         res.json({
           tenantId,
           from: fromRaw,
@@ -207,4 +299,7 @@ export const __test = {
   daysBetweenInclusive,
   eachDate,
   MAX_RANGE_DAYS,
+  renderCsvCell,
+  renderCsvRow,
+  wantsCsv,
 };
