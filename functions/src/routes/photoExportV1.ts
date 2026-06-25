@@ -168,6 +168,7 @@ export function createPhotoExportRouter(
         storage: deps.storageAdapter,
         photo,
         preset,
+        data: deps.dataAdapter,
       });
 
       // Build a short-lived signed URL pointing back at the GET handler.
@@ -198,6 +199,8 @@ export function createPhotoExportRouter(
           outputHeight: rendered.outputHeight,
           cacheHit: rendered.cacheHit,
           actor: req.tenant?.keyId ?? req.user?.uid ?? null,
+          // #185: hosts price watermarked vs clean exports differently.
+          watermark: rendered.watermarkApplied,
         },
       });
 
@@ -310,6 +313,7 @@ export function createPhotoExportRouter(
           storage: deps.storageAdapter,
           photo,
           preset,
+          data: deps.dataAdapter,
         });
         res.set({
           'Content-Type': 'image/jpeg',

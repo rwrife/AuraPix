@@ -19,9 +19,12 @@ import {
   EXPORT_PRESET_MIN_EDGE,
   EXPORT_PRESET_MIN_QUALITY,
   EXPORT_PRESET_NAME_PATTERN,
+  EXPORT_PRESET_WATERMARK_MAX_TEXT_LENGTH,
+  EXPORT_PRESET_WATERMARK_POSITIONS,
   TENANT_EXPORT_PRESETS_COLLECTION,
   defaultExportPresets,
   type ExportPreset,
+  type ExportPresetWatermark,
   type TenantExportPresetsRecord,
 } from '../../models/ExportPreset.js';
 
@@ -111,14 +114,88 @@ export function validatePresetBody(
     );
   }
 
+  const watermark =
+    b.watermark === undefined ? undefined : validateWatermark(b.watermark);
+
   const preset: ExportPreset = {
     name,
     maxEdge: maxEdgeRaw,
     quality: qualityRaw,
     format,
     ...(typeof label === 'string' ? { label } : {}),
+    ...(watermark ? { watermark } : {}),
   };
   return preset;
+}
+
+/**
+ * Validate the optional `watermark` block on an export preset (issue #185).
+ * `enabled: false` is accepted with no further checks so a host can keep
+ * a watermark template around but disable it without dropping the config.
+ */
+export function validateWatermark(value: unknown): ExportPresetWatermark {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK',
+      'watermark must be a JSON object'
+    );
+  }
+  const w = value as Record<string, unknown>;
+  if (typeof w.enabled !== 'boolean') {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK_ENABLED',
+      'watermark.enabled must be a boolean'
+    );
+  }
+  const text = w.text;
+  if (typeof text !== 'string') {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK_TEXT',
+      'watermark.text must be a string'
+    );
+  }
+  if (w.enabled && text.trim().length === 0) {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK_TEXT',
+      'watermark.text must be non-empty when watermark.enabled is true'
+    );
+  }
+  if (text.length > EXPORT_PRESET_WATERMARK_MAX_TEXT_LENGTH) {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK_TEXT',
+      `watermark.text must be at most ${EXPORT_PRESET_WATERMARK_MAX_TEXT_LENGTH} characters`
+    );
+  }
+  const opacity = w.opacity;
+  if (
+    typeof opacity !== 'number' ||
+    !Number.isFinite(opacity) ||
+    opacity < 0 ||
+    opacity > 1
+  ) {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK_OPACITY',
+      'watermark.opacity must be a number in [0, 1]'
+    );
+  }
+  const position = w.position;
+  if (
+    typeof position !== 'string' ||
+    !EXPORT_PRESET_WATERMARK_POSITIONS.includes(
+      position as ExportPresetWatermark['position']
+    )
+  ) {
+    throw new ExportPresetValidationError(
+      'INVALID_WATERMARK_POSITION',
+      `watermark.position must be one of: ${EXPORT_PRESET_WATERMARK_POSITIONS.join(', ')}`
+    );
+  }
+  return {
+    enabled: w.enabled,
+    text,
+    opacity,
+    position: position as ExportPresetWatermark['position'],
+  };
 }
 
 /**
@@ -304,6 +381,35 @@ function isValidPreset(p: unknown): p is ExportPreset {
   if (o.quality < EXPORT_PRESET_MIN_QUALITY || o.quality > EXPORT_PRESET_MAX_QUALITY) {
     return false;
   }
+  // Watermark is optional. If present, it must be structurally sound;
+  // a malformed persisted watermark drops the whole preset so we never
+  // half-apply a bad config.
+  if (o.watermark !== undefined && !isValidWatermark(o.watermark)) {
+    return false;
+  }
+  return true;
+}
+
+function isValidWatermark(w: unknown): w is ExportPresetWatermark {
+  if (!w || typeof w !== 'object') return false;
+  const o = w as Partial<ExportPresetWatermark>;
+  if (typeof o.enabled !== 'boolean') return false;
+  if (typeof o.text !== 'string') return false;
+  if (o.text.length > EXPORT_PRESET_WATERMARK_MAX_TEXT_LENGTH) return false;
+  if (
+    typeof o.opacity !== 'number' ||
+    !Number.isFinite(o.opacity) ||
+    o.opacity < 0 ||
+    o.opacity > 1
+  ) {
+    return false;
+  }
+  if (
+    !o.position ||
+    !EXPORT_PRESET_WATERMARK_POSITIONS.includes(o.position)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -313,7 +419,22 @@ function presetsEqual(a: ExportPreset, b: ExportPreset): boolean {
     a.maxEdge === b.maxEdge &&
     a.quality === b.quality &&
     a.format === b.format &&
-    (a.label ?? null) === (b.label ?? null)
+    (a.label ?? null) === (b.label ?? null) &&
+    watermarksEqual(a.watermark, b.watermark)
+  );
+}
+
+function watermarksEqual(
+  a: ExportPresetWatermark | undefined,
+  b: ExportPresetWatermark | undefined
+): boolean {
+  if (a === undefined && b === undefined) return true;
+  if (a === undefined || b === undefined) return false;
+  return (
+    a.enabled === b.enabled &&
+    a.text === b.text &&
+    a.opacity === b.opacity &&
+    a.position === b.position
   );
 }
 

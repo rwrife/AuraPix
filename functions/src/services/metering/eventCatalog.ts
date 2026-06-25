@@ -324,7 +324,7 @@ export const EVENT_CATALOG = [
     version: 1,
     billable: true,
     description:
-      'A photo was successfully exported (cache hit or miss). Drives the `exportBytes` rollup.',
+      'A photo was successfully exported (cache hit or miss). Drives the `exportBytes` rollup. Issue #185 added `meta.watermark` (boolean) to distinguish watermarked vs clean exports.',
     schema: metaSchema({
       libraryId: S_STRING,
       preset: S_STRING,
@@ -332,6 +332,10 @@ export const EVENT_CATALOG = [
       outputHeight: S_INTEGER,
       cacheHit: S_BOOLEAN,
       actor: S_STRING,
+      // Issue #185: hosts can price watermarked vs clean exports
+      // differently. Additive; no version bump per `eventCatalog.ts`
+      // rules (the `meta` schema is `additionalProperties: true`).
+      watermark: S_BOOLEAN,
     }),
   },
   {
