@@ -8,7 +8,7 @@ This page documents the counters, where they come from, and how to pull them.
 ## Endpoint
 
 ```
-GET /api/v1/tenants/{tenantId}/usage?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET /api/v1/tenants/{tenantId}/usage?from=YYYY-MM-DD&to=YYYY-MM-DD[&format=csv]
 ```
 
 - **Auth:** tenant owner (Bearer token) **or** a host API key with the
@@ -19,6 +19,47 @@ GET /api/v1/tenants/{tenantId}/usage?from=YYYY-MM-DD&to=YYYY-MM-DD
   days with no activity so callers can iterate without gap handling. See
   the [OpenAPI contract](../../contracts/openapi/tenant-usage.openapi.json)
   for the precise schema.
+- **Response format (issue #186):** JSON by default; CSV when the request
+  sends `Accept: text/csv` **or** the query parameter `?format=csv`. CSV
+  responses are streamed (chunked transfer encoding) so even the maximum
+  100-day range never has to be buffered in memory.
+
+### CSV column order (locked contract)
+
+The CSV variant emits one header row followed by one row per UTC day in
+the range — including zero-filled days. Columns appear in **exactly** the
+following order, and this order is part of the public contract:
+
+```
+tenantId, date, storageBytesDelta, imagesUploaded, imagesProcessed,
+signedUrlsIssued, editsApplied, tagsApplied, apiCalls, exportBytes,
+activeUsers, rateLimited, storageBytesTotal, updatedAt
+```
+
+Guarantees:
+
+- Existing columns will never be renamed, reordered, or removed.
+- New counters are only ever appended at the end of the row.
+- Cells follow RFC 4180: fields containing `,`, `"`, CR, or LF are
+  wrapped in double quotes and embedded `"` is escaped as `""`.
+- `storageBytesTotal` is rendered as an empty cell until the daily
+  snapshot job writes a value for that date.
+- The response sets
+  `Content-Disposition: attachment; filename="usage-<tenantId>-<from>-to-<to>.csv"`.
+
+The locked order also lives in `CSV_COLUMNS` in
+`functions/src/routes/tenantUsage.ts` and as `CsvColumnOrder` in the
+OpenAPI contract. Any change to those three must land in the same commit.
+
+Example (range `2026-04-01 .. 2026-04-03`, two days of activity then a
+zero-filled day):
+
+```csv
+tenantId,date,storageBytesDelta,imagesUploaded,imagesProcessed,signedUrlsIssued,editsApplied,tagsApplied,apiCalls,exportBytes,activeUsers,rateLimited,storageBytesTotal,updatedAt
+tenant-A,2026-04-01,0,0,0,0,0,0,4,0,0,0,,2026-04-02T10:00:00.000Z
+tenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,2026-04-02T10:00:00.000Z
+tenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z
+```
 
 ## Daily document
 
