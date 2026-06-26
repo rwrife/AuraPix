@@ -404,6 +404,16 @@ export function createEmbedCspMiddleware(opts: {
    * events as host pages frame AuraPix. When omitted, no event is emitted.
    */
   meteringBus?: { emit?: (e: unknown) => void };
+  /**
+   * Optional branding resolver (issue #187). When set and the tenant has
+   * non-default branding configured, the resolved tokens are surfaced via
+   * `embed.session_started.meta.brandingApplied = true`. The actual
+   * branding payload is delivered to the host page through the
+   * `aurapix:ready` postMessage handshake — this flag is purely for
+   * white-label rollout debugging. Failures fall back to
+   * `brandingApplied: false` and never break CSP enforcement.
+   */
+  loadBrandingApplied?: (tenantId: string) => Promise<boolean>;
 }) {
   // Per (tenantId, origin) dedupe window — see acceptance criteria
   // ("debounced, max 1/min/tenant/origin").
@@ -472,6 +482,18 @@ export function createEmbedCspMiddleware(opts: {
                 if (now - t >= DEDUPE_MS * 5) seen.delete(k);
               }
             }
+            // Issue #187: resolve whether branding tokens will be applied
+            // for this session so hosts can track white-label rollout. The
+            // actual tokens travel via the `aurapix:ready` postMessage
+            // payload, not through metering.
+            let brandingApplied = false;
+            if (opts.loadBrandingApplied) {
+              try {
+                brandingApplied = await opts.loadBrandingApplied(tenantId);
+              } catch (err) {
+                logger.debug({ err, tenantId }, 'Failed to resolve brandingApplied for embed.session_started');
+              }
+            }
             try {
               opts.meteringBus.emit({
                 tenantId,
@@ -479,6 +501,7 @@ export function createEmbedCspMiddleware(opts: {
                 meta: {
                   origin: parentOrigin,
                   userAgent: req.headers['user-agent'] ?? null,
+                  brandingApplied,
                 },
               });
             } catch (err) {

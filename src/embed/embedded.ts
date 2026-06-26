@@ -6,6 +6,7 @@
 import {
   AURAPIX_MESSAGE_TYPES,
   isAuraPixMessage,
+  type AuraPixBrandingTokens,
   type AuraPixInboundMessage,
   type AuraPixOutboundMessage,
 } from './contract.js';
@@ -24,7 +25,15 @@ export interface EmbeddedEmitterOptions {
 }
 
 export interface EmbeddedHandle {
-  ready(): void;
+  /**
+   * Send the `aurapix:ready` handshake to every allowed parent origin.
+   *
+   * Optional `branding` tokens (issue #187) are forwarded verbatim when
+   * provided — the embedded UI is responsible for only passing in
+   * public-safe values resolved server-side. Omit when the tenant has
+   * default branding so the host falls back to its own defaults.
+   */
+  ready(branding?: AuraPixBrandingTokens): void;
   resize(height: number): void;
   emit(name: string, payload?: unknown): void;
   on(
@@ -94,11 +103,12 @@ export function createEmbedded(opts: EmbeddedEmitterOptions): EmbeddedHandle {
   w.addEventListener('message', onMessage);
 
   return {
-    ready() {
+    ready(branding?: AuraPixBrandingTokens) {
       postToParent({
         type: AURAPIX_MESSAGE_TYPES.ready,
         tenantId: opts.tenantId,
         version: opts.version,
+        ...(branding ? { branding } : {}),
       });
     },
     resize(height) {

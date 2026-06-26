@@ -106,7 +106,7 @@ import { createAlbumsRouter } from './routes/albums.js';
 import { createAlbumsV1Router } from './routes/albumsV1.js';
 import { createPhotosListV1Router } from './routes/photosListV1.js';
 import { createComplianceV1Router } from './routes/complianceV1.js';
-import { createBrandingV1Router } from './routes/brandingV1.js';
+import { createBrandingV1Router, loadBrandingTokensForEmbed } from './routes/brandingV1.js';
 import { createTenantUsageRouter } from './routes/tenantUsage.js';
 import { createTenantUsersRouter } from './routes/tenantUsersV1.js';
 import { createTenantAdminRouter } from './routes/tenantAdmin.js';
@@ -181,6 +181,14 @@ const embedCspMiddleware = createEmbedCspMiddleware({
   loadOrigins: (tenantId) => loadAllowedOriginsForTenant(dataAdapter, tenantId),
   reportUriTemplate: '/api/v1/tenants/{tenantId}/embed/csp-report',
   meteringBus: meteringBus as unknown as { emit?: (e: unknown) => void },
+  // Issue #187: surface whether tenant branding will be applied to the
+  // embed session so hosts can debug white-label rollouts. The actual
+  // branding tokens flow through the `aurapix:ready` postMessage payload,
+  // not the metering bus.
+  loadBrandingApplied: async (tenantId) => {
+    const tokens = await loadBrandingTokensForEmbed(dataAdapter, tenantId);
+    return tokens !== null;
+  },
 });
 app.use('/api/v1', embedCspMiddleware);
 app.use('/v1', embedCspMiddleware);

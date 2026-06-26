@@ -4,6 +4,7 @@ import {
   createBrandingV1Router,
   sanitizeHexColor,
   brandingWithDefaults,
+  loadBrandingTokensForEmbed,
   BRANDING_COLLECTION,
   DEFAULT_BRANDING,
   type BrandingRecord,
@@ -187,5 +188,127 @@ describe('PUT /:tenantId/branding', () => {
     expect(res.status).toBe(200);
     expect(res.body.branding.appName).toBe('Acme');
     expect(adapter._store.acme.primaryColor).toBe('#abcdef');
+  });
+});
+
+describe('loadBrandingTokensForEmbed (issue #187)', () => {
+  it('returns null for an unknown tenant', async () => {
+    const adapter = makeAdapter();
+    expect(await loadBrandingTokensForEmbed(adapter, 'unknown')).toBeNull();
+  });
+
+  it('returns null when only default colors and no logo are configured', async () => {
+    // Tenant has a doc but every field is the default — emitting branding
+    // tokens here would be noise. The host should fall back to its own
+    // defaults.
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme',
+        appName: DEFAULT_BRANDING.appName,
+        primaryColor: DEFAULT_BRANDING.primaryColor,
+        accentColor: DEFAULT_BRANDING.accentColor,
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    expect(await loadBrandingTokensForEmbed(adapter, 'acme')).toBeNull();
+  });
+
+  it('returns only non-default tokens for a partially-branded tenant', async () => {
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme',
+        appName: 'Acme',
+        primaryColor: '#abcdef',
+        accentColor: DEFAULT_BRANDING.accentColor,
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    const tokens = await loadBrandingTokensForEmbed(adapter, 'acme');
+    expect(tokens).toEqual({ primaryColor: '#abcdef' });
+  });
+
+  it('returns logoUrl independently of the default-color comparison', async () => {
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme',
+        appName: DEFAULT_BRANDING.appName,
+        primaryColor: DEFAULT_BRANDING.primaryColor,
+        accentColor: DEFAULT_BRANDING.accentColor,
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    const tokens = await loadBrandingTokensForEmbed(adapter, 'acme');
+    expect(tokens).toEqual({ logoUrl: 'https://cdn.example.com/logo.svg' });
+  });
+
+  it('returns all non-default tokens for a fully-branded tenant', async () => {
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme',
+        appName: 'Acme',
+        primaryColor: '#abcdef',
+        accentColor: '#123456',
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    const tokens = await loadBrandingTokensForEmbed(adapter, 'acme');
+    expect(tokens).toEqual({
+      primaryColor: '#abcdef',
+      accentColor: '#123456',
+      logoUrl: 'https://cdn.example.com/logo.svg',
+    });
+  });
+
+  it('never leaks internal fields (tenantId, updatedAt, appName, faviconUrl)', async () => {
+    // Acceptance criteria: snapshot test on payload shape — no
+    // secret/internal fields leaked.
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme',
+        appName: 'Acme',
+        primaryColor: '#abcdef',
+        accentColor: '#123456',
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        faviconUrl: 'https://cdn.example.com/favicon.ico',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    const tokens = await loadBrandingTokensForEmbed(adapter, 'acme');
+    expect(tokens).not.toBeNull();
+    expect(Object.keys(tokens!).sort()).toEqual(['accentColor', 'logoUrl', 'primaryColor']);
+    for (const forbidden of ['tenantId', 'updatedAt', 'appName', 'faviconUrl']) {
+      expect((tokens as Record<string, unknown>)[forbidden]).toBeUndefined();
+    }
+  });
+
+  it('rejects invalid tenant ids without hitting the adapter', async () => {
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme', appName: 'Acme',
+        primaryColor: '#abcdef', accentColor: '#123456',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    expect(await loadBrandingTokensForEmbed(adapter, 'has space')).toBeNull();
+  });
+
+  it('ignores malformed stored colors (defensive)', async () => {
+    const adapter = makeAdapter({
+      acme: {
+        tenantId: 'acme',
+        appName: 'Acme',
+        // Intentionally bogus values — stored data corruption shouldn't
+        // leak through to the embed handshake.
+        primaryColor: 'rgb(255,0,0)',
+        accentColor: '#123',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    const tokens = await loadBrandingTokensForEmbed(adapter, 'acme');
+    // accentColor #123 is a valid hex AND differs from default, so it
+    // flows through; primaryColor is dropped.
+    expect(tokens).toEqual({ accentColor: '#123' });
   });
 });

@@ -99,6 +99,61 @@ export function brandingWithDefaults(tenantId: string, partial: Partial<Branding
   };
 }
 
+/**
+ * Public-safe branding tokens emitted alongside the `aurapix:ready`
+ * handshake (issue #187). Strictly read-only and **only** carries tokens
+ * safe for an untrusted host page — no API keys, no internal IDs, no
+ * Firestore document paths, no `updatedAt`, no `tenantId`.
+ */
+export interface EmbedBrandingTokens {
+  primaryColor?: string;
+  accentColor?: string;
+  logoUrl?: string;
+  fontFamily?: string;
+}
+
+/**
+ * Resolve the branding tokens to embed in the handshake for `tenantId`.
+ * Returns `null` when the tenant has no non-default branding configured
+ * (per issue #187, avoid noise on the wire — absent payload tells the
+ * host to fall back to its own defaults).
+ *
+ * Only public-safe fields are returned; internal record fields
+ * (`tenantId`, `updatedAt`, etc.) are intentionally stripped.
+ */
+export async function loadBrandingTokensForEmbed(
+  dataAdapter: DataAdapter,
+  tenantId: string
+): Promise<EmbedBrandingTokens | null> {
+  if (!isValidTenantId(tenantId)) return null;
+  let stored: BrandingRecord | null = null;
+  try {
+    stored = await dataAdapter.fetchData<BrandingRecord>(BRANDING_COLLECTION, tenantId);
+  } catch (err) {
+    logger.warn({ err, tenantId }, 'Failed to load tenant branding for embed handshake');
+    return null;
+  }
+  if (!stored) return null;
+
+  const tokens: EmbedBrandingTokens = {};
+  const primary = sanitizeHexColor(stored.primaryColor);
+  if (primary && primary !== DEFAULT_BRANDING.primaryColor) {
+    tokens.primaryColor = primary;
+  }
+  const accent = sanitizeHexColor(stored.accentColor);
+  if (accent && accent !== DEFAULT_BRANDING.accentColor) {
+    tokens.accentColor = accent;
+  }
+  if (typeof stored.logoUrl === 'string' && stored.logoUrl.length > 0) {
+    tokens.logoUrl = stored.logoUrl;
+  }
+  // No `fontFamily` field in BrandingRecord today; reserved for future
+  // extension (#132/#135 follow-up) without changing the embed contract.
+
+  if (Object.keys(tokens).length === 0) return null;
+  return tokens;
+}
+
 export interface BrandingRouterOptions {
   /**
    * Authorization gate for PUT. Should return true when the caller has

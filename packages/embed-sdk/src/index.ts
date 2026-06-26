@@ -23,4 +23,5 @@ export type {
   AuraPixTheme,
   AuraPixReadyDetail,
   AuraPixEventName,
+  AuraPixBrandingTokens,
 } from './mount.js';

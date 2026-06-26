@@ -54,6 +54,44 @@ describe('isAuraPixMessage guards', () => {
     expect(isAuraPixResize({ type: 'aurapix:resize', height: 'tall' })).toBe(false);
     expect(isAuraPixEvent({ type: 'aurapix:event' })).toBe(false);
   });
+
+  it('accepts aurapix:ready with optional branding tokens (issue #187)', () => {
+    expect(
+      isAuraPixReady({
+        type: 'aurapix:ready',
+        tenantId: 't',
+        version: '1',
+        branding: { primaryColor: '#2563eb' },
+      })
+    ).toBe(true);
+    expect(
+      isAuraPixReady({
+        type: 'aurapix:ready',
+        tenantId: 't',
+        version: '1',
+        branding: {},
+      })
+    ).toBe(true);
+  });
+
+  it('rejects aurapix:ready with malformed branding payload', () => {
+    expect(
+      isAuraPixReady({
+        type: 'aurapix:ready',
+        tenantId: 't',
+        version: '1',
+        branding: { primaryColor: 42 },
+      })
+    ).toBe(false);
+    expect(
+      isAuraPixReady({
+        type: 'aurapix:ready',
+        tenantId: 't',
+        version: '1',
+        branding: 'not-an-object',
+      })
+    ).toBe(false);
+  });
 });
 
 describe('createEmbedHost', () => {
@@ -94,6 +132,51 @@ describe('createEmbedHost', () => {
     expect(seen[0]).toMatchObject({ type: 'aurapix:ready', tenantId: 'acme' });
 
     unsub();
+    handle.dispose();
+  });
+
+  it('forwards branding tokens end-to-end from embedded ready() to host listener (issue #187)', () => {
+    // The handshake is fan-out from the embedded UI to every allowed
+    // parent origin. From the host side we just need to verify that an
+    // `aurapix:ready` with a `branding` block is delivered intact to the
+    // listener (i.e. createEmbedHost's outbound filter doesn't strip the
+    // additive field).
+    const fakeIframeWin: FakeWindow = {};
+    const iframe = makeIframe(fakeIframeWin);
+    const handle = createEmbedHost({
+      iframe,
+      targetOrigin: 'https://app.aurapix.com',
+    });
+    const seen: AuraPixOutboundMessage[] = [];
+    handle.on((msg) => seen.push(msg));
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          type: 'aurapix:ready',
+          tenantId: 'acme',
+          version: '1.0.0',
+          branding: {
+            primaryColor: '#abcdef',
+            accentColor: '#123456',
+            logoUrl: 'https://cdn.example.com/logo.svg',
+          },
+        },
+        origin: 'https://app.aurapix.com',
+        source: fakeIframeWin as unknown as Window,
+      })
+    );
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      type: 'aurapix:ready',
+      tenantId: 'acme',
+      branding: {
+        primaryColor: '#abcdef',
+        accentColor: '#123456',
+        logoUrl: 'https://cdn.example.com/logo.svg',
+      },
+    });
     handle.dispose();
   });
 
@@ -251,6 +334,92 @@ describe('createEmbedded', () => {
       'https://host-b.example.com'
     );
 
+    handle.dispose();
+  });
+
+  it('ready(branding) includes optional branding tokens (issue #187)', () => {
+    const parentPost = vi.fn();
+    const parentRef = { postMessage: parentPost };
+    const fakeWindow = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      parent: parentRef,
+    } as unknown as Window;
+
+    const handle = createEmbedded({
+      tenantId: 'acme',
+      version: '1.0.0',
+      allowedOrigins: ['https://host.example.com'],
+      window: fakeWindow,
+    });
+
+    // No branding — field is omitted from the envelope so hosts on the
+    // wire-snapshot path stay backward-compatible.
+    handle.ready();
+    expect(parentPost).toHaveBeenCalledWith(
+      { type: 'aurapix:ready', tenantId: 'acme', version: '1.0.0' },
+      'https://host.example.com'
+    );
+    expect((parentPost.mock.calls[0][0] as Record<string, unknown>).branding).toBeUndefined();
+
+    parentPost.mockClear();
+    handle.ready({ primaryColor: '#abcdef', logoUrl: 'https://cdn.example.com/logo.svg' });
+    expect(parentPost).toHaveBeenCalledWith(
+      {
+        type: 'aurapix:ready',
+        tenantId: 'acme',
+        version: '1.0.0',
+        branding: { primaryColor: '#abcdef', logoUrl: 'https://cdn.example.com/logo.svg' },
+      },
+      'https://host.example.com'
+    );
+
+    handle.dispose();
+  });
+
+  it('does not leak internal record fields into the branding payload (snapshot)', () => {
+    // Snapshot test on the payload shape — part of the issue #187
+    // acceptance criteria: no secret/internal fields are leaked through
+    // the handshake.
+    const parentPost = vi.fn();
+    const parentRef = { postMessage: parentPost };
+    const fakeWindow = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      parent: parentRef,
+    } as unknown as Window;
+
+    const handle = createEmbedded({
+      tenantId: 'acme',
+      version: '1.0.0',
+      allowedOrigins: ['https://host.example.com'],
+      window: fakeWindow,
+    });
+    handle.ready({
+      primaryColor: '#2563eb',
+      accentColor: '#7c3aed',
+      logoUrl: 'https://cdn.example.com/logo.svg',
+      fontFamily: 'Inter, system-ui, sans-serif',
+    });
+
+    expect(parentPost).toHaveBeenCalledTimes(1);
+    const sent = parentPost.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(sent).sort()).toEqual([
+      'branding',
+      'tenantId',
+      'type',
+      'version',
+    ]);
+    expect(Object.keys(sent.branding as object).sort()).toEqual([
+      'accentColor',
+      'fontFamily',
+      'logoUrl',
+      'primaryColor',
+    ]);
+    // Explicitly assert none of the internal record fields leak.
+    for (const forbidden of ['tenantId', 'updatedAt', 'apiKey', 'faviconUrl']) {
+      expect((sent.branding as Record<string, unknown>)[forbidden]).toBeUndefined();
+    }
     handle.dispose();
   });
 
