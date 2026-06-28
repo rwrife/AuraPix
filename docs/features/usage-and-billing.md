@@ -61,6 +61,84 @@ tenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,2026-04-02T10:00:00.000Z
 tenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z
 ```
 
+## Month-to-date summary (issue #188)
+
+Hosts that just want to render an in-app "Usage this month" widget can call
+the summary endpoint instead of fanning out up to 31 reads against `/usage`:
+
+```
+GET /api/v1/tenants/{tenantId}/usage/current
+```
+
+- **Auth:** identical to `/usage` — tenant owner (Bearer) **or** a host API
+  key with the `usage.read` scope (no new scope).
+- **Period window:** `periodStart` is the first day of the current UTC
+  month and `periodEnd` is today's UTC date. The endpoint never looks
+  ahead to days that have not yet happened.
+- **Zero activity:** the response is well-defined for tenants with zero
+  activity — every counter is `0`, not a `404`.
+- **Cross-tenant access:** always returns `403 FORBIDDEN`, same as
+  `/usage`.
+
+### Counter semantics
+
+The response carries exactly the **summable** counters of `usageDaily`
+(`storageBytesDelta`, `imagesUploaded`, `imagesProcessed`,
+`signedUrlsIssued`, `editsApplied`, `tagsApplied`, `apiCalls`,
+`exportBytes`, `activeUsers`, `rateLimited`) plus `tenantId`,
+`periodStart`, `periodEnd`, and a `generatedAt` timestamp.
+
+Fields **excluded** from the summary:
+
+- `storageBytesTotal` — point-in-time snapshot, not summable.
+- `appliedEventIds` — idempotency bookkeeping, not a billing field.
+- `updatedAt` — per-day metadata; the summary has its own
+  `generatedAt` instead.
+
+`activeUsers` is the **distinct** end-user count for the period in
+production (de-duplicated across days via the `DistinctActiveUsersQuery`
+capability on `UserActiveDailyStore`). When the capability is not wired
+— e.g. during local-dev with only the in-memory store — the field falls
+back to summing per-day `activeUsers`, which is a conservative upper
+bound. The behaviour is identical to how the daily doc's per-day
+`activeUsers` is computed (driven by `user.active` metering events, not
+re-emitted on every request).
+
+### Caching
+
+- Each tenant's summary is cached in-memory for **~60 seconds** to keep
+  cost predictable when hosts hit the endpoint on every dashboard load.
+- The cache is **invalidated explicitly** when `usageDaily` is written
+  through the same process (`router.invalidateTenantCurrentCache(...)`).
+- In a multi-process deployment the eventual-consistency window is
+  bounded by the 60s TTL; hosts that need stricter freshness should
+  cache-bust on their side.
+- The response sets `Cache-Control: private, max-age=60` so a fronting
+  CDN can also cache for ~60s without serving cross-tenant data.
+- The `X-Cache: HIT|MISS` response header is diagnostic only — not part
+  of the billing contract.
+
+### Example payload
+
+```json
+{
+  "tenantId": "tenant-A",
+  "periodStart": "2026-04-01",
+  "periodEnd": "2026-04-15",
+  "generatedAt": "2026-04-15T12:34:56.000Z",
+  "storageBytesDelta": 5242880,
+  "imagesUploaded": 42,
+  "imagesProcessed": 91,
+  "signedUrlsIssued": 314,
+  "editsApplied": 8,
+  "tagsApplied": 17,
+  "apiCalls": 1023,
+  "exportBytes": 1048576,
+  "activeUsers": 6,
+  "rateLimited": 0
+}
+```
+
 ## Daily document
 
 Stored at `tenants/{tenantId}/usageDaily/{YYYY-MM-DD}` in Firestore.
