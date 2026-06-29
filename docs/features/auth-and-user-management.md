@@ -77,3 +77,29 @@ All three events are catalogued in
 `usage.read` and `tenants.read`). Granted via the existing admin endpoint
 (`POST /internal/tenants/:tenantId/api-keys`).
 
+---
+
+## Host-issued embed session tokens (SSO)
+
+_Tracking issue: [#195](https://github.com/rwrife/AuraPix/issues/195)._
+
+For host applications embedding AuraPix, asking already-signed-in end
+users to authenticate a second time with Firebase Auth is a major
+friction point. The embed session-token flow lets the host backend mint a
+short-lived signed credential the embedded UI can exchange for a real
+server-side session — no Firebase login prompt is shown.
+
+| Method | Path | Scope | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/v1/tenants/{tenantId}/embed/session-tokens` | `tenants.write` | Mint a short-lived JWT for an already-authenticated end user. Body: `{ userId, role?, ttlSeconds? }` (`ttlSeconds` ≤ 300, default 120). The `userId` MUST already be a tenant member; non-members get `409 user_not_member`. |
+| `POST` | `/v1/tenants/{tenantId}/embed/session-exchange` | (token in body) | Iframe-side redemption. Validates the JWT and returns the user's identity claims plus an optional opaque `session` payload (e.g. a Firebase custom token). Cross-tenant tokens are rejected; replays return `401 token_replayed`. |
+
+Tokens are signed with the tenant's existing webhook signing secret
+(issue #161), so secret rotation inherits the same dual-secret grace
+window. The full handshake — token mint, postMessage forwarding, exchange
+— is documented in [`embed-handshake.md`](./embed-handshake.md#host-issued-session-tokens-sso).
+
+Membership is re-validated at exchange time, so revoking a user (per the
+DELETE endpoint above) immediately invalidates any outstanding embed
+tokens for that user.
+

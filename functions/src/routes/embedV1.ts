@@ -3,6 +3,15 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import { recordAuditEvent } from '../services/audit/AuditService.js';
+import {
+  EMBED_SESSION_TOKEN_AUDIENCE,
+  EMBED_SESSION_TOKEN_DEFAULT_TTL_SECONDS,
+  EMBED_SESSION_TOKEN_MAX_TTL_SECONDS,
+  hashJtiForMetering,
+  mintEmbedSessionToken,
+  verifyAndRedeemEmbedSessionToken,
+} from '../services/host/embedSessionTokenService.js';
+import { TENANT_MEMBER_ROLES } from '../models/TenantMember.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -99,6 +108,33 @@ export const EmbedAllowedOriginsSchema = z.object({
     ),
 });
 
+/**
+ * Body schema for `POST /v1/tenants/:tenantId/embed/session-tokens` (issue
+ * #195). Hosts pass `userId` (and optionally `role`/`ttlSeconds`) for an
+ * already-authenticated end user; the response is a short-lived signed
+ * token the host SDK forwards into the iframe.
+ */
+export const EmbedSessionTokenInputSchema = z.object({
+  userId: z.string().min(1).max(256),
+  role: z.enum(TENANT_MEMBER_ROLES as readonly [string, ...string[]]).optional(),
+  ttlSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(EMBED_SESSION_TOKEN_MAX_TTL_SECONDS)
+    .optional(),
+});
+
+/**
+ * Body schema for the iframe-side exchange endpoint
+ * `POST /v1/tenants/:tenantId/embed/session-exchange` — the embedded
+ * AuraPix UI POSTs the token it received from the host SDK and gets back
+ * a server-side session.
+ */
+export const EmbedSessionExchangeSchema = z.object({
+  token: z.string().min(1).max(4096),
+});
+
 interface ApiErrorPayload {
   error: {
     code: string;
@@ -154,6 +190,24 @@ export interface EmbedRouterOptions {
    * production this is wired to the host-API-key middleware.
    */
   canWriteEmbedConfig?: (req: Request, tenantId: string) => boolean | Promise<boolean>;
+
+  /**
+   * Optional callback invoked after a successful embed session-token
+   * exchange (issue #195). Lets the server.ts wiring layer mint a
+   * Firebase custom token, set a session cookie, or otherwise establish
+   * an authenticated server-side session for the user — without this
+   * route needing to know about Firebase Admin.
+   *
+   * Returned object is echoed back in the exchange response under the
+   * `session` field; callers can attach things like a Firebase custom
+   * token the SDK will sign in with (`signInWithCustomToken`) so the
+   * embedded UI never shows the Firebase login prompt.
+   */
+  issueEmbedSession?: (input: {
+    tenantId: string;
+    userId: string;
+    role: string;
+  }) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 }
 
 export function createEmbedV1Router(
@@ -359,6 +413,232 @@ export function createEmbedV1Router(
       res.status(204).end();
     } catch (error) {
       logger.debug({ err: error }, 'Failed to process embed session-end');
+      next(error);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Embed session tokens (issue #195) — host-side SSO mint endpoint.
+  // ---------------------------------------------------------------------
+  // Host-API-key only with the `tenants.write` scope. The same `canWrite`
+  // gate that protects the allowed-origins config is reused so hosts only
+  // need to manage one key/scope for the whole embed surface.
+  router.post('/:tenantId/embed/session-tokens', async (req, res, next) => {
+    try {
+      const tenantId = req.params.tenantId;
+      if (!isValidTenantId(tenantId)) {
+        sendError(res, 400, 'INVALID_TENANT_ID', 'tenantId must match [a-zA-Z0-9_-]{1,64}');
+        return;
+      }
+
+      const allowed = await canWrite(req, tenantId);
+      if (!allowed) {
+        sendError(
+          res,
+          403,
+          'FORBIDDEN',
+          'tenants.write scope required to mint embed session tokens'
+        );
+        return;
+      }
+
+      const parsed = EmbedSessionTokenInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        sendError(res, 400, 'INVALID_BODY', 'Invalid embed session token request', {
+          issues: parsed.error.issues,
+        });
+        return;
+      }
+
+      const result = await mintEmbedSessionToken(dataAdapter, {
+        tenantId,
+        userId: parsed.data.userId,
+        role: parsed.data.role as never,
+        ttlSeconds: parsed.data.ttlSeconds ?? EMBED_SESSION_TOKEN_DEFAULT_TTL_SECONDS,
+      });
+
+      if ('code' in result) {
+        switch (result.code) {
+          case 'invalid_input':
+            sendError(res, 400, 'INVALID_BODY', result.message);
+            return;
+          case 'user_not_member':
+            // Acceptance criterion: 409 user_not_member when the userId is
+            // not already a member of the tenant. Hosts must call the
+            // tenant-users API first.
+            sendError(res, 409, 'user_not_member', result.message);
+            return;
+          case 'no_signing_secret':
+            sendError(res, 409, 'no_signing_secret', result.message);
+            return;
+          default: {
+            const _exhaustive: never = result;
+            void _exhaustive;
+            sendError(res, 500, 'INTERNAL', 'Unable to mint session token');
+            return;
+          }
+        }
+      }
+
+      // Emit metering event for hosts that bill per session.
+      const meteringBus = req.app.locals.meteringBus as
+        | { emit?: (e: unknown) => void }
+        | undefined;
+      try {
+        meteringBus?.emit?.({
+          tenantId,
+          type: 'embed.session.minted',
+          meta: {
+            userId: parsed.data.userId,
+            role: result.role,
+            jtiHash: hashJtiForMetering(result.jti),
+            ttlSeconds:
+              parsed.data.ttlSeconds ?? EMBED_SESSION_TOKEN_DEFAULT_TTL_SECONDS,
+          },
+        });
+      } catch (err) {
+        logger.debug({ err, tenantId }, 'Failed to emit embed.session.minted');
+      }
+
+      // Audit — host-issued credentials are sensitive enough that we leave a
+      // record per mint. The token itself is NEVER logged; only the jti hash
+      // and userId.
+      try {
+        await recordAuditEvent(dataAdapter, {
+          eventType: 'embed.session_token.minted',
+          actorId: req.tenant?.keyId ?? req.user?.uid ?? 'host-api-key',
+          targetId: parsed.data.userId,
+          createdAt: new Date().toISOString(),
+          metadata: {
+            tenantId,
+            jtiHash: hashJtiForMetering(result.jti),
+            role: result.role,
+            expiresAt: result.expiresAt,
+          },
+        });
+      } catch (auditErr) {
+        logger.warn(
+          { err: auditErr, tenantId },
+          'Failed to record embed session token mint audit event'
+        );
+      }
+
+      res.status(201).json({
+        token: result.token,
+        expiresAt: result.expiresAt,
+        audience: EMBED_SESSION_TOKEN_AUDIENCE,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Embed session exchange (issue #195) — iframe-side redemption.
+  // ---------------------------------------------------------------------
+  // The embedded AuraPix UI calls this with the token it received via the
+  // `aurapix:session` postMessage. We verify the JWT, enforce tenant
+  // binding (token tenant must match the iframe's tenant context), and
+  // record the jti to defeat replay. On success we return the user/role
+  // claims; an enclosing session-issue middleware (Firebase custom token
+  // or session cookie) is wired by `server.ts` so AuraPix can establish
+  // a real session without showing the Firebase login UI.
+  //
+  // Auth: NONE on the request itself — the token IS the credential. Cross
+  // tenant relay is rejected at exchange time because `expectedTenantId`
+  // comes from the URL path, not the token.
+  router.post('/:tenantId/embed/session-exchange', async (req, res, next) => {
+    try {
+      const tenantId = req.params.tenantId;
+      if (!isValidTenantId(tenantId)) {
+        sendError(res, 400, 'INVALID_TENANT_ID', 'tenantId must match [a-zA-Z0-9_-]{1,64}');
+        return;
+      }
+
+      const parsed = EmbedSessionExchangeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        sendError(res, 400, 'INVALID_BODY', 'Invalid embed session exchange payload', {
+          issues: parsed.error.issues,
+        });
+        return;
+      }
+
+      const verification = await verifyAndRedeemEmbedSessionToken(
+        dataAdapter,
+        parsed.data.token,
+        { expectedTenantId: tenantId }
+      );
+
+      if (!verification.ok) {
+        switch (verification.code) {
+          case 'tenant_mismatch':
+            sendError(res, 403, 'tenant_mismatch', verification.message);
+            return;
+          case 'token_expired':
+            sendError(res, 401, 'token_expired', verification.message);
+            return;
+          case 'token_replayed':
+            sendError(res, 401, 'token_replayed', verification.message);
+            return;
+          case 'user_not_member':
+            sendError(res, 409, 'user_not_member', verification.message);
+            return;
+          case 'invalid_token':
+          default:
+            sendError(res, 401, 'invalid_token', verification.message);
+            return;
+        }
+      }
+
+      const { claims } = verification;
+
+      // Optional invoker hook lets `server.ts` swap in a real session
+      // issuer (Firebase custom token, session cookie, etc.) without this
+      // route having to know about Firebase Admin.
+      let sessionIssued: Record<string, unknown> | null = null;
+      if (options.issueEmbedSession) {
+        try {
+          sessionIssued = await options.issueEmbedSession({
+            tenantId: claims.iss,
+            userId: claims.sub,
+            role: claims.role,
+          });
+        } catch (err) {
+          logger.warn(
+            { err, tenantId },
+            'Failed to issue embed session after token exchange'
+          );
+          sendError(res, 500, 'INTERNAL', 'Unable to establish embed session');
+          return;
+        }
+      }
+
+      const meteringBus = req.app.locals.meteringBus as
+        | { emit?: (e: unknown) => void }
+        | undefined;
+      try {
+        meteringBus?.emit?.({
+          tenantId,
+          type: 'embed.session.exchanged',
+          meta: {
+            userId: claims.sub,
+            role: claims.role,
+            jtiHash: hashJtiForMetering(claims.jti),
+            matchedSecret: verification.matchedSecret,
+          },
+        });
+      } catch (err) {
+        logger.debug({ err, tenantId }, 'Failed to emit embed.session.exchanged');
+      }
+
+      res.status(200).json({
+        tenantId: claims.iss,
+        userId: claims.sub,
+        role: claims.role,
+        expiresAt: new Date(claims.exp * 1000).toISOString(),
+        session: sessionIssued,
+      });
+    } catch (error) {
       next(error);
     }
   });

@@ -5,6 +5,7 @@ import {
   isAuraPixReady,
   isAuraPixResize,
   isAuraPixEvent,
+  isAuraPixSession,
   AURAPIX_MESSAGE_TYPES,
   type AuraPixOutboundMessage,
   type AuraPixInboundMessage,
@@ -301,6 +302,127 @@ describe('createEmbedded', () => {
 
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ type: 'aurapix:set-theme', theme: 'dark' });
+    handle.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #195: host-issued embed session token forwarding.
+// ---------------------------------------------------------------------------
+
+describe('isAuraPixSession guard', () => {
+  it('accepts a well-formed compact JWT', () => {
+    expect(
+      isAuraPixSession({ type: 'aurapix:session', token: 'aaa.bbb.ccc' })
+    ).toBe(true);
+  });
+
+  it('rejects non-JWT-shaped tokens and wrong-type messages', () => {
+    expect(isAuraPixSession({ type: 'aurapix:session', token: '' })).toBe(false);
+    expect(isAuraPixSession({ type: 'aurapix:session', token: 'noDots' })).toBe(
+      false
+    );
+    expect(
+      isAuraPixSession({ type: 'aurapix:session', token: 'a.b.c.d' })
+    ).toBe(false);
+    expect(isAuraPixSession({ type: 'aurapix:ready', token: 'a.b.c' })).toBe(
+      false
+    );
+    expect(isAuraPixSession(null)).toBe(false);
+  });
+});
+
+describe('createEmbedHost — sessionToken (issue #195)', () => {
+  function makeFakeIframe(post: ReturnType<typeof vi.fn>): HTMLIFrameElement {
+    const iframe = document.createElement('iframe');
+    const fakeWin = { postMessage: post, close: () => {} } as unknown as Window;
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: fakeWin,
+      configurable: true,
+    });
+    document.body.appendChild(iframe);
+    return iframe;
+  }
+
+  it('forwards the queued sessionToken on aurapix:ready', () => {
+    const post = vi.fn();
+    const iframe = makeFakeIframe(post);
+    const handle = createEmbedHost({
+      iframe,
+      targetOrigin: 'https://app.aurapix.com',
+      sessionToken: 'aaa.bbb.ccc',
+    });
+
+    // Simulate aurapix:ready from the iframe.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'aurapix:ready', tenantId: 'acme', version: '1.0.0' },
+        origin: 'https://app.aurapix.com',
+        source: iframe.contentWindow as unknown as Window,
+      })
+    );
+
+    expect(post).toHaveBeenCalledWith(
+      { type: AURAPIX_MESSAGE_TYPES.session, token: 'aaa.bbb.ccc' },
+      'https://app.aurapix.com'
+    );
+
+    handle.dispose();
+  });
+
+  it('does not forward the token if ready never arrives', () => {
+    const post = vi.fn();
+    const iframe = makeFakeIframe(post);
+    const handle = createEmbedHost({
+      iframe,
+      targetOrigin: 'https://app.aurapix.com',
+      sessionToken: 'aaa.bbb.ccc',
+    });
+    expect(post).not.toHaveBeenCalled();
+    handle.dispose();
+  });
+
+  it('sendSessionToken queues before ready and sends immediately after', () => {
+    const post = vi.fn();
+    const iframe = makeFakeIframe(post);
+    const handle = createEmbedHost({
+      iframe,
+      targetOrigin: 'https://app.aurapix.com',
+    });
+
+    handle.sendSessionToken('xxx.yyy.zzz');
+    expect(post).not.toHaveBeenCalled();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'aurapix:ready', tenantId: 'acme', version: '1.0.0' },
+        origin: 'https://app.aurapix.com',
+        source: iframe.contentWindow as unknown as Window,
+      })
+    );
+    expect(post).toHaveBeenCalledWith(
+      { type: AURAPIX_MESSAGE_TYPES.session, token: 'xxx.yyy.zzz' },
+      'https://app.aurapix.com'
+    );
+
+    // After ready, calls send immediately.
+    post.mockClear();
+    handle.sendSessionToken('ddd.eee.fff');
+    expect(post).toHaveBeenCalledWith(
+      { type: AURAPIX_MESSAGE_TYPES.session, token: 'ddd.eee.fff' },
+      'https://app.aurapix.com'
+    );
+
+    handle.dispose();
+  });
+
+  it('sendSessionToken rejects empty tokens', () => {
+    const iframe = makeFakeIframe(vi.fn());
+    const handle = createEmbedHost({
+      iframe,
+      targetOrigin: 'https://app.aurapix.com',
+    });
+    expect(() => handle.sendSessionToken('')).toThrow();
     handle.dispose();
   });
 });
