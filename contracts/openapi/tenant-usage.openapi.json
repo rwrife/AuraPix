@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Tenant Usage API",
-    "version": "0.2.0",
-    "description": "Per-tenant daily usage rollups. The canonical pull surface for host billing systems (issue #133). Supports JSON (default) and CSV (issue #186) via content negotiation."
+    "version": "0.3.0",
+    "description": "Per-tenant daily usage rollups. The canonical pull surface for host billing systems (issue #133). Supports JSON (default) and CSV (issue #186) via content negotiation, plus a month-to-date summary endpoint (issue #188) for in-dashboard widgets."
   },
   "servers": [
     { "url": "https://api.aurapix.example" }
@@ -94,6 +94,63 @@
           },
           "429": {
             "description": "Per-tenant API rate limit exceeded (issue #154). Token-bucket keyed by `tenantId`, applied to all tenant-scoped routes after `resolveTenant`. The response sets the `Retry-After` header (whole seconds) and emits a sampled `rate_limit.exceeded` metering event (\u22641/sec/tenant) which is rolled up into the `rateLimited` counter on the daily usage doc. Defaults: `RATE_LIMIT_RPS=20`, `RATE_LIMIT_BURST=60`; host-key traffic uses `RATE_LIMIT_HOST_RPS=100`. A `tenants_config/{tenantId}` doc may override `rateLimit.rps`/`rateLimit.burst` and takes effect on the next request (no restart).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds the client should wait before retrying. Always \u2265 1.",
+                "schema": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/usage/current": {
+      "get": {
+        "operationId": "getTenantUsageCurrent",
+        "summary": "Month-to-date usage summary for the current UTC month",
+        "description": "Returns a single object with month-to-date totals for the current UTC month (issue #188). Derived by summing the existing `usageDaily` docs server-side, so hosts can render an in-app \"Usage this month\" widget without fanning out 1\u201331 reads on every dashboard load.\n\n**Auth:** identical to `GET /v1/tenants/{tenantId}/usage` \u2014 tenant owner (Bearer) **or** a host API key with the `usage.read` scope. No new scope is introduced.\n\n**Period window:** `periodStart` is the first day of the current UTC month and `periodEnd` is today's UTC date. Both are `YYYY-MM-DD` strings. The response is well-defined for tenants with zero activity (all counters are `0`).\n\n**activeUsers semantics:** when a `DistinctActiveUsersQuery` is wired (production), this is the distinct count of end-users seen across the period \u2014 NOT the sum of per-day distincts. When the capability is not wired, the field falls back to the sum of per-day `activeUsers` (a conservative upper bound) and the discrepancy is documented as an eventual-consistency window.\n\n**Caching:** the response is cached in-memory per tenant for ~60 seconds. The endpoint sets `Cache-Control: max-age=60` so hosts can layer their own CDN. The cache is explicitly busted on writes routed through the same process (`invalidateTenantCurrentCache`); multi-process deployments observe at most a 60s drift.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Month-to-date totals for the tenant.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `private, max-age=60` so a fronting CDN can cache for ~60s without serving cross-tenant data.",
+                "schema": { "type": "string" }
+              },
+              "X-Cache": {
+                "description": "`HIT` if the response was served from the in-memory per-tenant cache, `MISS` if it was freshly summed. Diagnostic only \u2014 not part of the billing contract.",
+                "schema": { "type": "string", "enum": ["HIT", "MISS"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TenantUsageCurrentResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not authorized for this tenant (cross-tenant access or missing `usage.read` scope).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-tenant API rate limit exceeded (issue #154). Same shape as `/usage`.",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds the client should wait before retrying. Always \u2265 1.",
@@ -204,6 +261,65 @@
             "type": "array",
             "items": { "$ref": "#/components/schemas/UsageDailyDoc" }
           }
+        }
+      },
+      "TenantUsageCurrentResponse": {
+        "type": "object",
+        "description": "Month-to-date usage summary for the current UTC month (issue #188). Mirrors the summable counters of `UsageDailyDoc` plus the period window and a generation timestamp. Zero-filled when the tenant has no recorded activity for the month.",
+        "required": [
+          "tenantId",
+          "periodStart",
+          "periodEnd",
+          "generatedAt",
+          "storageBytesDelta",
+          "imagesUploaded",
+          "imagesProcessed",
+          "signedUrlsIssued",
+          "editsApplied",
+          "tagsApplied",
+          "apiCalls",
+          "exportBytes",
+          "activeUsers",
+          "rateLimited"
+        ],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "periodStart": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of the current UTC month (always day 01)."
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date",
+            "description": "Today's UTC date. The endpoint never looks ahead to days that have not yet happened."
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server-side wall-clock timestamp at which the summary was computed. For cached responses, this is the timestamp of the *original* MISS; the `X-Cache: HIT` header signals reuse."
+          },
+          "storageBytesDelta": {
+            "type": "integer",
+            "description": "Sum of per-day `storageBytesDelta` across the period. May be negative if deletes outweigh uploads."
+          },
+          "imagesUploaded": { "type": "integer", "minimum": 0 },
+          "imagesProcessed": { "type": "integer", "minimum": 0 },
+          "signedUrlsIssued": { "type": "integer", "minimum": 0 },
+          "editsApplied": { "type": "integer", "minimum": 0 },
+          "tagsApplied": { "type": "integer", "minimum": 0 },
+          "apiCalls": { "type": "integer", "minimum": 0 },
+          "exportBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total export bytes egressed across the period."
+          },
+          "activeUsers": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Distinct end-users active for the tenant across the period (seat-based billing signal). De-duplicated across days when the production `DistinctActiveUsersQuery` capability is wired; falls back to the sum of per-day distincts (a conservative upper bound) otherwise."
+          },
+          "rateLimited": { "type": "integer", "minimum": 0 }
         }
       },
       "RateLimitErrorResponse": {

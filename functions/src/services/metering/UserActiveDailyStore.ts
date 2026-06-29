@@ -21,7 +21,27 @@ export interface UserActiveDailyStore {
   markIfFirst(tenantId: string, userId: string, utcDay: string): Promise<boolean>;
 }
 
-export class InMemoryUserActiveDailyStore implements UserActiveDailyStore {
+/**
+ * Optional capability — implementations that can enumerate distinct user
+ * IDs across a UTC date range expose this so the month-to-date summary
+ * endpoint (issue #188) can de-duplicate `activeUsers` rather than
+ * naively summing per-day counts.
+ *
+ * Returns the SET of distinct userIds that were active for `tenantId` on
+ * any UTC day in `[from, to]` inclusive. Both `from` and `to` are
+ * `YYYY-MM-DD` UTC dates.
+ */
+export interface DistinctActiveUsersQuery {
+  listDistinctUsers(
+    tenantId: string,
+    from: string,
+    to: string
+  ): Promise<string[]>;
+}
+
+export class InMemoryUserActiveDailyStore
+  implements UserActiveDailyStore, DistinctActiveUsersQuery
+{
   private readonly seen = new Set<string>();
 
   private key(tenantId: string, userId: string, utcDay: string): string {
@@ -37,6 +57,27 @@ export class InMemoryUserActiveDailyStore implements UserActiveDailyStore {
     if (this.seen.has(k)) return false;
     this.seen.add(k);
     return true;
+  }
+
+  async listDistinctUsers(
+    tenantId: string,
+    from: string,
+    to: string
+  ): Promise<string[]> {
+    const prefix = `${tenantId}::`;
+    const distinct = new Set<string>();
+    for (const k of this.seen) {
+      if (!k.startsWith(prefix)) continue;
+      // key = tenantId::userId::utcDay — split from the right so userIds
+      // containing `::` are preserved.
+      const lastSep = k.lastIndexOf('::');
+      if (lastSep < 0) continue;
+      const utcDay = k.slice(lastSep + 2);
+      if (utcDay < from || utcDay > to) continue;
+      const userId = k.slice(prefix.length, lastSep);
+      distinct.add(userId);
+    }
+    return Array.from(distinct);
   }
 
   /** Test helper. */

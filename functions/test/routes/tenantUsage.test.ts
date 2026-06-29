@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import express from 'express';
 import { createTenantUsageRouter, CSV_COLUMNS } from '../../src/routes/tenantUsage.js';
 import { InMemoryDailyDocStore, UsageRollupConsumer } from '../../src/services/metering/UsageRollupConsumer.js';
+import { InMemoryUserActiveDailyStore } from '../../src/services/metering/UserActiveDailyStore.js';
 
 function makeApp(opts: {
   store: InMemoryDailyDocStore;
@@ -9,6 +10,8 @@ function makeApp(opts: {
   tenantId?: string;
   authUserId?: string | null;
   hostScopeChecker?: Parameters<typeof createTenantUsageRouter>[0]['hostScopeChecker'];
+  distinctActiveUsers?: Parameters<typeof createTenantUsageRouter>[0]['distinctActiveUsers'];
+  now?: () => Date;
 }) {
   const app = express();
   app.use(express.json());
@@ -25,6 +28,8 @@ function makeApp(opts: {
       ownsTenant: async (userId, tenantId) =>
         userId === opts.ownerUserId && tenantId === opts.tenantId,
       hostScopeChecker: opts.hostScopeChecker,
+      distinctActiveUsers: opts.distinctActiveUsers,
+      now: opts.now,
     })
   );
   return app;
@@ -397,5 +402,354 @@ describe('GET /v1/tenants/:tenantId/usage — CSV (issue #186)', () => {
     expect(row).toBe(
       '"tenant,with""quotes\nand-commas",2026-04-01,0,0,0,0,0,0,1,0,0,0,,2026-04-01T00:00:00.000Z'
     );
+  });
+});
+
+describe('GET /v1/tenants/:tenantId/usage/current (issue #188)', () => {
+  // Pin "now" to 2026-04-15T12:34:56Z so periodStart=2026-04-01 and periodEnd=2026-04-15.
+  const fixedNow = () => new Date('2026-04-15T12:34:56.000Z');
+
+  it('returns zero-filled totals for a tenant with no activity', async () => {
+    const store = new InMemoryDailyDocStore();
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      tenantId: 'tenant-A',
+      periodStart: '2026-04-01',
+      periodEnd: '2026-04-15',
+      storageBytesDelta: 0,
+      imagesUploaded: 0,
+      imagesProcessed: 0,
+      signedUrlsIssued: 0,
+      editsApplied: 0,
+      tagsApplied: 0,
+      apiCalls: 0,
+      exportBytes: 0,
+      activeUsers: 0,
+      rateLimited: 0,
+    });
+    expect(typeof res.body.generatedAt).toBe('string');
+  });
+
+  it('sums summable counters across a partial month', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    // Three days in the current month with activity.
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 5, occurredAt: '2026-04-02T10:00:00Z' });
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 7, occurredAt: '2026-04-05T10:00:00Z' });
+    await consumer.apply({ tenantId, counter: 'imagesUploaded', value: 3, occurredAt: '2026-04-05T10:00:00Z' });
+    await consumer.apply({ tenantId, counter: 'exportBytes', value: 1024, occurredAt: '2026-04-10T10:00:00Z' });
+    // Activity from the previous month should NOT be included.
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 99, occurredAt: '2026-03-15T10:00:00Z' });
+    // Activity for a different tenant must not bleed in either.
+    await consumer.apply({ tenantId: 'tenant-OTHER', counter: 'apiCalls', value: 50, occurredAt: '2026-04-05T10:00:00Z' });
+
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      tenantId: 'tenant-A',
+      periodStart: '2026-04-01',
+      periodEnd: '2026-04-15',
+      apiCalls: 12, // 5 + 7
+      imagesUploaded: 3,
+      exportBytes: 1024,
+    });
+  });
+
+  it('returns the full month when "now" is the last day', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    // Spread one apiCall across each of 30 days of April 2026.
+    for (let day = 1; day <= 30; day++) {
+      const date = `2026-04-${String(day).padStart(2, '0')}T10:00:00Z`;
+      await consumer.apply({ tenantId, counter: 'apiCalls', value: 1, occurredAt: date });
+    }
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: () => new Date('2026-04-30T23:59:59.000Z'),
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(res.body.periodStart).toBe('2026-04-01');
+    expect(res.body.periodEnd).toBe('2026-04-30');
+    expect(res.body.apiCalls).toBe(30);
+  });
+
+  it('de-duplicates activeUsers across days when a DistinctActiveUsersQuery is wired', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    // Per-day activeUsers counter — naive sum would be 5.
+    await consumer.apply({ tenantId, counter: 'activeUsers', value: 2, occurredAt: '2026-04-02T10:00:00Z' });
+    await consumer.apply({ tenantId, counter: 'activeUsers', value: 2, occurredAt: '2026-04-03T10:00:00Z' });
+    await consumer.apply({ tenantId, counter: 'activeUsers', value: 1, occurredAt: '2026-04-04T10:00:00Z' });
+    // But the actual distinct set across the period is {alice, bob, carol}.
+    const userActive = new InMemoryUserActiveDailyStore();
+    await userActive.markIfFirst(tenantId, 'alice', '2026-04-02');
+    await userActive.markIfFirst(tenantId, 'bob', '2026-04-02');
+    await userActive.markIfFirst(tenantId, 'alice', '2026-04-03'); // duplicate user
+    await userActive.markIfFirst(tenantId, 'carol', '2026-04-03');
+    await userActive.markIfFirst(tenantId, 'bob', '2026-04-04'); // duplicate user
+    // A user from a previous month is out of range.
+    await userActive.markIfFirst(tenantId, 'dave', '2026-03-31');
+    // A user from a different tenant must not leak in.
+    await userActive.markIfFirst('tenant-OTHER', 'eve', '2026-04-05');
+
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: fixedNow,
+      distinctActiveUsers: userActive,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(res.body.activeUsers).toBe(3); // alice, bob, carol — NOT 5
+  });
+
+  it('falls back to summing per-day activeUsers when no DistinctActiveUsersQuery is wired', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    await consumer.apply({ tenantId, counter: 'activeUsers', value: 2, occurredAt: '2026-04-02T10:00:00Z' });
+    await consumer.apply({ tenantId, counter: 'activeUsers', value: 3, occurredAt: '2026-04-03T10:00:00Z' });
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(res.body.activeUsers).toBe(5); // sum, the conservative upper bound
+  });
+
+  it('rejects cross-tenant access with 403', async () => {
+    const store = new InMemoryDailyDocStore();
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId: 'tenant-OTHER',
+      authUserId: ownerUserId,
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects unauthenticated callers when no host scope is granted (403)', async () => {
+    const store = new InMemoryDailyDocStore();
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: null,
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects host API key whose scope check fails (403)', async () => {
+    const store = new InMemoryDailyDocStore();
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: null,
+      hostScopeChecker: async () => false, // explicit deny — missing scope
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('allows host API key with usage.read scope', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 4, occurredAt: '2026-04-05T10:00:00Z' });
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: null,
+      hostScopeChecker: async (_req, t, scope) => t === tenantId && scope === 'usage.read',
+      now: fixedNow,
+    });
+    const res = await req(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(res.body.apiCalls).toBe(4);
+  });
+
+  it('sets Cache-Control: max-age=60 on responses', async () => {
+    const store = new InMemoryDailyDocStore();
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: fixedNow,
+    });
+    const res = await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(res.status).toBe(200);
+    expect(String(res.headers['cache-control'])).toMatch(/max-age=60/);
+  });
+
+  it('caches identical requests for 60s (second call is a HIT, no store re-read)', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 4, occurredAt: '2026-04-05T10:00:00Z' });
+    const app = makeApp({
+      store,
+      ownerUserId,
+      tenantId,
+      authUserId: ownerUserId,
+      now: fixedNow,
+    });
+    const first = await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(first.status).toBe(200);
+    expect(String(first.headers['x-cache'] ?? '')).toBe('MISS');
+
+    // Mutate the store AFTER the first call. With a 60s in-memory cache and
+    // no explicit cache-bust, the second call must see the cached payload.
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 100, occurredAt: '2026-04-05T10:00:00Z' });
+
+    const second = await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(second.status).toBe(200);
+    expect(String(second.headers['x-cache'] ?? '')).toBe('HIT');
+    const body = JSON.parse(second.body);
+    expect(body.apiCalls).toBe(4); // stale, as documented
+  });
+
+  it('exposes invalidateTenantCurrentCache so writers can bust the cache', async () => {
+    const store = new InMemoryDailyDocStore();
+    const consumer = new UsageRollupConsumer(store);
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 4, occurredAt: '2026-04-05T10:00:00Z' });
+    // Build the router directly so we can grab the invalidator handle.
+    const router = createTenantUsageRouter({
+      store,
+      ownsTenant: async (uid, tid) => uid === ownerUserId && tid === tenantId,
+      now: fixedNow,
+    }) as ReturnType<typeof createTenantUsageRouter> & {
+      invalidateTenantCurrentCache?: (tenantId: string) => void;
+    };
+    expect(typeof router.invalidateTenantCurrentCache).toBe('function');
+
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = { uid: ownerUserId };
+      next();
+    });
+    app.use('/api/v1/tenants', router);
+
+    const first = await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(JSON.parse(first.body).apiCalls).toBe(4);
+    // Write more, then explicitly bust the cache.
+    await consumer.apply({ tenantId, counter: 'apiCalls', value: 6, occurredAt: '2026-04-05T10:00:00Z' });
+    router.invalidateTenantCurrentCache!(tenantId);
+
+    const second = await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    expect(String(second.headers['x-cache'] ?? '')).toBe('MISS');
+    expect(JSON.parse(second.body).apiCalls).toBe(10);
+  });
+
+  it('caches per-tenant — invalidating one tenant does not affect another', async () => {
+    const store = new InMemoryDailyDocStore();
+    const router = createTenantUsageRouter({
+      store,
+      ownsTenant: async () => true, // simplify — any user owns any tenant
+      now: fixedNow,
+    }) as ReturnType<typeof createTenantUsageRouter> & {
+      invalidateTenantCurrentCache?: (tenantId: string) => void;
+    };
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = { uid: 'u' };
+      next();
+    });
+    app.use('/api/v1/tenants', router);
+
+    await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    await rawReq(app, '/api/v1/tenants/tenant-B/usage/current');
+
+    router.invalidateTenantCurrentCache!('tenant-A');
+
+    const aRes = await rawReq(app, '/api/v1/tenants/tenant-A/usage/current');
+    const bRes = await rawReq(app, '/api/v1/tenants/tenant-B/usage/current');
+    expect(String(aRes.headers['x-cache'])).toBe('MISS'); // busted
+    expect(String(bRes.headers['x-cache'])).toBe('HIT'); // still cached
+  });
+
+  it('helper functions: currentUtcMonthRange and sumCounters', async () => {
+    const { currentUtcMonthRange, sumCounters } = (
+      await import('../../src/routes/tenantUsage.js')
+    ).__test;
+    // currentUtcMonthRange: leading zero on single-digit month & day.
+    expect(currentUtcMonthRange(new Date('2026-01-05T00:00:00Z'))).toEqual({
+      periodStart: '2026-01-01',
+      periodEnd: '2026-01-05',
+    });
+    expect(currentUtcMonthRange(new Date('2026-12-31T23:59:59Z'))).toEqual({
+      periodStart: '2026-12-01',
+      periodEnd: '2026-12-31',
+    });
+    // sumCounters: empty input yields zero-filled totals.
+    expect(sumCounters([])).toMatchObject({
+      apiCalls: 0,
+      imagesUploaded: 0,
+      activeUsers: 0,
+      rateLimited: 0,
+    });
+  });
+});
+
+describe('InMemoryUserActiveDailyStore.listDistinctUsers (issue #188)', () => {
+  it('returns distinct user IDs across an inclusive UTC date range, scoped to the tenant', async () => {
+    const s = new InMemoryUserActiveDailyStore();
+    await s.markIfFirst('tenant-A', 'alice', '2026-04-02');
+    await s.markIfFirst('tenant-A', 'bob', '2026-04-02');
+    await s.markIfFirst('tenant-A', 'alice', '2026-04-03'); // same user, later day
+    await s.markIfFirst('tenant-A', 'carol', '2026-04-15');
+    // Out of range and other tenant — must be excluded.
+    await s.markIfFirst('tenant-A', 'dave', '2026-03-31');
+    await s.markIfFirst('tenant-A', 'eve', '2026-05-01');
+    await s.markIfFirst('tenant-OTHER', 'mallory', '2026-04-10');
+
+    const result = await s.listDistinctUsers('tenant-A', '2026-04-01', '2026-04-15');
+    expect(result.sort()).toEqual(['alice', 'bob', 'carol']);
+  });
+
+  it('preserves userIds containing the "::" separator (split-from-the-right)', async () => {
+    const s = new InMemoryUserActiveDailyStore();
+    await s.markIfFirst('tenant-A', 'foo::bar', '2026-04-02');
+    const result = await s.listDistinctUsers('tenant-A', '2026-04-01', '2026-04-30');
+    expect(result).toEqual(['foo::bar']);
+  });
+
+  it('returns an empty array for tenants with no recorded activity', async () => {
+    const s = new InMemoryUserActiveDailyStore();
+    const result = await s.listDistinctUsers('tenant-A', '2026-04-01', '2026-04-30');
+    expect(result).toEqual([]);
   });
 });
