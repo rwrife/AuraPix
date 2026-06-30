@@ -529,6 +529,16 @@ app.use(
   embedRouter
 );
 
+// Also mount under `/v1/tenants` for the documented OpenAPI URL
+// (embed session tokens / session-exchange — issue #195). The two
+// mounts share the same router instance so the wiring stays in lockstep.
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  embedRouter
+);
+
 app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,

@@ -45,7 +45,7 @@
  *
  * Use a date string so the value is human-readable in logs.
  */
-export const CATALOG_VERSION = '2026-06-20';
+export const CATALOG_VERSION = '2026-06-29';
 
 /**
  * JSON Schema describing the `meta` payload for a single event type.
@@ -408,6 +408,32 @@ export const EVENT_CATALOG = [
       blockedUri: S_STRING,
       documentUri: S_STRING,
       violatedDirective: S_STRING,
+    }),
+  },
+  {
+    name: 'embed.session.minted',
+    version: 1,
+    billable: false,
+    description:
+      'Host minted an embed session token via POST /v1/tenants/{tenantId}/embed/session-tokens (issue #195). Useful for billing per-session pricing models.',
+    schema: metaSchema({
+      userId: S_STRING,
+      role: S_STRING,
+      jtiHash: S_STRING,
+      ttlSeconds: S_INTEGER,
+    }),
+  },
+  {
+    name: 'embed.session.exchanged',
+    version: 1,
+    billable: false,
+    description:
+      'Embedded iframe successfully redeemed an embed session token — the meaningful "active embedded user" signal that complements `user.active` with embed context (issue #195).',
+    schema: metaSchema({
+      userId: S_STRING,
+      role: S_STRING,
+      jtiHash: S_STRING,
+      matchedSecret: { type: 'string', enum: ['current', 'previous'] },
     }),
   },
   {

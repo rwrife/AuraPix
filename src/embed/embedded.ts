@@ -78,7 +78,8 @@ export function createEmbedded(opts: EmbeddedEmitterOptions): EmbeddedHandle {
     const t = event.data.type;
     if (
       t !== AURAPIX_MESSAGE_TYPES.setTheme &&
-      t !== AURAPIX_MESSAGE_TYPES.navigate
+      t !== AURAPIX_MESSAGE_TYPES.navigate &&
+      t !== AURAPIX_MESSAGE_TYPES.session
     ) {
       return;
     }

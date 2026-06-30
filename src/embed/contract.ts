@@ -43,6 +43,24 @@ export interface AuraPixNavigateMessage {
   path: string;
 }
 
+/**
+ * Host → embedded: forward a host-issued embed session token (issue #195).
+ *
+ * Sent by the host SDK as the first `postMessage` after the embedded UI
+ * announces `aurapix:ready`. The embedded UI POSTs the token to
+ * `/v1/tenants/{tenantId}/embed/session-exchange` to mint a server-side
+ * session without showing the Firebase login UI.
+ */
+export interface AuraPixSessionMessage {
+  type: 'aurapix:session';
+  /**
+   * Compact JWT minted by the host backend via
+   * `POST /v1/tenants/{tenantId}/embed/session-tokens`. Single use,
+   * short-lived (TTL ≤ 300s), bound to a specific tenant.
+   */
+  token: string;
+}
+
 export type AuraPixOutboundMessage =
   | AuraPixReadyMessage
   | AuraPixResizeMessage
@@ -50,7 +68,8 @@ export type AuraPixOutboundMessage =
 
 export type AuraPixInboundMessage =
   | AuraPixSetThemeMessage
-  | AuraPixNavigateMessage;
+  | AuraPixNavigateMessage
+  | AuraPixSessionMessage;
 
 export type AuraPixMessage = AuraPixOutboundMessage | AuraPixInboundMessage;
 
@@ -62,6 +81,7 @@ export const AURAPIX_MESSAGE_TYPES = {
   event: 'aurapix:event',
   setTheme: 'aurapix:set-theme',
   navigate: 'aurapix:navigate',
+  session: 'aurapix:session',
 } as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -120,5 +140,24 @@ export function isAuraPixNavigate(
     value.type === AURAPIX_MESSAGE_TYPES.navigate &&
     typeof value.path === 'string' &&
     value.path.startsWith('/')
+  );
+}
+
+/**
+ * Type guard for the host-issued embed session token forwarded over
+ * postMessage (issue #195). Validates structure only — the token itself
+ * is verified server-side at /v1/tenants/{tenantId}/embed/session-exchange.
+ */
+export function isAuraPixSession(
+  value: unknown
+): value is AuraPixSessionMessage {
+  return (
+    isPlainObject(value) &&
+    value.type === AURAPIX_MESSAGE_TYPES.session &&
+    typeof value.token === 'string' &&
+    value.token.length > 0 &&
+    // Compact JWTs are header.payload.signature — reject obvious garbage
+    // early so the embedded UI doesn't waste a network round-trip.
+    value.token.split('.').length === 3
   );
 }

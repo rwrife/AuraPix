@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AuraPix Embed Handshake API",
-    "version": "0.1.0",
-    "description": "Per-tenant allowed-origins configuration for embedding AuraPix in host applications. Drives the server-emitted `Content-Security-Policy: frame-ancestors` header and the documented postMessage handshake. See `docs/features/embed-handshake.md`."
+    "version": "0.2.0",
+    "description": "Per-tenant allowed-origins configuration and host-issued session tokens for embedding AuraPix in host applications. Drives the server-emitted `Content-Security-Policy: frame-ancestors` header and the documented postMessage handshake. See `docs/features/embed-handshake.md`."
   },
   "paths": {
     "/v1/tenants/{tenantId}/embed/allowed-origins": {
@@ -102,6 +102,136 @@
         }
       }
     },
+    "/v1/tenants/{tenantId}/embed/session-tokens": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "post": {
+        "summary": "Mint a host-issued embed session token",
+        "description": "Mints a short-lived signed JWT for an already-authenticated end user. The host passes this token to the embedded AuraPix iframe via the documented `aurapix:session` postMessage; AuraPix then exchanges it for a server-side session and the user lands logged in (no Firebase login prompt).\n\nThe token is signed with the tenant's existing webhook signing secret (issue #161 \u2014 rotation grace window is honored). Tokens are single-use within their TTL window; replays return `401 token_replayed` at exchange time.\n\nThe `userId` must already be a member of the tenant (provision via `POST /v1/tenants/{tenantId}/users` first). Auto-provisioning is intentionally out of scope.\n\nEmits the `embed.session.minted` metering event.",
+        "security": [{ "hostApiKey": ["tenants.write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EmbedSessionTokenInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token minted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EmbedSessionTokenResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body or tenantId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenants.write scope",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "409": {
+            "description": "User is not a member of the tenant (`user_not_member`) or the tenant has no webhook signing secret yet (`no_signing_secret`).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenantId}/embed/session-exchange": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$" }
+        }
+      ],
+      "post": {
+        "summary": "Exchange a host-issued embed session token for a server-side session",
+        "description": "Called by the embedded AuraPix UI after receiving an `aurapix:session` postMessage from the host page. Validates the JWT signature (against the tenant's webhook signing secret, honoring the rotation grace window), audience, expiry, tenant binding (the URL `tenantId` must equal the token's issuer), and one-time-use `jti`. On success, returns the user identity claims and an optional opaque `session` payload (e.g. a Firebase custom token) the embedded SDK can use to sign in. Emits the `embed.session.exchanged` metering event.\n\nNo Authorization header is required \u2014 the token IS the credential. Cross-tenant tokens are rejected at exchange time.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EmbedSessionExchangeInput" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token verified and session established.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EmbedSessionExchangeResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body or tenantId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is malformed, expired, has an invalid signature, or has already been redeemed (`token_replayed`).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": {
+            "description": "Token tenant does not match the iframe's tenant context (`tenant_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "409": {
+            "description": "User is no longer a member of the tenant (`user_not_member`).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenants/{tenantId}/embed/csp-report": {
       "parameters": [
         {
@@ -144,6 +274,75 @@
       "hostApiKey": { "type": "apiKey", "in": "header", "name": "X-Host-API-Key" }
     },
     "schemas": {
+      "EmbedSessionTokenInput": {
+        "type": "object",
+        "required": ["userId"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Stable user id; must already be a member of the tenant."
+          },
+          "role": {
+            "type": "string",
+            "enum": ["owner", "editor", "viewer"],
+            "description": "Optional role override. Defaults to the membership's stored role."
+          },
+          "ttlSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300,
+            "description": "Token lifetime in seconds. Capped at 300; defaults to 120."
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmbedSessionTokenResponse": {
+        "type": "object",
+        "required": ["token", "expiresAt", "audience"],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Compact JWT (HS256). Forward to the embedded UI via the `aurapix:session` postMessage."
+          },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "audience": {
+            "type": "string",
+            "enum": ["aurapix:embed"]
+          }
+        }
+      },
+      "EmbedSessionExchangeInput": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmbedSessionExchangeResponse": {
+        "type": "object",
+        "required": ["tenantId", "userId", "role", "expiresAt"],
+        "properties": {
+          "tenantId": { "type": "string" },
+          "userId": { "type": "string" },
+          "role": {
+            "type": "string",
+            "enum": ["owner", "editor", "viewer"]
+          },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "session": {
+            "type": ["object", "null"],
+            "description": "Optional opaque payload (e.g. Firebase custom token) the embedded SDK can use to establish a real session without showing the login UI. Present only when the deployment wires `issueEmbedSession`.",
+            "additionalProperties": true
+          }
+        }
+      },
       "EmbedConfigInput": {
         "type": "object",
         "required": ["origins"],
