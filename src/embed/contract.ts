@@ -7,12 +7,37 @@
  * for the full specification.
  */
 
+/**
+ * Public-safe branding tokens delivered alongside the `aurapix:ready`
+ * handshake (issue #187). The server populates this only when the tenant
+ * has any non-default branding configured — when omitted, hosts fall back
+ * to their own defaults. The field is strictly read-only and contains
+ * **only public-safe tokens**: no API keys, no internal IDs, no
+ * server-side identifiers.
+ */
+export interface AuraPixBrandingTokens {
+  /** Hex primary brand color (e.g. `#2563eb`). */
+  primaryColor?: string;
+  /** Hex accent brand color (e.g. `#7c3aed`). */
+  accentColor?: string;
+  /** Public logo URL (typically an HTTPS asset). */
+  logoUrl?: string;
+  /** CSS `font-family` value the host can mirror in its surrounding chrome. */
+  fontFamily?: string;
+}
+
 /** Sent by the embedded UI as soon as it mounts. */
 export interface AuraPixReadyMessage {
   type: 'aurapix:ready';
   tenantId: string;
   /** SemVer string of the embedded build. */
   version: string;
+  /**
+   * Resolved branding tokens for the tenant (issue #187). Optional —
+   * absent when the tenant has not configured any non-default branding.
+   * Strictly read-only and contains only public-safe tokens.
+   */
+  branding?: AuraPixBrandingTokens;
 }
 
 /** Sent by the embedded UI when its content height changes. */
@@ -95,13 +120,44 @@ export function isAuraPixMessage(value: unknown): value is AuraPixMessage {
   return typeof t === 'string' && t.startsWith(AURAPIX_MESSAGE_PREFIX);
 }
 
+/**
+ * Validate that an unknown value is a well-formed `AuraPixBrandingTokens`
+ * object. Empty objects are accepted (every field is optional). Fields
+ * that are present must be strings; unknown extra keys are tolerated
+ * because the message contract is append-only and the host SDK ignores
+ * unknown fields.
+ */
+export function isAuraPixBrandingTokens(
+  value: unknown
+): value is AuraPixBrandingTokens {
+  if (!isPlainObject(value)) return false;
+  for (const key of ['primaryColor', 'accentColor', 'logoUrl', 'fontFamily'] as const) {
+    const v = (value as Record<string, unknown>)[key];
+    if (v !== undefined && typeof v !== 'string') return false;
+  }
+  return true;
+}
+
 export function isAuraPixReady(value: unknown): value is AuraPixReadyMessage {
-  return (
-    isPlainObject(value) &&
-    value.type === AURAPIX_MESSAGE_TYPES.ready &&
-    typeof value.tenantId === 'string' &&
-    typeof value.version === 'string'
-  );
+  if (
+    !isPlainObject(value) ||
+    value.type !== AURAPIX_MESSAGE_TYPES.ready ||
+    typeof value.tenantId !== 'string' ||
+    typeof value.version !== 'string'
+  ) {
+    return false;
+  }
+  // `branding` is optional; if present it must be a well-formed tokens
+  // object. We don't reject extra unknown fields — the protocol is
+  // additive.
+  if (
+    'branding' in value &&
+    value.branding !== undefined &&
+    !isAuraPixBrandingTokens(value.branding)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function isAuraPixResize(value: unknown): value is AuraPixResizeMessage {

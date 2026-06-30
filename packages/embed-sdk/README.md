@@ -81,7 +81,7 @@ npm install @aurapix/embed
 | `aurapixOrigin`      | `string`                                        | `'https://app.aurapix.com'`        | Exact origin; never `'*'`. Override for dev (`http://localhost:5173`).                                  |
 | `embedUrl`           | `string`                                        | `${aurapixOrigin}/embed`           | For non-default embed routes / staging.                                                                |
 | `handshakeTimeoutMs` | `number`                                        | `5000`                             | `onError` fires with `code: 'handshake_timeout'` if no `aurapix:ready` arrives in time.                |
-| `onReady`            | `({ tenantId, version, origin }) => void`       | —                                  | Fires once on successful handshake.                                                                    |
+| `onReady`            | `({ tenantId, version, origin, branding? }) => void` | —                                  | Fires once on successful handshake. The optional `branding` object carries public-safe tenant tokens (issue [#187](https://github.com/rwrife/AuraPix/issues/187)) so the host can paint its own chrome to match on first paint without a second network request. |
 | `onError`            | `(AuraPixError) => void`                        | —                                  | Typed errors. `code` is one of `invalid_element`, `invalid_origin`, `invalid_options`, `handshake_timeout`, `destroyed`. |
 | `onEvent`            | `({ name, payload }) => void`                   | —                                  | Catch-all for every forwarded `aurapix:event`.                                                          |
 | `sandbox`            | `string \| null`                                | conservative default               | Set to `null` to omit the `sandbox` attribute entirely.                                                |
@@ -169,6 +169,9 @@ When the SDK successfully handshakes with AuraPix, the backend emits:
 
 - `embed.session_started` — already in the metering bus today, fired from
   the CSP middleware when an allowed parent origin frames the embed.
+  Carries `meta.brandingApplied: boolean` (issue
+  [#187](https://github.com/rwrife/AuraPix/issues/187)) so hosts can see
+  how often tenant branding actually shipped to the embedded client.
 - `embed.session_ended` — fired by AuraPix when the SDK calls its
   beacon endpoint (`POST /v1/tenants/:tenantId/embed/session-end`),
   either from `handle.destroy()` or the page's `pagehide` event.

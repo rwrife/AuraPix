@@ -110,11 +110,44 @@ shape doesn't match below.
 
 ### Embedded → Host
 
-| `type`             | Payload                            | When emitted                                             |
-| ------------------ | ---------------------------------- | -------------------------------------------------------- |
-| `aurapix:ready`    | `{ tenantId, version }`            | Immediately after the embedded UI mounts                 |
-| `aurapix:resize`   | `{ height }` (CSS px)              | When the content height changes (ResizeObserver)         |
-| `aurapix:event`    | `{ name, payload? }`               | Select user actions (`selection-changed`, `upload-started`, …) |
+| `type`             | Payload                                          | When emitted                                             |
+| ------------------ | ------------------------------------------------ | -------------------------------------------------------- |
+| `aurapix:ready`    | `{ tenantId, version, branding? }`               | Immediately after the embedded UI mounts                 |
+| `aurapix:resize`   | `{ height }` (CSS px)                            | When the content height changes (ResizeObserver)         |
+| `aurapix:event`    | `{ name, payload? }`                             | Select user actions (`selection-changed`, `upload-started`, …) |
+
+#### `aurapix:ready` branding payload (issue #187)
+
+The `branding` field is **optional**. The server populates it only when
+the tenant has any non-default branding configured (per #132/#135) — when
+the field is absent, the host page should fall back to its own defaults.
+
+The payload is strictly **read-only** and contains **only public-safe
+tokens** (no API keys, no internal IDs, no Firestore document paths, no
+`updatedAt`, no `tenantId`):
+
+```ts
+interface AuraPixBrandingTokens {
+  /** Hex primary brand color (e.g. `#2563eb`). */
+  primaryColor?: string;
+  /** Hex accent brand color (e.g. `#7c3aed`). */
+  accentColor?: string;
+  /** Public logo URL (typically an HTTPS asset). */
+  logoUrl?: string;
+  /** CSS `font-family` value the host can mirror. */
+  fontFamily?: string;
+}
+```
+
+The host page can use these tokens to instantly paint surrounding chrome
+with tenant colors — saving a second HTTP round-trip to
+`GET /v1/tenants/:id/branding`. Because the field is additive and
+optional, older host integrations that don't read `branding` continue to
+work unchanged.
+
+The shape is validated client-side by `@aurapix/embed` before being
+surfaced via `onReady` so a compromised iframe cannot inject
+non-string values into the host's CSS.
 
 ### Host → Embedded
 
@@ -325,7 +358,7 @@ existing `MeteringBus`:
 
 | Event                      | When                                                                                       | Debounce            |
 | -------------------------- | ------------------------------------------------------------------------------------------ | ------------------- |
-| `embed.session_started`    | An allowed parent frames an embed-eligible response                                        | 1 / min / tenant+origin |
+| `embed.session_started`    | An allowed parent frames an embed-eligible response. Carries `meta.brandingApplied: boolean` (issue #187) for white-label rollout debugging. | 1 / min / tenant+origin |
 | `embed.session_ended`      | The `@aurapix/embed` SDK posts to `POST /v1/tenants/:id/embed/session-end` on `destroy()` or `pagehide` (issue #177) | None (client-driven) |
 | `embed.origin_blocked`     | Browser posts a `frame-ancestors` violation report                                         | None (report-driven) |
 
@@ -342,6 +375,8 @@ through the standard host webhook fanout (see `metering-events.md`).
 | `src/embed/host-sdk.ts` with TypeScript types and unit tests             | `src/embed/host-sdk.ts`, `src/embed/contract.ts`, tests   |
 | Embedded UI ignores messages from non-allowed origins (tested)           | `src/embed/embedded.ts` + `src/embed/host-sdk.test.ts`    |
 | `embed.session_started` flows through existing bus                       | `MeteringBus` event type + middleware emit                |
+| `aurapix:ready` carries optional `branding` tokens (#187)                | `src/embed/contract.ts`, `loadBrandingTokensForEmbed`     |
+| `embed.session_started.meta.brandingApplied` populated (#187)            | `createEmbedCspMiddleware` + server.ts wiring             |
 | OpenAPI updated                                                          | `contracts/openapi/embed.openapi.json`                    |
 | `POST /v1/tenants/:id/embed/session-tokens` minted JWT, host-API-key gated (#195) | `functions/src/services/host/embedSessionTokenService.ts` + `embedV1.ts` route |
 | Replay defense (`token_replayed`) via single-use `jti` tracking (#195)   | `embedSessionTokenJtis` collection + `verifyAndRedeemEmbedSessionToken` |

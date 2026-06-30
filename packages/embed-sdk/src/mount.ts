@@ -24,6 +24,24 @@ export const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
 /** UI theme forwarded to the embedded app. */
 export type AuraPixTheme = 'light' | 'dark' | 'auto' | (string & {});
 
+/** Public-safe branding tokens forwarded by the embedded app (issue #187).
+ *
+ * Strictly read-only — the SDK only surfaces the field so the host page
+ * can mirror tenant colors in its surrounding chrome without a second
+ * network round-trip. Omitted when the tenant has not configured any
+ * non-default branding (hosts fall back to their own defaults). Contains
+ * only public-safe values — no API keys, no internal IDs. */
+export interface AuraPixBrandingTokens {
+  /** Hex primary brand color (e.g. `#2563eb`). */
+  primaryColor?: string;
+  /** Hex accent brand color (e.g. `#7c3aed`). */
+  accentColor?: string;
+  /** Public logo URL (typically an HTTPS asset). */
+  logoUrl?: string;
+  /** CSS `font-family` value the host can mirror. */
+  fontFamily?: string;
+}
+
 /** Payload delivered to {@link MountAuraPixOptions.onReady}. */
 export interface AuraPixReadyDetail {
   /** Tenant id reported by the embedded app — should match `opts.tenantId`. */
@@ -32,6 +50,12 @@ export interface AuraPixReadyDetail {
   version: string;
   /** AuraPix origin the iframe is loaded from. */
   origin: string;
+  /**
+   * Optional tenant branding tokens (issue #187). Present only when the
+   * tenant has configured non-default branding; hosts should fall back
+   * to their own defaults otherwise.
+   */
+  branding?: AuraPixBrandingTokens;
 }
 
 /** All error codes the SDK surfaces. Stable strings safe for switch/case. */
@@ -271,10 +295,25 @@ export function mountAuraPix(
         );
         return;
       }
+      // Issue #187: optional, public-safe branding tokens. The embedded
+      // app vets the payload server-side; we still drop non-string
+      // fields here so a compromised iframe can't slip values of the
+      // wrong type into the host's CSS.
+      let branding: AuraPixBrandingTokens | undefined;
+      const b = data.branding;
+      if (isPlainObject(b)) {
+        const out: Record<string, string> = {};
+        for (const k in b) {
+          const v = (b as Record<string, unknown>)[k];
+          if (typeof v === 'string' && v) out[k] = v;
+        }
+        if (Object.keys(out).length > 0) branding = out;
+      }
       const detail: AuraPixReadyDetail = {
         tenantId: data.tenantId,
         version: data.version,
         origin: aurapixOrigin,
+        ...(branding ? { branding } : {}),
       };
       fireAll(readyListeners, detail);
       return;

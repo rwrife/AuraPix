@@ -377,6 +377,28 @@
           "embed": { "$ref": "#/components/schemas/EmbedConfig" }
         }
       },
+      "AuraPixBrandingTokens": {
+        "type": "object",
+        "description": "Public-safe branding tokens forwarded to host pages via the `aurapix:ready` postMessage handshake (issue #187). Emitted by the server only when the tenant has any non-default branding configured — absent payload means the host should fall back to its own defaults. Contains **only public-safe** values: no API keys, no internal IDs.",
+        "properties": {
+          "primaryColor": { "type": "string", "description": "Hex primary brand color (e.g. `#2563eb`)." },
+          "accentColor": { "type": "string", "description": "Hex accent brand color (e.g. `#7c3aed`)." },
+          "logoUrl": { "type": "string", "description": "Public logo URL (typically an HTTPS asset)." },
+          "fontFamily": { "type": "string", "description": "CSS `font-family` value the host can mirror in its surrounding chrome." }
+        },
+        "additionalProperties": false
+      },
+      "AuraPixReadyMessage": {
+        "type": "object",
+        "description": "`aurapix:ready` postMessage envelope sent by the embedded UI to the host page on mount. The shape lives in the postMessage contract — it is documented here for OpenAPI consumers generating typed clients.",
+        "required": ["type", "tenantId", "version"],
+        "properties": {
+          "type": { "type": "string", "const": "aurapix:ready" },
+          "tenantId": { "type": "string" },
+          "version": { "type": "string", "description": "SemVer string of the embedded build." },
+          "branding": { "$ref": "#/components/schemas/AuraPixBrandingTokens" }
+        }
+      },
       "CspReport": {
         "type": "object",
         "properties": {

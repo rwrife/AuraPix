@@ -502,6 +502,108 @@ describe('createEmbedCspMiddleware', () => {
     });
     expect(emit).not.toHaveBeenCalled();
   });
+
+  it('populates meta.brandingApplied on embed.session_started (issue #187)', async () => {
+    const emit = vi.fn();
+    const loadBrandingApplied = vi.fn(async () => true);
+    const middleware = createEmbedCspMiddleware({
+      tenantFromReq: () => 'acme',
+      loadOrigins: async () => ['https://host.example.com'],
+      meteringBus: { emit },
+      loadBrandingApplied,
+    });
+    const app = express();
+    app.use(middleware);
+    app.get('/x', (_req, res) => res.json({ ok: true }));
+
+    await request(app, 'GET', '/x', undefined, {
+      'referer': 'https://host.example.com/page',
+      'sec-fetch-dest': 'iframe',
+    });
+    expect(loadBrandingApplied).toHaveBeenCalledWith('acme');
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'embed.session_started',
+      meta: expect.objectContaining({
+        origin: 'https://host.example.com',
+        brandingApplied: true,
+      }),
+    }));
+  });
+
+  it('falls back to brandingApplied=false when loadBrandingApplied throws (issue #187)', async () => {
+    const emit = vi.fn();
+    const middleware = createEmbedCspMiddleware({
+      tenantFromReq: () => 'acme',
+      loadOrigins: async () => ['https://host.example.com'],
+      meteringBus: { emit },
+      loadBrandingApplied: async () => {
+        throw new Error('branding lookup blew up');
+      },
+    });
+    const app = express();
+    app.use(middleware);
+    app.get('/x', (_req, res) => res.json({ ok: true }));
+
+    await request(app, 'GET', '/x', undefined, {
+      'referer': 'https://host.example.com/page',
+      'sec-fetch-dest': 'iframe',
+    });
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect((emit.mock.calls[0][0] as any).meta.brandingApplied).toBe(false);
+  });
+
+  it('emits brandingApplied=false when loadBrandingApplied is omitted (backward compatibility)', async () => {
+    const emit = vi.fn();
+    const middleware = createEmbedCspMiddleware({
+      tenantFromReq: () => 'acme',
+      loadOrigins: async () => ['https://host.example.com'],
+      meteringBus: { emit },
+    });
+    const app = express();
+    app.use(middleware);
+    app.get('/x', (_req, res) => res.json({ ok: true }));
+
+    await request(app, 'GET', '/x', undefined, {
+      'referer': 'https://host.example.com/page',
+      'sec-fetch-dest': 'iframe',
+    });
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect((emit.mock.calls[0][0] as any).meta.brandingApplied).toBe(false);
+  });
+
+  it('keeps blocking disallowed origins regardless of branding config (issue #187)', async () => {
+    // Integration-style: the branding hook MUST NOT relax origin
+    // enforcement. Disallowed parents stay blocked.
+    const emit = vi.fn();
+    const loadBrandingApplied = vi.fn(async () => true);
+    const middleware = createEmbedCspMiddleware({
+      tenantFromReq: () => 'acme',
+      loadOrigins: async () => ['https://host.example.com'],
+      meteringBus: { emit },
+      loadBrandingApplied,
+    });
+    const app = express();
+    app.use(middleware);
+    app.get('/x', (_req, res) => res.json({ ok: true }));
+
+    // Disallowed referer — must not emit session_started and must not
+    // even consult the branding hook.
+    await request(app, 'GET', '/x', undefined, {
+      'referer': 'https://evil.example.com/page',
+      'sec-fetch-dest': 'iframe',
+    });
+    expect(emit).not.toHaveBeenCalled();
+    expect(loadBrandingApplied).not.toHaveBeenCalled();
+
+    // Allowed referer — emit fires AND carries the branding flag.
+    await request(app, 'GET', '/x', undefined, {
+      'referer': 'https://host.example.com/page',
+      'sec-fetch-dest': 'iframe',
+    });
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect((emit.mock.calls[0][0] as any).meta.brandingApplied).toBe(true);
+  });
 });
 
 describe('loadAllowedOriginsForTenant', () => {

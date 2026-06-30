@@ -190,6 +190,111 @@ describe('mountAuraPix — handshake & origin validation', () => {
     handle.destroy();
   });
 
+  it('forwards branding tokens from aurapix:ready to onReady (issue #187)', () => {
+    const host = makeHost();
+    const onReady = vi.fn();
+    const handle = mountAuraPix(host, {
+      tenantId: 'acme',
+      userJwt: 'jwt',
+      aurapixOrigin: ORIGIN,
+      onReady,
+    });
+    const fakeWin = patchIframeWindow(handle.iframe);
+
+    dispatchMessage(
+      {
+        type: 'aurapix:ready',
+        tenantId: 'acme',
+        version: '1.2.3',
+        branding: {
+          primaryColor: '#abcdef',
+          accentColor: '#123456',
+          logoUrl: 'https://cdn.example.com/logo.svg',
+          fontFamily: 'Inter, system-ui, sans-serif',
+        },
+      },
+      ORIGIN,
+      fakeWin as unknown as Window
+    );
+
+    expect(onReady).toHaveBeenCalledWith({
+      tenantId: 'acme',
+      version: '1.2.3',
+      origin: ORIGIN,
+      branding: {
+        primaryColor: '#abcdef',
+        accentColor: '#123456',
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        fontFamily: 'Inter, system-ui, sans-serif',
+      },
+    });
+    handle.destroy();
+  });
+
+  it('omits branding from onReady when the embedded app did not send any (issue #187)', () => {
+    const host = makeHost();
+    const onReady = vi.fn();
+    const handle = mountAuraPix(host, {
+      tenantId: 'acme',
+      userJwt: 'jwt',
+      aurapixOrigin: ORIGIN,
+      onReady,
+    });
+    const fakeWin = patchIframeWindow(handle.iframe);
+
+    dispatchMessage(
+      { type: 'aurapix:ready', tenantId: 'acme', version: '1.2.3' },
+      ORIGIN,
+      fakeWin as unknown as Window
+    );
+
+    expect(onReady).toHaveBeenCalledWith({
+      tenantId: 'acme',
+      version: '1.2.3',
+      origin: ORIGIN,
+    });
+    const detail = onReady.mock.calls[0]?.[0];
+    expect(detail).not.toHaveProperty('branding');
+    handle.destroy();
+  });
+
+  it('drops non-string branding fields defensively (issue #187)', () => {
+    const host = makeHost();
+    const onReady = vi.fn();
+    const handle = mountAuraPix(host, {
+      tenantId: 'acme',
+      userJwt: 'jwt',
+      aurapixOrigin: ORIGIN,
+      onReady,
+    });
+    const fakeWin = patchIframeWindow(handle.iframe);
+
+    dispatchMessage(
+      {
+        type: 'aurapix:ready',
+        tenantId: 'acme',
+        version: '1.2.3',
+        // Hostile / malformed payload: number, null, empty string
+        branding: {
+          primaryColor: '#abcdef',
+          accentColor: 42,
+          logoUrl: null,
+          fontFamily: '',
+        },
+      },
+      ORIGIN,
+      fakeWin as unknown as Window
+    );
+
+    expect(onReady).toHaveBeenCalledWith({
+      tenantId: 'acme',
+      version: '1.2.3',
+      origin: ORIGIN,
+      branding: { primaryColor: '#abcdef' },
+    });
+    handle.destroy();
+  });
+
   it('rejects ready messages from a different origin (anti-spoofing)', () => {
     const host = makeHost();
     const onReady = vi.fn();
