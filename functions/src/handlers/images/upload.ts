@@ -26,6 +26,7 @@ import {
 } from '../../services/metering/index.js';
 import { readCurrentUsageBytes } from '../../services/metering/currentUsage.js';
 import { getTenantRecord } from '../../services/tenant/tenantRecordService.js';
+import { evaluateStorageThresholds } from '../../services/tenant/storageThresholdEvaluator.js';
 import { wouldExceedQuota } from '../../models/TenantRecord.js';
 import type { DailyDocStore } from '../../services/metering/UsageRollupConsumer.js';
 
@@ -364,6 +365,30 @@ export async function handleUpload(
         ...(metadata.height ? { heightPx: metadata.height } : {}),
       },
     });
+
+    // Issue #196: piggy-back per-tenant storage-threshold evaluation on
+    // the upload path. Uses the post-upload usage estimate (pre-snapshot
+    // we approximate by adding the new bytes to the in-memory reading we
+    // just took). Best-effort — the evaluator swallows all errors so it
+    // can never break an upload.
+    if (
+      usageDailyStore &&
+      tenantRecord.quotaBytes !== null &&
+      tenantRecord.quotaBytes > 0
+    ) {
+      const postUploadUsageBytes =
+        (await readCurrentUsageBytes(usageDailyStore, tenantId)) +
+        metadata.sizeBytes;
+      // Don't await beyond a single tick — we want this off the
+      // critical response path. `evaluateStorageThresholds` already
+      // catches all errors internally.
+      void evaluateStorageThresholds({
+        dataAdapter,
+        tenantId,
+        usedBytes: postUploadUsageBytes,
+        tenantRecord,
+      });
+    }
 
     // Return response immediately
     res.status(202).json({

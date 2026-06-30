@@ -117,6 +117,7 @@ import { createTenantWebhookSecretsRouter } from './routes/tenantWebhookSecretsV
 import { createTenantPluginsRouter } from './routes/tenantPluginsV1.js';
 import { createTenantFeaturesRouter } from './routes/tenantFeaturesV1.js';
 import { createTenantTrashConfigRouter } from './routes/tenantTrashConfigV1.js';
+import { createTenantStorageThresholdsRouter } from './routes/tenantStorageThresholdsV1.js';
 import { createHostWebhookEventsRouter } from './routes/hostWebhookEventsV1.js';
 import { createRequireFeature } from './middleware/requireFeature.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
@@ -583,6 +584,26 @@ app.use(
   '/api/v1/tenants',
   hostApiKeyAuth,
   tenantTrashConfigRouter
+);
+
+// Per-tenant storage threshold config (issue #196). Drives
+// `tenant.storage.threshold_crossed` / `_cleared` webhook events.
+// Host-API-key-only (`tenants.write` for mutations, `tenants.read` for
+// GET); also accessible to tenant owners via Bearer auth on the
+// `/api/v1/tenants` prefix. Mounted on both prefixes for parity with
+// the trash config router.
+const tenantStorageThresholdsRouter = createTenantStorageThresholdsRouter({
+  dataAdapter,
+});
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  tenantStorageThresholdsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  tenantStorageThresholdsRouter
 );
 
 // Public webhook event catalog (issue #176). Global — not per-tenant —

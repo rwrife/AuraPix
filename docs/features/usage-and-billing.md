@@ -207,6 +207,105 @@ After each tenant's daily snapshot, the system emits one
 Hosts can subscribe to this event to push-trigger their billing job
 instead of polling the read endpoint.
 
+## Push trigger: storage threshold webhooks (issue #196)
+
+Hosts that resell AuraPix should not need to poll `GET /v1/tenants/:id/usage`
+to know when one of their customer tenants is approaching its plan
+limit. AuraPix pushes two webhook events on the existing host webhook
+pipeline whenever a tenant's storage usage **crosses** or **clears** a
+configured threshold:
+
+| Event                                | Fires when                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `tenant.storage.threshold_crossed`   | Used bytes / quota bytes ≥ threshold for the first time since the last `_cleared`.       |
+| `tenant.storage.threshold_cleared`   | Used bytes / quota bytes ≤ (threshold − 5%) after a `_crossed` event was previously fired. |
+
+Payload (both events; only the trailing timestamp field differs):
+
+```json
+{
+  "type": "tenant.storage.threshold_crossed",
+  "tenantId": "tenant-A",
+  "meta": {
+    "tenantId": "tenant-A",
+    "threshold": 0.8,
+    "usedBytes": 8589934592,
+    "quotaBytes": 10737418240,
+    "crossedAt": "2026-06-30T12:00:00.000Z"
+  }
+}
+```
+
+### Hysteresis (no flapping)
+
+A threshold fires `_crossed` **at most once per crossing direction**. After
+`_crossed` is emitted, the threshold is considered "armed for clear";
+`_cleared` only fires once usage has dropped by at least **5% of quota**
+below the threshold and then crosses up again. This guarantees a tenant
+that hovers around 80% does not generate a flood of webhook events.
+
+State is persisted on the tenant doc (`storageThresholdState`) so a
+restart never re-fires events for thresholds that were already crossed.
+
+### Evaluation cadence
+
+Evaluation is **piggy-backed** on existing hot paths — there is no new
+scheduler:
+
+| Trigger                 | What it can fire           |
+| ----------------------- | -------------------------- |
+| Successful upload       | `_crossed` (usage went up) |
+| Trash purge job         | `_cleared` (usage went down) |
+
+### Default thresholds
+
+When a tenant has no per-tenant override, the system applies:
+
+```json
+[0.5, 0.8, 0.95, 1.0]
+```
+
+Values above `1.0` (up to `1.5`) are permitted on a per-tenant basis so
+hosts can wire **overage** alerts (e.g. `1.05` = 5% over quota).
+
+### Configure per-tenant thresholds
+
+Manage the override via the per-tenant config API. Requires a host API
+key with the `tenants.write` scope (read uses `tenants.read`); also
+accessible to the tenant owner via the `/api/v1/...` prefix.
+
+```
+GET    /v1/tenants/{tenantId}/storage/thresholds
+PUT    /v1/tenants/{tenantId}/storage/thresholds   body: { "thresholds": [0.5, 0.8, 0.95, 1.05] }
+DELETE /v1/tenants/{tenantId}/storage/thresholds   (revert to defaults)
+```
+
+Response shape:
+
+```json
+{
+  "tenantId": "tenant-A",
+  "thresholds": [0.5, 0.8, 0.95, 1.05],
+  "defaults": [0.5, 0.8, 0.95, 1.0],
+  "override": [0.5, 0.8, 0.95, 1.05],
+  "source": "tenant",
+  "updatedAt": "2026-06-30T12:00:00.000Z"
+}
+```
+
+Validation rules:
+
+- 1–8 entries.
+- Each entry must be a finite number in the open interval `(0, 1.5]`.
+- Duplicates (after 3-decimal normalization) are deduped silently.
+- Output is always sorted ascending.
+
+### Discovery
+
+Both events appear in the public catalog at
+`GET /v1/host/webhook-events` (#176) so hosts can discover them
+programmatically; their schemas live in `services/metering/eventCatalog.ts`.
+
 ## Caveats & dependencies
 
 - The `tenantId` model and host API key scopes (`usage.read`) are tracked

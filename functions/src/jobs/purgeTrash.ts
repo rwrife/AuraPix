@@ -17,6 +17,15 @@
  *   - Reuses the existing storage-cleanup path on the storage adapter.
  *   - Emits `photo.purged` exactly once per photo (host webhook).
  *   - Decrements the daily `storageBytesDelta` rollup via the usage bus.
+ *
+ * Threshold clearing (issue #196):
+ *   - When a `usageStore` is provided, evaluates per-tenant storage
+ *     thresholds after each tenant's purge completes so
+ *     `tenant.storage.threshold_cleared` events fire when bytes
+ *     reclaimed bring usage back below a previously-crossed threshold
+ *     (after hysteresis). When no `usageStore` is wired, this step is
+ *     skipped silently and the next upload's piggy-backed evaluation
+ *     will catch up.
  */
 
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
@@ -24,6 +33,9 @@ import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
 import { PhotosService } from '../domain/photos/PhotosService.js';
 import type { UsageMeteringBus } from '../services/metering/UsageMeteringBus.js';
 import { resolveTenantTrashRetentionDays } from '../services/host/tenantFeaturesConfigService.js';
+import { evaluateStorageThresholds } from '../services/tenant/storageThresholdEvaluator.js';
+import { readCurrentUsageBytes } from '../services/metering/currentUsage.js';
+import type { DailyDocStore } from '../services/metering/UsageRollupConsumer.js';
 import { logger } from '../utils/logger.js';
 
 export const DEFAULT_TRASH_RETENTION_DAYS = 30;
@@ -48,6 +60,14 @@ export interface PurgeTrashJobOptions {
   dataAdapter: DataAdapter;
   storageAdapter?: StorageAdapter;
   usageBus?: UsageMeteringBus;
+  /**
+   * Optional usage store used by the issue #196 threshold evaluator to
+   * compute fresh post-purge `usedBytes` per tenant. Without it the
+   * `tenant.storage.threshold_cleared` event cannot fire from this job;
+   * the next upload for that tenant will still trip the evaluator and
+   * emit the cleared event then.
+   */
+  usageStore?: DailyDocStore;
   /**
    * Deployment-wide default retention. Per-tenant overrides on the
    * features-config doc take precedence; pass this when you want to
@@ -105,6 +125,33 @@ export async function runPurgeTrashJob(
     { retentionDays, totalPurged, tenants: results.length },
     'purgeTrash job complete'
   );
+
+  // Issue #196: after each tenant's purge, re-evaluate storage
+  // thresholds so `tenant.storage.threshold_cleared` events fire when
+  // the reclaimed bytes bring usage back below a previously-crossed
+  // threshold (after hysteresis). Skipped silently when no usage store
+  // is wired — the next upload's piggy-backed evaluation will catch up.
+  if (opts.usageStore) {
+    for (const r of results) {
+      if (r.photoIds.length === 0) continue;
+      try {
+        const usedBytes = await readCurrentUsageBytes(
+          opts.usageStore,
+          String(r.tenantId)
+        );
+        await evaluateStorageThresholds({
+          dataAdapter: opts.dataAdapter,
+          tenantId: r.tenantId,
+          usedBytes,
+        });
+      } catch (err) {
+        logger.warn(
+          { err, tenantId: r.tenantId },
+          'purgeTrash: threshold re-evaluation failed; continuing'
+        );
+      }
+    }
+  }
 
   return {
     retentionDays,
