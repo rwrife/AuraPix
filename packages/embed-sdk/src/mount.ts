@@ -307,7 +307,7 @@ export function mountAuraPix(
           const v = (b as Record<string, unknown>)[k];
           if (typeof v === 'string' && v) out[k] = v;
         }
-        for (const _ in out) { branding = out; break; }
+        if (Object.keys(out).length > 0) branding = out;
       }
       const detail: AuraPixReadyDetail = {
         tenantId: data.tenantId,
