@@ -8,7 +8,11 @@
  */
 import type { DataAdapter } from '../../adapters/data/DataAdapter.js';
 import {
+  STORAGE_THRESHOLDS_MAX_COUNT,
+  STORAGE_THRESHOLD_MAX,
+  STORAGE_THRESHOLD_MIN_EXCLUSIVE,
   TENANTS_COLLECTION,
+  type StorageThresholdState,
   type TenantRecord,
 } from '../../models/TenantRecord.js';
 import type { TenantId } from '../../domain/tenant/Tenant.js';
@@ -57,7 +61,11 @@ export async function getTenantRecord(
 export async function patchTenantRecord(
   dataAdapter: DataAdapter,
   tenantId: TenantId,
-  patch: { quotaBytes?: number | null }
+  patch: {
+    quotaBytes?: number | null;
+    storageThresholds?: number[] | null;
+    storageThresholdState?: Record<string, StorageThresholdState>;
+  }
 ): Promise<TenantRecord> {
   const existing = await dataAdapter.fetchData<TenantRecord>(
     TENANTS_COLLECTION,
@@ -70,6 +78,14 @@ export async function patchTenantRecord(
       patch.quotaBytes === undefined
         ? (existing?.quotaBytes ?? readDefaultQuotaBytes())
         : patch.quotaBytes,
+    storageThresholds:
+      patch.storageThresholds === undefined
+        ? (existing?.storageThresholds ?? null)
+        : patch.storageThresholds,
+    storageThresholdState:
+      patch.storageThresholdState === undefined
+        ? (existing?.storageThresholdState ?? {})
+        : patch.storageThresholdState,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -87,6 +103,59 @@ export function validateQuotaBytesInput(value: unknown): number | null {
     throw new Error('quotaBytes must be a non-negative finite number or null');
   }
   return Math.floor(value);
+}
+
+/**
+ * Validate / normalize a `storageThresholds` payload submitted via the
+ * admin API (issue #196). Returns the normalized, sorted, deduped array
+ * or throws with a stable message.
+ *
+ * Accepts `null` to mean "clear the override and revert to
+ * {@link DEFAULT_STORAGE_THRESHOLDS}".
+ */
+export function validateStorageThresholdsInput(
+  value: unknown
+): number[] | null {
+  if (value === null) return null;
+  if (!Array.isArray(value)) {
+    throw new Error('storageThresholds must be an array of numbers or null');
+  }
+  if (value.length === 0) {
+    throw new Error('storageThresholds must contain at least one entry');
+  }
+  if (value.length > STORAGE_THRESHOLDS_MAX_COUNT) {
+    throw new Error(
+      `storageThresholds may contain at most ${STORAGE_THRESHOLDS_MAX_COUNT} entries`
+    );
+  }
+  const seen = new Set<string>();
+  const normalized: number[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      throw new Error(
+        'storageThresholds entries must be finite numbers'
+      );
+    }
+    if (raw <= STORAGE_THRESHOLD_MIN_EXCLUSIVE) {
+      throw new Error(
+        `storageThresholds entries must be greater than ${STORAGE_THRESHOLD_MIN_EXCLUSIVE}`
+      );
+    }
+    if (raw > STORAGE_THRESHOLD_MAX) {
+      throw new Error(
+        `storageThresholds entries must be ≤ ${STORAGE_THRESHOLD_MAX}`
+      );
+    }
+    // Normalize to 3 decimal places to dedupe near-equal values that
+    // would otherwise produce duplicate state keys.
+    const fixed = Number(raw.toFixed(3));
+    const key = fixed.toFixed(3);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(fixed);
+  }
+  normalized.sort((a, b) => a - b);
+  return normalized;
 }
 
 /** Exposed for tests. */

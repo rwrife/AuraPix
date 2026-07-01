@@ -26,7 +26,7 @@ discarded; there is no outbound traffic.
 > ⚠️ This table is auto-generated from `functions/src/services/metering/eventCatalog.ts`.
 > Do not hand-edit; run `node scripts/generate-event-catalog-docs.mjs` after changing the registry.
 >
-> **Catalog version:** `2026-06-20` — the same string is stamped on every outbound webhook envelope and returned by `GET /v1/host/webhook-events`.
+> **Catalog version:** `2026-06-30` — the same string is stamped on every outbound webhook envelope and returned by `GET /v1/host/webhook-events`.
 
 | `type` | Version | Billable | Description |
 | --- | --- | --- | --- |
@@ -40,6 +40,8 @@ discarded; there is no outbound traffic.
 | `user.revoked` | 1 | — | A tenant membership was removed. |
 | `quota.exceeded` | 1 | — | In-process storage quota check rejected an upload with HTTP 413. |
 | `quota.warning` | 1 | — | Tenant storage usage crossed a configured threshold (e.g. 80%, 95%). Once per threshold per UTC day. |
+| `tenant.storage.threshold_crossed` | 1 | — | Per-tenant storage usage crossed a configured threshold (issue #196). Hysteresis prevents re-firing until usage drops 5% below and crosses up again. Hosts drive upsell / hard-cap flows from this event. |
+| `tenant.storage.threshold_cleared` | 1 | — | Per-tenant storage usage dropped at least 5% below a previously-crossed threshold (issue #196). Emitted exactly once per crossing direction; pairs with `tenant.storage.threshold_crossed`. |
 | `share.viewed` | 1 | ✅ | A share token passed auth and a resource was actually delivered. |
 | `plugin.ran` | 1 | ✅ | A plugin/edit operation executed (success or failure). One event per operation. |
 | `plugin.enabled` | 1 | — | A tenant toggled a plugin to enabled. |
@@ -56,6 +58,8 @@ discarded; there is no outbound traffic.
 | `embed.session_started` | 1 | — | An allowed parent origin framed an embed-eligible response. Debounced per `(tenantId, origin)`. |
 | `embed.session_ended` | 1 | — | The embed SDK reported a session end via the beacon endpoint or page unload. |
 | `embed.origin_blocked` | 1 | — | A browser-reported `frame-ancestors` CSP violation. Helps hosts find misconfigured deployments. |
+| `embed.session.minted` | 1 | — | Host minted an embed session token via POST /v1/tenants/{tenantId}/embed/session-tokens (issue #195). Useful for billing per-session pricing models. |
+| `embed.session.exchanged` | 1 | — | Embedded iframe successfully redeemed an embed session token — the meaningful "active embedded user" signal that complements `user.active` with embed context (issue #195). |
 | `idempotency.replayed` | 1 | — | Idempotency-Key middleware served a cached response. Debug-tier; NOT billable. |
 | `webhook.secret_rotated` | 1 | — | A tenant rotated its webhook signing secret. |
 | `smart_album.created` | 1 | — | A smart album definition was created. |

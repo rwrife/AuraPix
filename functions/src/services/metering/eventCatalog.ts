@@ -45,7 +45,7 @@
  *
  * Use a date string so the value is human-readable in logs.
  */
-export const CATALOG_VERSION = '2026-06-29';
+export const CATALOG_VERSION = '2026-06-30';
 
 /**
  * JSON Schema describing the `meta` payload for a single event type.
@@ -224,6 +224,40 @@ export const EVENT_CATALOG = [
       usageBytes: S_NUMBER,
       date: S_STRING,
     }),
+  },
+  {
+    name: 'tenant.storage.threshold_crossed',
+    version: 1,
+    billable: false,
+    description:
+      'Per-tenant storage usage crossed a configured threshold (issue #196). Hysteresis prevents re-firing until usage drops 5% below and crosses up again. Hosts drive upsell / hard-cap flows from this event.',
+    schema: metaSchema(
+      {
+        tenantId: S_STRING,
+        threshold: S_NUMBER,
+        usedBytes: S_NUMBER,
+        quotaBytes: S_NUMBER,
+        crossedAt: S_ISO_DATE,
+      },
+      ['tenantId', 'threshold', 'usedBytes', 'quotaBytes', 'crossedAt']
+    ),
+  },
+  {
+    name: 'tenant.storage.threshold_cleared',
+    version: 1,
+    billable: false,
+    description:
+      'Per-tenant storage usage dropped at least 5% below a previously-crossed threshold (issue #196). Emitted exactly once per crossing direction; pairs with `tenant.storage.threshold_crossed`.',
+    schema: metaSchema(
+      {
+        tenantId: S_STRING,
+        threshold: S_NUMBER,
+        usedBytes: S_NUMBER,
+        quotaBytes: S_NUMBER,
+        clearedAt: S_ISO_DATE,
+      },
+      ['tenantId', 'threshold', 'usedBytes', 'quotaBytes', 'clearedAt']
+    ),
   },
   {
     name: 'share.viewed',
