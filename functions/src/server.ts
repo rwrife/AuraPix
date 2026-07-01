@@ -130,6 +130,8 @@ import {
 import { createBulkPhotosRouter } from './routes/photosBatchV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
+import { createTenantEditPresetsRouter } from './routes/tenantEditPresetsV1.js';
+import { getMembership } from './services/tenant/tenantMembershipService.js';
 import {
   createSmartAlbumsLibraryRouter,
   createSmartAlbumsResourceRouter,
@@ -656,6 +658,69 @@ app.use(
   hostApiKeyAuth,
   optionalAuthMiddleware,
   auditEventsRouter
+);
+
+// Per-tenant edit presets — Lightroom Sync Settings (issue #197).
+// Host API key (edit-presets.read / edit-presets.write) OR Firebase user
+// whose tenant-member role permits the operation (editor+ for
+// write/apply, viewer for read).
+const tenantEditPresetsRouter = createTenantEditPresetsRouter({
+  dataAdapter,
+  resolveTenantRole: async (tenantId, userId) => {
+    // Until a real tenant/user model lands, treat the authenticated
+    // user's uid as their own tenantId (mirrors the tenantUsage
+    // convention) and grant `editor` — end-users in single-tenant mode
+    // can save + apply their own presets. Once the multi-tenant
+    // membership model is wired end-to-end, this collapses back to a
+    // raw `getMembership` lookup.
+    if (userId === tenantId) return 'editor';
+    try {
+      const membership = await getMembership(dataAdapter, tenantId, userId);
+      return membership?.role ?? null;
+    } catch (err) {
+      logger.warn(
+        { err, tenantId, userId },
+        'edit-presets: role resolution failed'
+      );
+      return null;
+    }
+  },
+});
+// Idempotency-Key support on the apply endpoint (issue #162 style).
+// Mounted before the router so retries with the same key are
+// short-circuited without re-committing edits or re-emitting metering.
+const editPresetApplyIdempotency = createIdempotencyMiddleware({
+  route: 'POST /v1/tenants/:tenantId/edit-presets/:presetId/apply',
+  dataAdapter,
+  resolveTenantId: (req) => {
+    const tenantId = req.params?.tenantId;
+    if (typeof tenantId === 'string' && tenantId.length > 0) return tenantId;
+    return req.tenant?.id ?? req.user?.uid ?? null;
+  },
+});
+app.use(
+  '/v1/tenants/:tenantId/edit-presets/:presetId/apply',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  editPresetApplyIdempotency
+);
+app.use(
+  '/api/v1/tenants/:tenantId/edit-presets/:presetId/apply',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  editPresetApplyIdempotency
+);
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantEditPresetsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  tenantEditPresetsRouter
 );
 
 // Error handlers (must be last)

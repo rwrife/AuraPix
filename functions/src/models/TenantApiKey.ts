@@ -25,7 +25,9 @@ export type TenantApiKeyScope =
   | 'plugins.read'
   | 'plugins.write'
   | 'export-presets.read'
-  | 'export-presets.write';
+  | 'export-presets.write'
+  | 'edit-presets.read'
+  | 'edit-presets.write';
 
 export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'usage.read',
@@ -52,6 +54,17 @@ export const TENANT_API_KEY_SCOPES: readonly TenantApiKeyScope[] = [
   'plugins.write',
   'export-presets.read',
   'export-presets.write',
+  /**
+   * `edit-presets.read` / `edit-presets.write` gate the Lightroom-style
+   * develop-preset surface (issue #197). `edit-presets.read` covers
+   * listing presets and reading a single preset's recipe; `.write`
+   * covers create/delete AND apply-to-many. Apply is grouped under the
+   * write scope because it commits new edit versions on N photos.
+   * Firebase user auth on the same endpoints is gated separately by
+   * tenant-member role (editor+ to write/apply, viewer to read).
+   */
+  'edit-presets.read',
+  'edit-presets.write',
 ] as const;
 
 export interface TenantApiKeyRecord {

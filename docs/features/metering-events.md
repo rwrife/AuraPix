@@ -26,7 +26,7 @@ discarded; there is no outbound traffic.
 > ⚠️ This table is auto-generated from `functions/src/services/metering/eventCatalog.ts`.
 > Do not hand-edit; run `node scripts/generate-event-catalog-docs.mjs` after changing the registry.
 >
-> **Catalog version:** `2026-06-30` — the same string is stamped on every outbound webhook envelope and returned by `GET /v1/host/webhook-events`.
+> **Catalog version:** `2026-07-01` — the same string is stamped on every outbound webhook envelope and returned by `GET /v1/host/webhook-events`.
 
 | `type` | Version | Billable | Description |
 | --- | --- | --- | --- |
@@ -34,6 +34,7 @@ discarded; there is no outbound traffic.
 | `image.processed` | 1 | ✅ | A derivative variant (thumbnail / preview) was written. One event per variant. |
 | `signed_url.issued` | 1 | ✅ | A signed URL was minted for a user or share grant. |
 | `edit.applied` | 1 | ✅ | A non-destructive edit version was committed for a photo. |
+| `edit_preset.applied` | 1 | — | A develop preset (issue #197) was applied to a batch of photos. One event per apply call, regardless of N. Per-photo commits still emit `edit.applied`. |
 | `bulk.batch` | 1 | ✅ | A `POST /v1/photos:batch` call completed. One event per call regardless of N. |
 | `user.active` | 1 | ✅ | First end-user request of the UTC day for `(tenantId, userId)`. The per-seat billing signal. |
 | `user.provisioned` | 1 | — | A new tenant membership was created. |
