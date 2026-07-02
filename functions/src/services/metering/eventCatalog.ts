@@ -45,7 +45,7 @@
  *
  * Use a date string so the value is human-readable in logs.
  */
-export const CATALOG_VERSION = '2026-07-01';
+export const CATALOG_VERSION = '2026-07-02';
 
 /**
  * JSON Schema describing the `meta` payload for a single event type.
@@ -277,12 +277,33 @@ export const EVENT_CATALOG = [
     version: 1,
     billable: true,
     description:
-      'A share token passed auth and a resource was actually delivered.',
+      'A share token passed auth and a resource was actually delivered. Deduped per `(linkId, ipHash, uaHash)` on a 60-second window so a single multi-asset page view is not counted N times (issue #198). Carries `bytesServed` when the underlying media fetch length is known.',
     schema: metaSchema({
       photoId: S_STRING,
       libraryId: S_STRING,
       grantType: { type: 'string', enum: ['album', 'photo', 'library'] },
+      // Issue #198: hosts can bill egress off the per-view size when the
+      // asset size is available at auth time. Additive; `additionalProperties`
+      // is already true on the meta schema.
+      bytesServed: S_NUMBER,
+      referrerHost: S_STRING,
     }),
+  },
+  {
+    name: 'share.bandwidth.served',
+    version: 1,
+    billable: true,
+    description:
+      'Aggregated bytes egressed via share-link resolutions for a `(tenantId, linkId, date)` triplet (issue #198). Fired by the usage rollup job for hosts that prefer batch egress billing over the per-view `share.viewed` stream.',
+    schema: metaSchema(
+      {
+        linkId: S_STRING,
+        date: S_STRING,
+        bytesServed: S_NUMBER,
+        viewCount: S_INTEGER,
+      },
+      ['linkId', 'date', 'bytesServed']
+    ),
   },
   {
     name: 'plugin.ran',

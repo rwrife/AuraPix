@@ -33,7 +33,7 @@ following order, and this order is part of the public contract:
 ```
 tenantId, date, storageBytesDelta, imagesUploaded, imagesProcessed,
 signedUrlsIssued, editsApplied, tagsApplied, apiCalls, exportBytes,
-activeUsers, rateLimited, storageBytesTotal, updatedAt
+activeUsers, rateLimited, storageBytesTotal, updatedAt, shareEgressBytes
 ```
 
 Guarantees:
@@ -55,10 +55,10 @@ Example (range `2026-04-01 .. 2026-04-03`, two days of activity then a
 zero-filled day):
 
 ```csv
-tenantId,date,storageBytesDelta,imagesUploaded,imagesProcessed,signedUrlsIssued,editsApplied,tagsApplied,apiCalls,exportBytes,activeUsers,rateLimited,storageBytesTotal,updatedAt
-tenant-A,2026-04-01,0,0,0,0,0,0,4,0,0,0,,2026-04-02T10:00:00.000Z
-tenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,2026-04-02T10:00:00.000Z
-tenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z
+tenantId,date,storageBytesDelta,imagesUploaded,imagesProcessed,signedUrlsIssued,editsApplied,tagsApplied,apiCalls,exportBytes,activeUsers,rateLimited,storageBytesTotal,updatedAt,shareEgressBytes
+tenant-A,2026-04-01,0,0,0,0,0,0,4,0,0,0,,2026-04-02T10:00:00.000Z,0
+tenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,2026-04-02T10:00:00.000Z,0
+tenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z,0
 ```
 
 ## Month-to-date summary (issue #188)
@@ -85,8 +85,8 @@ GET /api/v1/tenants/{tenantId}/usage/current
 The response carries exactly the **summable** counters of `usageDaily`
 (`storageBytesDelta`, `imagesUploaded`, `imagesProcessed`,
 `signedUrlsIssued`, `editsApplied`, `tagsApplied`, `apiCalls`,
-`exportBytes`, `activeUsers`, `rateLimited`) plus `tenantId`,
-`periodStart`, `periodEnd`, and a `generatedAt` timestamp.
+`exportBytes`, `shareEgressBytes`, `activeUsers`, `rateLimited`) plus
+`tenantId`, `periodStart`, `periodEnd`, and a `generatedAt` timestamp.
 
 Fields **excluded** from the summary:
 
@@ -156,6 +156,7 @@ Stored at `tenants/{tenantId}/usageDaily/{YYYY-MM-DD}` in Firestore.
 | `apiCalls`          | integer ≥ 0     | Billable API requests.                                       |
 | `storageBytesTotal` | integer \| null | Absolute storage at end-of-day; written by the snapshot job. |
 | `updatedAt`         | string (date-time) | Last write timestamp.                                     |
+| `shareEgressBytes`  | integer ≥ 0     | Bytes served through share links (issue #198). Increments on every de-duped `share.viewed` where `bytesServed` is known. |
 
 ## Where counters come from (event-to-counter mapping)
 
@@ -173,6 +174,7 @@ the daily doc in a transaction (idempotent on `eventId`).
 | `edits.operation.committed`                       | `editsApplied`      | +1                  |
 | `photo.tagged`                                    | `tagsApplied`       | +(`added` + `removed`) |
 | Any authenticated `/api/*` request                | `apiCalls`          | +1                  |
+| `share.viewed` (deduped, issue #198)              | `shareEgressBytes`  | +`bytesServed`      |
 
 > The MeteringBus interface ships ahead of its dedicated infrastructure
 > issue. In local mode it is an in-memory bus; in Firebase mode it can be

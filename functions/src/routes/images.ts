@@ -7,6 +7,16 @@ import { appCheckUploadMiddleware } from '../middleware/appCheck.js';
 import { securityConfig } from '../config/index.js';
 import { createSignedUrlMiddleware } from '../middleware/signedUrl.js';
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
+import type { ShareViewTracker } from '../services/sharing/ShareViewTracker.js';
+
+export interface ImageRoutesOptions {
+  /**
+   * Share-view tracker (issue #198). Optional; when wired, every
+   * signed-URL image serve backed by a share token records a view row
+   * and emits the `share.viewed` metering event with `bytesServed`.
+   */
+  shareViewTracker?: ShareViewTracker | null;
+}
 
 const router = Router();
 
@@ -14,7 +24,10 @@ const router = Router();
  * Factory function to create image routes with injected dependencies
  * @param dataAdapter - Data adapter for database operations
  */
-export function createImageRoutes(dataAdapter: DataAdapter) {
+export function createImageRoutes(
+  dataAdapter: DataAdapter,
+  options: ImageRoutesOptions = {}
+) {
   const router = Router();
 
   const uploadRateLimiter = createSlidingWindowRateLimiter({
@@ -22,8 +35,12 @@ export function createImageRoutes(dataAdapter: DataAdapter) {
     maxRequests: securityConfig.uploadRateLimit.maxRequests,
   });
 
-  // Create signed URL middleware with injected data adapter
-  const signedUrlMiddleware = createSignedUrlMiddleware(dataAdapter);
+  // Create signed URL middleware with injected data adapter. Passing the
+  // share-view tracker (issue #198) here is what wires up share-link
+  // analytics + `share.viewed` bytes accounting on every image serve.
+  const signedUrlMiddleware = createSignedUrlMiddleware(dataAdapter, {
+    shareViewTracker: options.shareViewTracker ?? null,
+  });
 
   /**
    * Upload a photo

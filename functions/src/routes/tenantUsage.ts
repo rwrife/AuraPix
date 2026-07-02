@@ -60,6 +60,10 @@ export const CSV_COLUMNS = [
   'rateLimited',
   'storageBytesTotal',
   'updatedAt',
+  // Appended for issue #198 — share-link egress bytes. Kept at the end
+  // of the row to preserve the existing column order per the docs
+  // (`docs/features/usage-and-billing.md` — append-only rule).
+  'shareEgressBytes',
 ] as const satisfies ReadonlyArray<keyof UsageDailyDoc>;
 
 type CsvColumn = (typeof CSV_COLUMNS)[number];
@@ -201,6 +205,7 @@ export const SUMMABLE_COUNTERS = [
   'tagsApplied',
   'apiCalls',
   'exportBytes',
+  'shareEgressBytes',
   'activeUsers',
   'rateLimited',
 ] as const satisfies ReadonlyArray<keyof UsageDailyDoc>;
@@ -257,6 +262,7 @@ export function sumCounters(docs: UsageDailyDoc[]): UsageCurrentTotals {
     tagsApplied: 0,
     apiCalls: 0,
     exportBytes: 0,
+    shareEgressBytes: 0,
     activeUsers: 0,
     rateLimited: 0,
   };

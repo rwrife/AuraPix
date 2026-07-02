@@ -23,7 +23,14 @@ export type UsageMeteringCounter =
   | 'apiCalls'
   | 'exportBytes'
   | 'activeUsers'
-  | 'rateLimited';
+  | 'rateLimited'
+  /**
+   * Bytes egressed via share-link resolutions (issue #198). Rolls up so
+   * hosts see `shareEgressBytes` on `/v1/tenants/:id/usage` next to
+   * `exportBytes`, without having to consume the `share.viewed` /
+   * `share.bandwidth.served` webhook stream directly.
+   */
+  | 'shareEgressBytes';
 
 export interface UsageMeteringEvent {
   /** Tenant the event applies to. */

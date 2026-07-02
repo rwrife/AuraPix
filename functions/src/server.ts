@@ -1,6 +1,6 @@
 import express from 'express';
 import pinoHttp from 'pino-http';
-import { serverConfig, storageConfig, tenantRateLimitConfig } from './config/index.js';
+import { serverConfig, storageConfig, tenantRateLimitConfig, signingConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
@@ -119,6 +119,9 @@ import { createTenantFeaturesRouter } from './routes/tenantFeaturesV1.js';
 import { createTenantTrashConfigRouter } from './routes/tenantTrashConfigV1.js';
 import { createTenantStorageThresholdsRouter } from './routes/tenantStorageThresholdsV1.js';
 import { createHostWebhookEventsRouter } from './routes/hostWebhookEventsV1.js';
+import { createShareLinkAnalyticsRouter } from './routes/shareLinkAnalyticsV1.js';
+import { InMemoryShareViewStore } from './services/sharing/ShareViewStore.js';
+import { ShareViewTracker } from './services/sharing/ShareViewTracker.js';
 import { createRequireFeature } from './middleware/requireFeature.js';
 import { createPhotosV1Router, createLibraryTagsRouter } from './routes/photosV1.js';
 import { createAuditEventsV1Router } from './routes/auditEventsV1.js';
@@ -160,6 +163,21 @@ const usageRollupConsumer = new UsageRollupConsumer(usageDailyStore);
 usageRollupConsumer.attach(meteringBus);
 app.locals.meteringBus = meteringBus;
 app.locals.usageDailyStore = usageDailyStore;
+
+// --- Share-link view metering (issue #198) ---
+// Every successful share-link resolution records a view row (with a 60s
+// dedup window per (linkId, ipHash, uaHash)) and emits the billable
+// `share.viewed` event carrying bytesServed + referrerHost. The tracker
+// also publishes `shareEgressBytes` onto the usage rollup bus so the
+// bytes show up on `/v1/tenants/:id/usage`.
+const shareViewStore = new InMemoryShareViewStore();
+const shareViewTracker = new ShareViewTracker({
+  store: shareViewStore,
+  hashSecret: signingConfig.masterSecret,
+  usageBus: meteringBus,
+});
+app.locals.shareViewStore = shareViewStore;
+app.locals.shareViewTracker = shareViewTracker;
 
 // --- Embed handshake CSP middleware (issue #163) ---
 // Sets `Content-Security-Policy: frame-ancestors ...` + `X-Frame-Options`
@@ -215,7 +233,7 @@ app.use(tenantRateLimiter);
 
 // Mount routes
 // Images route handles its own auth (signed URLs for GET, Bearer for POST)
-app.use('/images', createImageRoutes(dataAdapter));
+app.use('/images', createImageRoutes(dataAdapter, { shareViewTracker }));
 
 // /internal endpoints accept EITHER a Firebase user token OR a host API
 // key (Authorization: Bearer ak_live_...). The hostApiKeyAuth middleware
@@ -628,12 +646,6 @@ app.use(
 const tenantExportPresetsRouter = createTenantExportPresetsRouter({
   dataAdapter,
 });
-app.use(
-  '/v1/tenants',
-  hostApiKeyAuth,
-  optionalAuthMiddleware,
-  embedRouter
-);
 
 app.use(
   '/v1/tenants',
@@ -721,6 +733,25 @@ app.use(
   hostApiKeyAuth,
   optionalAuthMiddleware,
   tenantEditPresetsRouter
+);
+
+// --- Per-share-link analytics (issue #198) ---
+// GET /v1/tenants/:tenantId/share-links/:linkId/analytics
+const shareLinkAnalyticsRouter = createShareLinkAnalyticsRouter({
+  store: shareViewStore,
+  ownsTenant: async (userId, tenantId) => userId === tenantId,
+});
+app.use(
+  '/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  shareLinkAnalyticsRouter
+);
+app.use(
+  '/api/v1/tenants',
+  hostApiKeyAuth,
+  optionalAuthMiddleware,
+  shareLinkAnalyticsRouter
 );
 
 // Error handlers (must be last)

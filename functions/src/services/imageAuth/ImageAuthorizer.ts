@@ -7,6 +7,22 @@ import {
   emitMeteringEvent,
   resolveTenantId,
 } from '../metering/index.js';
+import type { ShareViewTracker } from '../sharing/ShareViewTracker.js';
+
+/**
+ * Per-request context propagated from the route/middleware layer into
+ * `authorizeImageAccess` so the share-view tracker can record client IP,
+ * user-agent, and referrer without leaking the raw values elsewhere
+ * (issue #198). All fields are optional — view tracking degrades
+ * gracefully when a caller does not supply them.
+ */
+export interface ShareViewRequestContext {
+  ip?: string | null;
+  userAgent?: string | null;
+  referrer?: string | null;
+  /** Bytes about to be served for this response, when known. */
+  bytesServed?: number | null;
+}
 
 // Share link types (subset needed for authorization)
 interface ShareLink {
@@ -26,17 +42,35 @@ interface ShareLink {
  * Service for authorizing image access based on ownership or share links
  */
 export class ImageAuthorizer {
+  private viewTracker: ShareViewTracker | null = null;
+
   constructor(private dataAdapter: DataAdapter) {}
+
+  /**
+   * Install a share-view tracker (issue #198). When wired, every
+   * successful share-token authorization records a view row + emits
+   * `share.viewed` via the tracker (which owns de-dup, IP/UA hashing,
+   * and bytes accounting) instead of the built-in direct emission path.
+   *
+   * The tracker is intentionally optional so existing call sites and
+   * tests that don't care about analytics continue to work.
+   */
+  setViewTracker(tracker: ShareViewTracker | null): void {
+    this.viewTracker = tracker;
+  }
 
   /**
    * Authorize image access for a given signature and photo
    * @param signature - Parsed and validated signature
    * @param photo - Photo document to access
+   * @param requestCtx - Optional per-request context used only for view
+   *   analytics (issue #198). Not required for authorization.
    * @returns Authorization result
    */
   async authorizeImageAccess(
     signature: ImageSignature,
-    photo: Photo
+    photo: Photo,
+    requestCtx?: ShareViewRequestContext
   ): Promise<ImageAuthResult> {
     // Authorization via user ID (library ownership)
     if (signature.userId) {
@@ -66,7 +100,8 @@ export class ImageAuthorizer {
     if (signature.shareToken) {
       const hasAccess = await this.checkShareAccess(
         signature.shareToken,
-        photo
+        photo,
+        requestCtx
       );
 
       if (hasAccess) {
@@ -138,11 +173,15 @@ export class ImageAuthorizer {
    * Check if share token grants access to photo
    * @param shareToken - Share token from signature
    * @param photo - Photo to access
+   * @param requestCtx - Optional per-request context used by the view
+   *   tracker for analytics (issue #198). Never affects the authorization
+   *   decision.
    * @returns True if share link grants access
    */
   async checkShareAccess(
     shareToken: string,
-    photo: Photo
+    photo: Photo,
+    requestCtx?: ShareViewRequestContext
   ): Promise<boolean> {
     try {
       // Query share links by token
@@ -192,20 +231,48 @@ export class ImageAuthorizer {
         // Log successful access for compliance/analytics
         await this.logShareAccess(shareLink.id, shareToken, 'granted');
 
-        // Emit metering event for billable share view. We only emit here
-        // (after auth/expiry/maxUses/scope checks pass) so failed accesses
-        // are NOT counted.
-        emitMeteringEvent({
-          tenantId: resolveTenantId({ libraryId: photo.libraryId }),
-          type: 'share.viewed',
-          count: 1,
-          resourceId: shareLink.id,
-          meta: {
-            photoId: photo.id,
-            libraryId: photo.libraryId,
-            grantType: shareLink.resourceType,
-          },
-        });
+        // Record a view + emit metering. When a tracker is wired (issue
+        // #198) it owns the emission so it can attach bytesServed /
+        // referrerHost and enforce the 60s de-dup window. Otherwise we
+        // fall back to the legacy per-check emission so existing
+        // integrations and tests still count.
+        if (this.viewTracker) {
+          void this.viewTracker
+            .record({
+              tenantId: resolveTenantId({ libraryId: photo.libraryId }),
+              linkId: shareLink.id,
+              ip: requestCtx?.ip ?? null,
+              userAgent: requestCtx?.userAgent ?? null,
+              referrer: requestCtx?.referrer ?? null,
+              bytesServed: requestCtx?.bytesServed ?? null,
+              meta: {
+                photoId: photo.id,
+                libraryId: photo.libraryId,
+                grantType: shareLink.resourceType,
+              },
+            })
+            .catch((err) => {
+              logger.warn(
+                { err, linkId: shareLink.id },
+                'Share view tracking failed'
+              );
+            });
+        } else {
+          // Emit metering event for billable share view. We only emit here
+          // (after auth/expiry/maxUses/scope checks pass) so failed accesses
+          // are NOT counted.
+          emitMeteringEvent({
+            tenantId: resolveTenantId({ libraryId: photo.libraryId }),
+            type: 'share.viewed',
+            count: 1,
+            resourceId: shareLink.id,
+            meta: {
+              photoId: photo.id,
+              libraryId: photo.libraryId,
+              grantType: shareLink.resourceType,
+            },
+          });
+        }
       }
 
       return hasAccess;
