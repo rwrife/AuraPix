@@ -45,7 +45,7 @@
  *
  * Use a date string so the value is human-readable in logs.
  */
-export const CATALOG_VERSION = '2026-06-30';
+export const CATALOG_VERSION = '2026-07-01';
 
 /**
  * JSON Schema describing the `meta` payload for a single event type.
@@ -154,6 +154,19 @@ export const EVENT_CATALOG = [
     schema: metaSchema({
       version: S_INTEGER,
       operationCount: S_INTEGER,
+    }),
+  },
+  {
+    name: 'edit_preset.applied',
+    version: 1,
+    billable: false,
+    description:
+      'A develop preset (issue #197) was applied to a batch of photos. One event per apply call, regardless of N. Per-photo commits still emit `edit.applied`.',
+    schema: metaSchema({
+      presetId: S_STRING,
+      photoCount: S_INTEGER,
+      succeeded: S_INTEGER,
+      failed: S_INTEGER,
     }),
   },
   {
