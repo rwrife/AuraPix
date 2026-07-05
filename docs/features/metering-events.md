@@ -43,7 +43,8 @@ discarded; there is no outbound traffic.
 | `quota.warning` | 1 | — | Tenant storage usage crossed a configured threshold (e.g. 80%, 95%). Once per threshold per UTC day. |
 | `tenant.storage.threshold_crossed` | 1 | — | Per-tenant storage usage crossed a configured threshold (issue #196). Hysteresis prevents re-firing until usage drops 5% below and crosses up again. Hosts drive upsell / hard-cap flows from this event. |
 | `tenant.storage.threshold_cleared` | 1 | — | Per-tenant storage usage dropped at least 5% below a previously-crossed threshold (issue #196). Emitted exactly once per crossing direction; pairs with `tenant.storage.threshold_crossed`. |
-| `share.viewed` | 1 | ✅ | A share token passed auth and a resource was actually delivered. |
+| `share.viewed` | 2 | ✅ | A share token passed auth and a resource was actually delivered. Deduped 60s per `(linkId, ipHash, uaHash)` — sub-resource fetches of a single page load count as one view (issue #198). `meta.bytesServed` (integer) and `meta.referrerHost` (string \| null) added in v2. |
+| `share.bandwidth.served` | 1 | ✅ | Daily rollup of share-link egress bytes per `(tenantId, linkId, date)` (issue #198). Emitted by the usage rollup job for hosts that prefer batch egress billing over per-view. Payload: `{ linkId, bytesServed, date }`. |
 | `plugin.ran` | 1 | ✅ | A plugin/edit operation executed (success or failure). One event per operation. |
 | `plugin.enabled` | 1 | — | A tenant toggled a plugin to enabled. |
 | `plugin.disabled` | 1 | — | A tenant toggled a plugin to disabled. |

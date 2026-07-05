@@ -94,6 +94,7 @@ export async function snapshotTenantStorage(
         tagsApplied: 0,
         apiCalls: 0,
         exportBytes: 0,
+        shareEgressBytes: 0,
         activeUsers: 0,
         rateLimited: 0,
         storageBytesTotal: null,

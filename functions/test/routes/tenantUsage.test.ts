@@ -207,6 +207,9 @@ describe('GET /v1/tenants/:tenantId/usage — CSV (issue #186)', () => {
       'rateLimited',
       'storageBytesTotal',
       'updatedAt',
+      // Share-link egress bytes (issue #198). Appended per the
+      // append-only column rule documented above.
+      'shareEgressBytes',
     ]);
   });
 
@@ -297,9 +300,9 @@ describe('GET /v1/tenants/:tenantId/usage — CSV (issue #186)', () => {
     // documented contract.
     const expected = [
       CSV_COLUMNS.join(','),
-      `tenant-A,2026-04-01,0,0,0,0,0,0,4,0,0,0,,${fixedUpdatedAt}`,
-      `tenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,${fixedUpdatedAt}`,
-      'tenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z',
+      `tenant-A,2026-04-01,0,0,0,0,0,0,4,0,0,0,,${fixedUpdatedAt},0`,
+      `tenant-A,2026-04-02,1024,2,0,0,0,0,0,0,0,0,,${fixedUpdatedAt},0`,
+      'tenant-A,2026-04-03,0,0,0,0,0,0,0,0,0,0,,1970-01-01T00:00:00.000Z,0',
       '',
     ].join('\n');
     expect(res.body).toBe(expected);
@@ -393,6 +396,7 @@ describe('GET /v1/tenants/:tenantId/usage — CSV (issue #186)', () => {
       tagsApplied: 0,
       apiCalls: 1,
       exportBytes: 0,
+      shareEgressBytes: 0,
       activeUsers: 0,
       rateLimited: 0,
       storageBytesTotal: null,
@@ -400,7 +404,7 @@ describe('GET /v1/tenants/:tenantId/usage — CSV (issue #186)', () => {
       updatedAt: '2026-04-01T00:00:00.000Z',
     });
     expect(row).toBe(
-      '"tenant,with""quotes\nand-commas",2026-04-01,0,0,0,0,0,0,1,0,0,0,,2026-04-01T00:00:00.000Z'
+      '"tenant,with""quotes\nand-commas",2026-04-01,0,0,0,0,0,0,1,0,0,0,,2026-04-01T00:00:00.000Z,0'
     );
   });
 });

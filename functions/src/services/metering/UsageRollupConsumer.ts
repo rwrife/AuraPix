@@ -29,6 +29,13 @@ export interface UsageDailyDoc {
    */
   exportBytes: number;
   /**
+   * Bytes egressed via share-link resolutions (issue #198). Populated
+   * from `share.viewed` metering events that carry a `bytesServed` value.
+   * Rolls up alongside `exportBytes` so hosts see both bandwidth flavours
+   * on the same daily doc.
+   */
+  shareEgressBytes: number;
+  /**
    * Distinct end-users seen for the tenant on this UTC day (seat-based
    * billing signal). Populated from `user.active` metering events; see
    * `docs/features/metering-events.md`.
@@ -70,6 +77,7 @@ const COUNTER_FIELDS: UsageMeteringCounter[] = [
   'tagsApplied',
   'apiCalls',
   'exportBytes',
+  'shareEgressBytes',
   'activeUsers',
   'rateLimited',
 ];
@@ -94,6 +102,7 @@ export function emptyDailyDoc(tenantId: string, date: string): UsageDailyDoc {
     tagsApplied: 0,
     apiCalls: 0,
     exportBytes: 0,
+    shareEgressBytes: 0,
     activeUsers: 0,
     rateLimited: 0,
     storageBytesTotal: null,
