@@ -31,6 +31,12 @@ export const FEATURE_FLAG_NAMES = [
   'smartAlbums',
   'export',
   'bulkOps',
+  // #208: gates the host's ability to hand out full-resolution
+  // originals. Default-on for back-compat; hosts flip it off on
+  // Free-tier tenants so export presets that target the untouched
+  // original and signed URLs for the `original` variant are rejected
+  // server-side, regardless of preset or link config.
+  'originalDownload',
 ] as const;
 
 export type FeatureFlagName = (typeof FEATURE_FLAG_NAMES)[number];
@@ -101,4 +107,5 @@ export const DEFAULT_FEATURE_FLAGS: TenantFeatureFlags = {
   smartAlbums: true,
   export: true,
   bulkOps: true,
+  originalDownload: true,
 };

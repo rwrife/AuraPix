@@ -7,6 +7,11 @@ import { AppError } from './errorHandler.js';
 import type { ImageAuthResult } from '../models/ImageAuth.js';
 import type { DataAdapter } from '../adapters/data/DataAdapter.js';
 import type { ShareViewTracker } from '../services/sharing/ShareViewTracker.js';
+import { isFeatureEnabled } from '../services/host/tenantFeaturesConfigService.js';
+import {
+  emitMeteringEvent,
+  resolveTenantId,
+} from '../services/metering/index.js';
 
 export interface SignedUrlMiddlewareOptions {
   /**
@@ -79,6 +84,65 @@ export function createSignedUrlMiddleware(
       
       if (!photo) {
         throw new AppError(404, 'PHOTO_NOT_FOUND', 'Photo not found');
+      }
+
+      // #208: gate signed URLs for the `original` variant behind the
+      // per-tenant `originalDownload` feature flag. Derivative sizes
+      // (small/medium/large) are unaffected. This catches direct URL
+      // requests that bypass the export-preset path — including
+      // share-token-issued signing keys that could otherwise produce a
+      // signed URL for the original bytes.
+      if (signature.size === 'original') {
+        const tenantId =
+          (photo as { tenantId?: string | null } | null)?.tenantId ?? null;
+        let originalAllowed = true;
+        try {
+          originalAllowed = await isFeatureEnabled(
+            dataAdapter,
+            tenantId ?? '',
+            'originalDownload'
+          );
+        } catch (err) {
+          // Fail open on config-store errors — mirrors requireFeature
+          // and avoids amplifying a flag-store incident into a serve outage.
+          logger.warn(
+            {
+              err,
+              libraryId: signature.libraryId,
+              photoId: signature.photoId,
+            },
+            'signedUrl: originalDownload flag lookup failed; failing open'
+          );
+        }
+        if (!originalAllowed) {
+          try {
+            emitMeteringEvent({
+              tenantId: resolveTenantId({ tenantId }),
+              type: 'feature.gated',
+              count: 1,
+              meta: {
+                feature: 'originalDownload',
+                route: '/images/:libraryId/:photoId',
+                variant: 'original',
+                method: req.method,
+                userId: signature.userId ?? null,
+                shareTokenPrefix: signature.shareToken
+                  ? signature.shareToken.substring(0, 8)
+                  : null,
+              },
+            });
+          } catch (err) {
+            logger.debug(
+              { err, libraryId: signature.libraryId, photoId: signature.photoId },
+              'feature.gated emit failed (originalDownload/serve)'
+            );
+          }
+          throw new AppError(
+            403,
+            'feature_disabled',
+            'Downloading the original file is disabled for this tenant'
+          );
+        }
       }
 
       // Check if signature grants access to this photo. Pass request

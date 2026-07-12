@@ -316,3 +316,45 @@ programmatically; their schemas live in `services/metering/eventCatalog.ts`.
 - The Firestore-backed store for `usageDaily` ships alongside the
   Firebase mode wiring; local-dev uses an in-memory store with the same
   semantics for tests.
+
+## Gating original-file access (issue #208)
+
+Hosts on tiered pricing plans commonly want to reserve **full-resolution
+original downloads** for their paid tenants and cap free-tier tenants to
+sized/watermarked derivatives.
+
+The per-tenant `originalDownload` feature flag (part of the
+[`tenantFeaturesConfig`](../../contracts/openapi/tenant-features.openapi.json)
+surface) enforces this **server-side**:
+
+- **Default:** `true` for every existing tenant (back-compat). Toggle it
+  off via `PATCH /v1/tenants/{tenantId}/features` with
+  `{"originalDownload": false}`.
+- **Export presets:** `POST /v1/photos/:id/export` rejects with `403
+  feature_disabled` (and emits `feature.gated`) whenever the resolved
+  preset targets the untouched original — i.e. `format === "original"`
+  and no active watermark. Presets that downsize (`format: "jpeg"`) or
+  apply a watermark continue to work.
+- **Signed URLs for the `original` variant:** the signed-URL image
+  serving path rejects requests whose signature was cut for
+  `size === "original"` when the flag is disabled, with the same `403
+  feature_disabled` shape. Derivative variants (`small`, `medium`,
+  `large`) are unaffected. This is what catches direct URL requests —
+  including any share-token-issued signing key — from bypassing the
+  preset gate above.
+- **Embedded UI:** the flag is included in the bootstrap payload; the
+  embedded UI hides the "Download original" / "Export original"
+  affordances when it reads `false`. **Server enforcement is
+  authoritative**; the UI hide is convenience.
+
+### Signals hosts should watch
+
+- `feature.gated` with `meta.feature === "originalDownload"` — every
+  attempt to pull an original that was blocked. Use this both as an
+  upsell trigger ("this tenant tried to export the original 12 times
+  this week") and as a fraud-monitoring signal.
+- `photo.exported` where `meta.preset === "original"` **and**
+  `meta.outputWidth === photo.originalWidth` — an actual original was
+  delivered to a Pro+ tenant. Aggregate this per tenant per day to
+  drive an "originals delivered" billing counter without needing a
+  dedicated event type.
