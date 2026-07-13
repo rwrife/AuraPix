@@ -45,7 +45,7 @@
  *
  * Use a date string so the value is human-readable in logs.
  */
-export const CATALOG_VERSION = '2026-07-02';
+export const CATALOG_VERSION = '2026-07-13';
 
 /**
  * JSON Schema describing the `meta` payload for a single event type.
@@ -579,6 +579,38 @@ export const EVENT_CATALOG = [
       newValue: S_BOOLEAN,
       actor: S_STRING,
     }),
+  },
+  {
+    name: 'photos.searched',
+    version: 1,
+    billable: true,
+    description:
+      'A `POST /v1/photos:search` call completed successfully (issue #207). One event per call regardless of result count.',
+    schema: metaSchema(
+      {
+        libraryId: S_STRING,
+        resultCount: S_INTEGER,
+        hasFullText: S_BOOLEAN,
+        filterCount: S_INTEGER,
+      },
+      ['libraryId', 'resultCount', 'hasFullText', 'filterCount']
+    ),
+  },
+  {
+    name: 'photos.search.unsupported',
+    version: 1,
+    billable: false,
+    description:
+      'A `POST /v1/photos:search` call was rejected with HTTP 409 because the requested filter combination has no server-side index (issue #207).',
+    schema: metaSchema(
+      {
+        requestedFilters: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      ['requestedFilters']
+    ),
   },
 ] as const satisfies readonly RegisteredEvent[];
 

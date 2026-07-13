@@ -37,6 +37,10 @@ export const FEATURE_FLAG_NAMES = [
   // original and signed URLs for the `original` variant are rejected
   // server-side, regardless of preset or link config.
   'originalDownload',
+  // #207: gates ad-hoc photo search (`POST /v1/photos:search`).
+  // Default-on for back-compat so existing tenants keep search
+  // access; hosts flip it off to reserve search for paid tiers.
+  'search',
 ] as const;
 
 export type FeatureFlagName = (typeof FEATURE_FLAG_NAMES)[number];
@@ -108,4 +112,5 @@ export const DEFAULT_FEATURE_FLAGS: TenantFeatureFlags = {
   export: true,
   bulkOps: true,
   originalDownload: true,
+  search: true,
 };

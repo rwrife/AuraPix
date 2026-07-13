@@ -104,6 +104,15 @@ export interface Photo {
   albumIds: string[];
   originalName: string;
   /**
+   * Denormalized lowercase copy of {@link originalName} used to power
+   * case-insensitive prefix search on the ad-hoc `/v1/photos:search`
+   * endpoint (issue #207). Written on photo create and on rename.
+   * Optional for backwards compatibility with photos written before
+   * the search rollout; treat a missing value as
+   * `originalName.toLowerCase()`.
+   */
+  filenameLower?: string;
+  /**
    * Indicates what was originally uploaded.
    * - raster: jpeg/png/heic/etc
    * - raw: camera RAW (arw/cr3/nef/etc)
@@ -189,6 +198,7 @@ export function createPhotoDocument(
     tenantId,
     albumIds: [],
     originalName,
+    filenameLower: originalName.toLowerCase(),
     sourceType: source?.sourceType,
     rawOriginal: source?.rawOriginal,
     storagePaths,

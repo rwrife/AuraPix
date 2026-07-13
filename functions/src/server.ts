@@ -131,6 +131,7 @@ import {
   loadAllowedOriginsForTenant,
 } from './routes/embedV1.js';
 import { createBulkPhotosRouter } from './routes/photosBatchV1.js';
+import { createPhotosSearchV1Router } from './routes/photosSearchV1.js';
 import { createPhotoExportRouter } from './routes/photoExportV1.js';
 import { createTenantExportPresetsRouter } from './routes/tenantExportPresetsV1.js';
 import { createTenantEditPresetsRouter } from './routes/tenantEditPresetsV1.js';
@@ -273,7 +274,33 @@ app.use('/api/v1/compliance', authMiddleware, createComplianceV1Router(dataAdapt
 // Bulk photo operations (issue #142). Express routes treat `:` as a param
 // separator, so we register the exact literal path.
 // Gated by per-tenant `bulkOps` feature flag (issue #175).
-app.use('/api/v1/photos\\:batch', authMiddleware, requireFeature('bulkOps'), createBulkPhotosRouter(dataAdapter));
+app.use('/api/v1/photos\:batch', authMiddleware, requireFeature('bulkOps'), createBulkPhotosRouter(dataAdapter));
+
+// Ad-hoc photo search (issue #207). Mounted at both `/v1/photos:search`
+// (spec) and `/api/v1/photos:search` (in-product). Gated by per-tenant
+// `search` feature flag. Idempotency-Key middleware applied so a retried
+// POST after a network blip is replayed rather than double-metered.
+const photosSearchIdempotency = createIdempotencyMiddleware({
+  route: 'POST /v1/photos:search',
+  dataAdapter,
+  resolveTenantId: (req) => req.tenant?.id ?? req.tenantId ?? req.user?.uid ?? null,
+});
+app.use(
+  '/v1/photos\:search',
+  authMiddleware,
+  resolveTenant,
+  requireFeature('search'),
+  photosSearchIdempotency,
+  createPhotosSearchV1Router(dataAdapter)
+);
+app.use(
+  '/api/v1/photos\:search',
+  authMiddleware,
+  resolveTenant,
+  requireFeature('search'),
+  photosSearchIdempotency,
+  createPhotosSearchV1Router(dataAdapter)
+);
 
 // Photos: soft-delete (Trash) + restore + trashed list (issue #152),
 // plus keyword tags add/remove + per-library tag enumeration (issue #173).
