@@ -104,14 +104,15 @@
       "FeatureFlags": {
         "type": "object",
         "description": "Effective state for every gateable feature. All keys are required in responses; defaults are `true`.",
-        "required": ["sharing", "plugins", "smartAlbums", "export", "bulkOps"],
+        "required": ["sharing", "plugins", "smartAlbums", "export", "bulkOps", "originalDownload"],
         "additionalProperties": false,
         "properties": {
           "sharing": { "type": "boolean", "description": "Share-token signing-key issuance." },
           "plugins": { "type": "boolean", "description": "Edits/plugin execution." },
           "smartAlbums": { "type": "boolean", "description": "Smart Albums CRUD + materialization." },
           "export": { "type": "boolean", "description": "Photo export API." },
-          "bulkOps": { "type": "boolean", "description": "Bulk photo operations (`POST /v1/photos:batch`)." }
+          "bulkOps": { "type": "boolean", "description": "Bulk photo operations (`POST /v1/photos:batch`)." },
+          "originalDownload": { "type": "boolean", "description": "Export/share of full-resolution originals (issue #208). When disabled, export presets targeting the untouched original and signed URLs for the `original` variant are rejected with `feature.gated`." }
         }
       },
       "FeaturesPatch": {
@@ -123,7 +124,8 @@
           "plugins": { "type": "boolean" },
           "smartAlbums": { "type": "boolean" },
           "export": { "type": "boolean" },
-          "bulkOps": { "type": "boolean" }
+          "bulkOps": { "type": "boolean" },
+          "originalDownload": { "type": "boolean" }
         }
       },
       "FeatureFlagChange": {

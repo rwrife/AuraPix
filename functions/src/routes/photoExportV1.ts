@@ -44,6 +44,19 @@ import {
   verifyExportToken,
 } from '../services/image/exportService.js';
 import { resolvePresetByName } from '../services/host/exportPresetService.js';
+import { isFeatureEnabled } from '../services/host/tenantFeaturesConfigService.js';
+import type { ExportPreset } from '../models/ExportPreset.js';
+
+/**
+ * True when the preset would hand out the untouched original bytes
+ * (issue #208): `format === 'original'` and no active watermark. A
+ * `jpeg` preset always re-encodes, so it never counts as "the original".
+ */
+function presetTargetsUntouchedOriginal(preset: ExportPreset): boolean {
+  if (preset.format !== 'original') return false;
+  if (preset.watermark && preset.watermark.enabled) return false;
+  return true;
+}
 
 const PHOTOS_COLLECTION = 'photos';
 
@@ -161,6 +174,57 @@ export function createPhotoExportRouter(
           { preset: presetName }
         );
         return;
+      }
+
+      // #208: gate export of the untouched original behind the
+      // per-tenant `originalDownload` feature flag. A preset that
+      // re-encodes (jpeg) or applies a watermark is fine; only
+      // format=original + no active watermark hands out original bytes.
+      if (presetTargetsUntouchedOriginal(preset)) {
+        let originalAllowed = true;
+        try {
+          originalAllowed = await isFeatureEnabled(
+            deps.dataAdapter,
+            tenantId,
+            'originalDownload'
+          );
+        } catch (err) {
+          // Fail open on config-store errors, matching requireFeature.
+          logger.warn(
+            { err, tenantId, photoId, preset: preset.name },
+            'export: originalDownload flag lookup failed; failing open'
+          );
+        }
+        if (!originalAllowed) {
+          try {
+            emitMeteringEvent({
+              tenantId: resolveTenantId({ tenantId }),
+              type: 'feature.gated',
+              count: 1,
+              meta: {
+                feature: 'originalDownload',
+                route: '/v1/photos/:id/export',
+                method: req.method,
+                preset: preset.name,
+                userId: req.user?.uid ?? null,
+                keyId: req.tenant?.keyId ?? null,
+              },
+            });
+          } catch (err) {
+            logger.debug(
+              { err, tenantId, photoId },
+              'feature.gated emit failed (originalDownload/export)'
+            );
+          }
+          sendError(
+            res,
+            403,
+            'feature_disabled',
+            'Exporting the original file is disabled for this tenant',
+            { feature: 'originalDownload', preset: preset.name }
+          );
+          return;
+        }
       }
 
       // Render (or pull from cache).
