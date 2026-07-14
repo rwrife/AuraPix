@@ -182,3 +182,68 @@ gate on it for higher tiers. See
 A composite index on `(tenantId, libraryId, tags array-contains,
 updatedAt desc)` supports the tag-narrowed photo query without
 collection-scan amplification.
+
+## Ad-hoc Search (issue #207)
+
+Smart Albums (above) are the answer for **saved** filters that materialize
+over time. `POST /v1/photos:search` is the answer for **one-shot** queries
+— the user types "sunset", "canon 5d", "last month", "5-star only", or
+"red-label" into a search box and expects results back immediately.
+
+```
+POST /v1/photos:search
+{
+  "libraryId": "lib_...",
+  "q": "sunset",                        // case-insensitive prefix on filenameLower + exact tag match
+  "tags": ["travel", "family"],         // AND semantics
+  "rating": { "gte": 4 },
+  "flag": "pick",                       // or "reject" / "unflagged"
+  "colorLabel": "red",                  // or ..., "none"
+  "capturedBetween": { "from": "2026-01-01T00:00:00Z", "to": "2026-02-01T00:00:00Z" },
+  "camera": "5D",
+  "trashed": false,
+  "limit": 50,
+  "cursor": "..."
+}
+→ 200 { items: PhotoSummary[], nextCursor?: string, totalEstimate?: number }
+```
+
+The endpoint composes the existing photo indexes; there is no new
+storage engine and no full-text yet. Full-text (filename substring,
+caption search, semantic/vector search) is intentionally deferred.
+
+### Query planner and 409
+
+Filter combinations that would require an index we do not currently
+maintain (for example, cross-library search over a tenant without
+`libraryId`) return HTTP `409 unsupported_query_combination` with a
+machine-readable `hint`. There is deliberately no silent client-side
+filtering fallback — hosts must see the 409 so we can add the missing
+index in a follow-up without breaking callers.
+
+### Feature flag
+
+Gated by the per-tenant `search` feature flag (default-on). Hosts can
+disable search on Free-tier tenants and enable it on Pro tiers via
+`PATCH /v1/tenants/:id/features`.
+
+### Metering
+
+- `photos.searched { libraryId, resultCount, hasFullText, filterCount }`
+  — one billable event per successful call, regardless of result count.
+- `photos.search.unsupported { requestedFilters }` — non-billable; emitted
+  when the query planner rejects a combo with 409, so hosts can spot
+  demand for indexes we do not yet maintain.
+
+### Idempotency
+
+`Idempotency-Key` is honored on this endpoint so a retried POST after a
+network blip replays the original response instead of double-metering.
+
+### `filenameLower`
+
+To support the case-insensitive prefix on `q`, the Photo document
+carries a denormalized `filenameLower` field written at photo-create
+time (and on rename). Older photos written before the search rollout
+may lack the field; the handler falls back to
+`originalName.toLowerCase()` in memory for those.
